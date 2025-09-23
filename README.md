@@ -79,14 +79,16 @@ MIT. Check `LICENSE` for more information.
 ## ✍️ Citation
 
 ```bibtex
-@misc{yang2025swesmith,
+@inproceedings{yang2025swesmith,
   title={SWE-smith: Scaling Data for Software Engineering Agents}, 
   author={John Yang and Kilian Lieret and Carlos E. Jimenez and Alexander Wettig and Kabir Khandpur and Yanzhe Zhang and Binyuan Hui and Ofir Press and Ludwig Schmidt and Diyi Yang},
+  booktitle = {Proceedings of the 39th Annual Conference on Neural Information Processing Systems (NeurIPS 2025 D&B Spotlight)},
   year={2025},
   eprint={2504.21798},
   archivePrefix={arXiv},
   primaryClass={cs.SE},
-  url={https://arxiv.org/abs/2504.21798}, 
+  url={https://arxiv.org/abs/2504.21798},
+  note={arXiv:2504.21798, accepted at NeurIPS 2025 (Spotlight)}
 }
 ```
 
