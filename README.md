@@ -1,30 +1,3 @@
-<p align="center">
-  <a href="https://swesmith.com/">
-    <img src="docs/assets/banner.png" style="height: 10em" alt="Kawhi the SWE-smith" />
-  </a>
-</p>
-<br>
-<div align="center">
-<strong>NeurIPS 2025 Datasets & Benchmarks Track - Spotlight 🔦</strong>
-</div>
-<br>
-<div align="center">
-<a href="https://www.python.org/">
-  <img alt="Build" src="https://img.shields.io/badge/Python-3.10+-1f425f.svg?color=purple">
-</a>
-<a href="https://copyright.princeton.edu/policy">
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-blue">
-</a>
-<a href="https://badge.fury.io/py/swesmith">
-  <img src="https://badge.fury.io/py/swesmith.svg">
-</a>
-<a href="https://arxiv.org/abs/2504.21798">
-  <img src="https://img.shields.io/badge/arXiv-2504.21798-b31b1b.svg">
-</a>
-</div>
-
-<hr />
-
 SWE-smith is a toolkit for training [SWE-agents](https://github.com/SWE-agent/SWE-agent). You can:
 * Turn any Github repository into a [SWE-gym](https://github.com/SWE-Gym/SWE-Gym).
 * Create *unlimited* tasks (e.g., file localization, program repair, [SWE-bench](https://github.com/SWE-bench/SWE-bench)) for that repo.
