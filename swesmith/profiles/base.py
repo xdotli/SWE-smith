@@ -40,6 +40,27 @@ from unidiff import PatchSet
 load_dotenv()
 
 
+def _default_arch() -> str:
+    """
+    Determine the default docker architecture, allowing an override via env vars.
+    """
+    override = os.getenv("SWESMITH_ARCH")
+    if override:
+        return override
+    machine = platform.machine().lower()
+    return "arm64" if machine in {"aarch64", "arm64"} else "x86_64"
+
+
+def _default_platform() -> str:
+    """
+    Determine the default docker platform, allowing an override via env vars.
+    """
+    override = os.getenv("SWESMITH_PLATFORM")
+    if override:
+        return override
+    return "linux/arm64/v8" if _default_arch() == "arm64" else "linux/x86_64"
+
+
 class SingletonMeta(ABCMeta):
     _instances = {}
 
