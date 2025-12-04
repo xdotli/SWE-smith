@@ -1,0 +1,19 @@
+{
+    "recover_status": "success",
+    "cost": 0,
+    "rewrites": {},
+    "direct_patch": true,
+    "instance_ref": {
+        "repo": "strapi/strapi",
+        "pull_number": 24907,
+        "instance_id": "strapi__strapi-24907",
+        "issue_numbers": [],
+        "base_commit": "e7ae51b01f78ddeaa09c4aa3e3882f466a5b3188",
+        "patch": "diff --git a/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx b/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx\nindex 8be32866b832..57f48a35753d 100644\n--- a/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx\n+++ b/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx\n@@ -171,7 +171,12 @@ export const GuidedTourHomepageOverview = () => {\n     }\n   };\n \n-  if (!guidedTourMeta?.data.isFirstSuperAdminUser || !enabled || hidden) {\n+  if (\n+    !guidedTourMeta?.data.isFirstSuperAdminUser ||\n+    !enabled ||\n+    hidden ||\n+    process.env.NODE_ENV !== 'development'\n+  ) {\n     return null;\n   }\n \ndiff --git a/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx b/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx\nindex b32990e0393e..448b803d3f59 100644\n--- a/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx\n+++ b/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx\n@@ -47,7 +47,7 @@ type GuidedTourTooltipProps = {\n const GuidedTourTooltip = ({ children, ...props }: GuidedTourTooltipProps) => {\n   const state = useGuidedTour('TooltipWrapper', (s) => s.state);\n \n-  if (!state.enabled || state.hidden) {\n+  if (!state.enabled || state.hidden || process.env.NODE_ENV !== 'development') {\n     return children;\n   }\n \ndiff --git a/packages/core/admin/admin/src/pages/ProfilePage.tsx b/packages/core/admin/admin/src/pages/ProfilePage.tsx\nindex 873c461fce31..f699120e56a8 100644\n--- a/packages/core/admin/admin/src/pages/ProfilePage.tsx\n+++ b/packages/core/admin/admin/src/pages/ProfilePage.tsx\n@@ -230,7 +230,7 @@ const ProfilePage = () => {\n             </>\n           )}\n         </Form>\n-        {isDesktop && (\n+        {isDesktop && process.env.NODE_ENV === 'development' && (\n           <Box>\n             <Layouts.Content>\n               <GuidedTourSection />\n",
+        "test_patch": "",
+        "problem_statement": "",
+        "hints_text": "",
+        "created_at": "2025-11-21T14:28:19Z",
+        "pr_mirror": "strapi__strapi.main"
+    }
+}

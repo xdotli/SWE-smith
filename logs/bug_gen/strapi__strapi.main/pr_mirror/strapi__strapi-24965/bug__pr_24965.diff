@@ -1,0 +1,18 @@
+diff --git a/packages/plugins/i18n/server/src/services/ai-localizations.ts b/packages/plugins/i18n/server/src/services/ai-localizations.ts
+index 3d21a605656b..8694a1811039 100644
+--- a/packages/plugins/i18n/server/src/services/ai-localizations.ts
++++ b/packages/plugins/i18n/server/src/services/ai-localizations.ts
+@@ -11,7 +11,12 @@ const createAILocalizationsService = ({ strapi }: { strapi: Core.Strapi }) => {
+   const aiServerUrl = process.env.STRAPI_AI_URL || 'https://strapi-ai.apps.strapi.io';
+   const aiLocalizationJobsService = getService('ai-localization-jobs');
+ 
+-  const UNSUPPORTED_ATTRIBUTE_TYPES: Schema.Attribute.Kind[] = ['media', 'relation', 'boolean'];
++  const UNSUPPORTED_ATTRIBUTE_TYPES: Schema.Attribute.Kind[] = [
++    'media',
++    'relation',
++    'boolean',
++    'enumeration',
++  ];
+   const IGNORED_FIELDS = [
+     'id',
+     'documentId',

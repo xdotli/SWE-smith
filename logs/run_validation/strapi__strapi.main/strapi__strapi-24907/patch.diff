@@ -1,0 +1,44 @@
+diff --git a/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx b/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx
+index 8be32866b832..57f48a35753d 100644
+--- a/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx
++++ b/packages/core/admin/admin/src/components/GuidedTour/Overview.tsx
+@@ -171,7 +171,12 @@ export const GuidedTourHomepageOverview = () => {
+     }
+   };
+ 
+-  if (!guidedTourMeta?.data.isFirstSuperAdminUser || !enabled || hidden) {
++  if (
++    !guidedTourMeta?.data.isFirstSuperAdminUser ||
++    !enabled ||
++    hidden ||
++    process.env.NODE_ENV !== 'development'
++  ) {
+     return null;
+   }
+ 
+diff --git a/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx b/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx
+index b32990e0393e..448b803d3f59 100644
+--- a/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx
++++ b/packages/core/admin/admin/src/components/GuidedTour/Tours.tsx
+@@ -47,7 +47,7 @@ type GuidedTourTooltipProps = {
+ const GuidedTourTooltip = ({ children, ...props }: GuidedTourTooltipProps) => {
+   const state = useGuidedTour('TooltipWrapper', (s) => s.state);
+ 
+-  if (!state.enabled || state.hidden) {
++  if (!state.enabled || state.hidden || process.env.NODE_ENV !== 'development') {
+     return children;
+   }
+ 
+diff --git a/packages/core/admin/admin/src/pages/ProfilePage.tsx b/packages/core/admin/admin/src/pages/ProfilePage.tsx
+index 873c461fce31..f699120e56a8 100644
+--- a/packages/core/admin/admin/src/pages/ProfilePage.tsx
++++ b/packages/core/admin/admin/src/pages/ProfilePage.tsx
+@@ -230,7 +230,7 @@ const ProfilePage = () => {
+             </>
+           )}
+         </Form>
+-        {isDesktop && (
++        {isDesktop && process.env.NODE_ENV === 'development' && (
+           <Box>
+             <Layouts.Content>
+               <GuidedTourSection />

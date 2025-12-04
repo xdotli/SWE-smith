@@ -1,0 +1,49 @@
+diff --git a/lib/adapters/http.js b/lib/adapters/http.js
+index 4d2670cb7a..524c278505 100755
+--- a/lib/adapters/http.js
++++ b/lib/adapters/http.js
+@@ -65,9 +65,9 @@ class Http2Sessions {
+       sessionTimeout: 1000
+     }, options);
+ 
+-    let authoritySessions;
++    let authoritySessions = this.sessions[authority];
+ 
+-    if ((authoritySessions = this.sessions[authority])) {
++    if (authoritySessions) {
+       let len = authoritySessions.length;
+ 
+       for (let i = 0; i < len; i++) {
+@@ -93,11 +93,12 @@ class Http2Sessions {
+ 
+       while (i--) {
+         if (entries[i][0] === session) {
+-          entries.splice(i, 1);
+           if (len === 1) {
+             delete this.sessions[authority];
+-            return;
++          } else {
++            entries.splice(i, 1);
+           }
++          return;
+         }
+       }
+     };
+@@ -136,12 +137,12 @@ class Http2Sessions {
+ 
+     session.once('close', removeSession);
+ 
+-    let entries = this.sessions[authority], entry = [
+-      session,
+-      options
+-    ];
++    let entry = [
++        session,
++        options
++      ];
+ 
+-    entries ? this.sessions[authority].push(entry) : authoritySessions =  this.sessions[authority] = [entry];
++    authoritySessions ? authoritySessions.push(entry) : authoritySessions =  this.sessions[authority] = [entry];
+ 
+     return session;
+   }

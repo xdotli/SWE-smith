@@ -1,0 +1,21 @@
+{
+    "recover_status": "success",
+    "cost": 0,
+    "rewrites": {},
+    "direct_patch": true,
+    "instance_ref": {
+        "repo": "iamkun/dayjs",
+        "pull_number": 2930,
+        "instance_id": "iamkun__dayjs.c8a26460.2930",
+        "issue_numbers": [
+            "2918"
+        ],
+        "base_commit": "c8a26460",
+        "patch": "diff --git a/src/locale/it.js b/src/locale/it.js\nindex 08f660bef..b4bceb00d 100644\n--- a/src/locale/it.js\n+++ b/src/locale/it.js\n@@ -23,7 +23,7 @@ const locale = {\n     s: 'qualche secondo',\n     m: 'un minuto',\n     mm: '%d minuti',\n-    h: 'un\\' ora',\n+    h: 'un\\'ora',\n     hh: '%d ore',\n     d: 'un giorno',\n     dd: '%d giorni',\n",
+        "test_patch": "diff --git a/test/locale/it.test.js b/test/locale/it.test.js\nnew file mode 100644\nindex 000000000..56043b1de\n--- /dev/null\n+++ b/test/locale/it.test.js\n@@ -0,0 +1,84 @@\n+import moment from 'moment'\n+import MockDate from 'mockdate'\n+import dayjs from '../../src'\n+import '../../src/locale/it'\n+import relativeTime from '../../src/plugin/relativeTime'\n+import localizedFormat from '../../src/plugin/localizedFormat'\n+\n+dayjs.extend(relativeTime)\n+dayjs.extend(localizedFormat)\n+\n+describe('Italian formats', () => {\n+  beforeEach(() => {\n+    dayjs.locale('it')\n+    moment.locale('it')\n+\n+    MockDate.set(new Date())\n+  })\n+\n+  afterEach(() => {\n+    MockDate.reset()\n+  })\n+\n+\n+  it('Format month with locale function', () => {\n+    for (let i = 0; i <= 7; i += 1) {\n+      const dayjsWithLocale = dayjs().add(i, 'day')\n+      const momentWithLocale = moment().add(i, 'day')\n+      const testFormat1 = 'DD MMMM YYYY MMM'\n+      const testFormat2 = 'dddd, MMMM D YYYY'\n+      const testFormat3 = 'MMMM'\n+      const testFormat4 = 'MMM'\n+      const testFormat5 = 'L'\n+      expect(dayjsWithLocale.format(testFormat1)).toEqual(momentWithLocale.format(testFormat1))\n+      expect(dayjsWithLocale.format(testFormat2)).toEqual(momentWithLocale.format(testFormat2))\n+      expect(dayjsWithLocale.format(testFormat3)).toEqual(momentWithLocale.format(testFormat3))\n+      expect(dayjsWithLocale.format(testFormat4)).toEqual(momentWithLocale.format(testFormat4))\n+      expect(dayjsWithLocale.format(testFormat5)).toEqual(momentWithLocale.format(testFormat5))\n+    }\n+  })\n+\n+  it('RelativeTime: Time from X', () => {\n+    const T = [\n+      [89.5, 'second'], // a minute\n+      [2, 'minute'], // 2 minutes\n+      [5, 'minute'], // 5 minutes\n+      [43, 'minute'], // 44 minutes\n+      [45, 'minute'], // an hour\n+      [3, 'hour'], // 3 hours\n+      [21, 'hour'], // 21 hours\n+      [1, 'day'], // a day\n+      [3, 'day'], // 3 day\n+      [25, 'day'], // 25 days\n+      [1, 'month'], // a month\n+      [2, 'month'], // 2 month\n+      [10, 'month'], // 10 month\n+      [1, 'year'], // a year\n+      [2, 'year'], // 2 year\n+      [5, 'year'], // 5 year\n+      [18, 'month'] // 2 years\n+    ]\n+\n+\n+    T.forEach((t) => {\n+      expect(dayjs().from(dayjs().add(t[0], t[1])))\n+        .toBe(moment().from(moment().add(t[0], t[1])))\n+      expect(dayjs().from(dayjs().add(t[0], t[1]), true))\n+        .toBe(moment().from(moment().add(t[0], t[1]), true))\n+    })\n+  })\n+\n+  // moment.js uses `alcuni secondi` while dayjs uses `qualche secondo`.\n+  it('RelativeTime: A few seconds', () => {\n+    const T = [\n+      [44.4, 'second'] // a few seconds\n+    ]\n+\n+    T.forEach((t) => {\n+      expect(dayjs().from(dayjs().add(t[0], t[1])))\n+        .toBe('qualche secondo fa')\n+      expect(dayjs().from(dayjs().add(t[0], t[1]), true))\n+        .toBe('qualche secondo')\n+    })\n+  })\n+})\n",
+        "problem_statement": "Fix for Italian locale relative time translation\nThe phrase 'One hour ago' is currently translated as 'un\u2019 ora fa', but the correct translation is 'un\u2019ora fa' (without the space after the apostrophe)\n\n",
+        "hints_text": "pr welcomed",
+        "created_at": "2025-09-06T09:36:02Z",
+        "pr_mirror": "iamkun__dayjs.c8a26460"
+    }
+}

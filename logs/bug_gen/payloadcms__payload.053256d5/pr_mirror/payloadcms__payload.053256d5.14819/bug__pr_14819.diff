@@ -1,0 +1,16 @@
+diff --git a/packages/ui/src/elements/SelectMany/index.tsx b/packages/ui/src/elements/SelectMany/index.tsx
+index aef666d6e..cd00ea684 100644
+--- a/packages/ui/src/elements/SelectMany/index.tsx
++++ b/packages/ui/src/elements/SelectMany/index.tsx
+@@ -25,8 +25,9 @@ export const SelectMany: React.FC<{
+         }
+       }}
+       pillStyle="white"
++      size="small"
+     >
+       {`Select ${count}`}
+     </Pill>
+   )
+-}
++}
+\ No newline at end of file

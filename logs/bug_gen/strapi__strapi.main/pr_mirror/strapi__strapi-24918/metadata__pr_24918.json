@@ -1,0 +1,19 @@
+{
+    "recover_status": "success",
+    "cost": 0,
+    "rewrites": {},
+    "direct_patch": true,
+    "instance_ref": {
+        "repo": "strapi/strapi",
+        "pull_number": 24918,
+        "instance_id": "strapi__strapi-24918",
+        "issue_numbers": [],
+        "base_commit": "29273b8e8a9a5aa635e5680190eda01f861431aa",
+        "patch": "diff --git a/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx b/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx\nindex 0b344ad118ec..4d934adc0ffd 100644\n--- a/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx\n+++ b/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx\n@@ -340,6 +340,7 @@ const ChatInput = (props: React.FormHTMLAttributes<HTMLFormElement>) => {\n                 <IconButton\n                   label={t('chat.tooltips.send-message', 'Send')}\n                   variant=\"default\"\n+                  type=\"submit\"\n                   // allow sending an empty message if there are attachments\n                   disabled={input.trim().length === 0 && attachments.length === 0}\n                 >\ndiff --git a/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx b/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx\nindex 635122fb56c8..4d9b03d8f870 100644\n--- a/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx\n+++ b/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx\n@@ -19,6 +19,8 @@ import { Marker } from './Marker';\n const MarkdownStyles = styled(Typography)`\n   max-width: 65ch;\n   margin: 0 auto;\n+  overflow-wrap: anywhere;\n+  word-break: break-word;\n \n   h1,\n   h2,\n@@ -77,6 +79,11 @@ const MarkdownStyles = styled(Typography)`\n   }\n `;\n \n+const UserMessageTypography = styled(Typography)`\n+  overflow-wrap: anywhere;\n+  word-break: break-word;\n+`;\n+\n // ---------------------------\n // Tool: schemaGenerationTool helpers\n // ---------------------------\n@@ -195,7 +202,7 @@ const UserMessage = ({ message }: { message: UserMessageType }) => {\n         <Box background=\"neutral150\" borderStyle=\"none\" padding={['10px', '16px']} hasRadius>\n           {message.parts.map((content, index) => {\n             if (content.type !== 'text') return null;\n-            return <Typography key={index}>{content.text}</Typography>;\n+            return <UserMessageTypography key={index}>{content.text}</UserMessageTypography>;\n           })}\n         </Box>\n       ) : null}\n",
+        "test_patch": "",
+        "problem_statement": "",
+        "hints_text": "",
+        "created_at": "2025-11-24T11:18:36Z",
+        "pr_mirror": "strapi__strapi.main"
+    }
+}

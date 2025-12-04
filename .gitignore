@@ -5,7 +5,7 @@
 
 # Folders
 hidden/
-logs/
+# logs/
 notebooks/
 repos/
 .idea/

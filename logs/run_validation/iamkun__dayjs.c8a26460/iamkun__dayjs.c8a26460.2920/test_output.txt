@@ -1,0 +1,194 @@
++ cd /testbed
++ : '>>>>> Start Test Output'
++ npm test
+
+> dayjs@0.0.0-development test
+> TZ=Pacific/Auckland npm run test-tz && TZ=Europe/London npm run test-tz && TZ=America/Whitehorse npm run test-tz && npm run test-tz && jest
+
+
+> dayjs@0.0.0-development test-tz
+> date && jest test/timezone.test --coverage=false
+
+Fri Dec  5 12:19:48 NZDT 2025
+PASS test/timezone.test.js
+  ✓ Add Time days (DST) (20ms)
+  ✓ Utc Offset (1ms)
+  ✓ Diff (DST) (17ms)
+  ✓ UTC add day in DST (10ms)
+  ✓ UTC and utcOffset (17ms)
+  ✓ UTC diff in DST
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        9.607s
+Ran all test suites matching /test\/timezone.test/i.
+
+> dayjs@0.0.0-development test-tz
+> date && jest test/timezone.test --coverage=false
+
+Thu Dec  4 23:20:01 GMT 2025
+PASS test/timezone.test.js
+  ✓ Add Time days (DST) (22ms)
+  ✓ Utc Offset (2ms)
+  ✓ Diff (DST) (22ms)
+  ✓ UTC add day in DST (7ms)
+  ✓ UTC and utcOffset (5ms)
+  ✓ UTC diff in DST
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        1.372s, estimated 4s
+Ran all test suites matching /test\/timezone.test/i.
+
+> dayjs@0.0.0-development test-tz
+> date && jest test/timezone.test --coverage=false
+
+Thu Dec  4 16:20:03 MST 2025
+PASS test/timezone.test.js
+  ✓ Add Time days (DST) (99ms)
+  ✓ Utc Offset (2ms)
+  ✓ Diff (DST) (67ms)
+  ✓ UTC add day in DST (14ms)
+  ✓ UTC and utcOffset (23ms)
+  ✓ UTC diff in DST
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        3.101s
+Ran all test suites matching /test\/timezone.test/i.
+
+> dayjs@0.0.0-development test-tz
+> date && jest test/timezone.test --coverage=false
+
+Thu Dec  4 23:20:09 UTC 2025
+PASS test/timezone.test.js
+  ✓ Add Time days (DST) (36ms)
+  ✓ Utc Offset (2ms)
+  ✓ Diff (DST) (30ms)
+  ✓ UTC add day in DST (6ms)
+  ✓ UTC and utcOffset (7ms)
+  ✓ UTC diff in DST (1ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        1.127s, estimated 2s
+Ran all test suites matching /test\/timezone.test/i.
+PASS test/plugin/isSameOrBefore.test.js (32.346s)
+PASS test/plugin/isBetween.test.js (34.268s)
+PASS test/plugin/isSameOrAfter.test.js (34.276s)
+PASS test/comparison.test.js (34.601s)
+PASS test/parse.test.js (6.296s)
+PASS test/plugin/isoWeek.test.js (6.714s)
+PASS test/plugin/objectSupport.test.js (41.965s)
+PASS test/plugin/duration.test.js (41.645s)
+PASS test/plugin/utc-utcOffset.test.js (6.834s)
+PASS test/display.test.js (7.235s)
+PASS test/plugin/utc.test.js (42.315s)
+PASS test/plugin/relativeTime.test.js
+PASS test/get-set.test.js
+PASS test/plugin/badMutable.test.js
+PASS test/plugin/customParseFormat.test.js (44.875s)
+PASS test/locale.test.js
+PASS test/plugin/pluralGetSet.test.js
+PASS test/plugin/advancedFormat.test.js
+PASS test/plugin/timezone.test.js (45.869s)
+PASS test/plugin/localizedFormat.test.js
+PASS test/plugin/localeData.test.js
+PASS test/locale/is.test.js
+PASS test/plugin/calendar.test.js
+PASS test/manipulate.test.js
+PASS test/issues/issue2027.swapped-order.test.js
+PASS test/issues/issue2027.correct-order.test.js
+PASS test/locale/sl.test.js
+PASS test/plugin/updateLocale.test.js
+  ● Console
+
+    console.warn node_modules/moment/moment.js:287
+      Deprecation warning: value provided is not in a recognized RFC2822 or ISO format. moment construction falls back to js Date(), which is not reliable across all browsers and versions. Non RFC2822/ISO date formats are discouraged. Please refer to http://momentjs.com/guides/#/warnings/js-date/ for more info.
+      Arguments: 
+      [0] _isAMomentObject: true, _isUTC: false, _useUTC: false, _l: undefined, _i: otherString, _f: undefined, _strict: undefined, _locale: [object Object]
+      Error: 
+          at Function.createFromInputFallback (/testbed/node_modules/moment/moment.js:324:25)
+          at configFromString (/testbed/node_modules/moment/moment.js:2550:19)
+          at configFromInput (/testbed/node_modules/moment/moment.js:2993:13)
+          at prepareConfig (/testbed/node_modules/moment/moment.js:2976:13)
+          at createFromConfig (/testbed/node_modules/moment/moment.js:2943:44)
+          at createLocalOrUTC (/testbed/node_modules/moment/moment.js:3037:16)
+          at createLocal (/testbed/node_modules/moment/moment.js:3041:16)
+          at hooks (/testbed/node_modules/moment/moment.js:16:29)
+          at Object.<anonymous> (/testbed/test/plugin/updateLocale.test.js:80:48)
+          at Object.asyncFn (/testbed/node_modules/jest-jasmine2/build/jasmine_async.js:82:37)
+          at /testbed/node_modules/jest-jasmine2/build/queue_runner.js:52:12
+          at new Promise (<anonymous>)
+          at mapper (/testbed/node_modules/jest-jasmine2/build/queue_runner.js:39:19)
+          at /testbed/node_modules/jest-jasmine2/build/queue_runner.js:73:82
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+PASS test/locale/sr-cyrl.test.js
+PASS test/plugin/preParsePostFormat.test.js
+PASS test/locale/bn.test.js
+PASS test/locale/it-ch.test.js
+PASS test/locale/bn-bd.test.js
+PASS test/locale/ru.test.js
+PASS test/locale/ar.test.js
+PASS test/plugin/quarterOfYear.test.js
+PASS test/locale/de.test.js
+PASS test/locale/uk.test.js
+PASS test/locale/bg.test.js
+PASS test/locale/sr.test.js
+PASS test/locale/pl.test.js
+PASS test/plugin/devHelper.test.js
+PASS test/plugin/negativeYear.test.js
+PASS test/utils.test.js
+PASS test/plugin/minMax.test.js
+PASS test/plugin/weekday.test.js
+PASS test/plugin/dayOfYear.test.js
+PASS test/plugin/weekOfYear.test.js
+PASS test/locale/br.test.js
+PASS test/locale/fi.test.js
+PASS test/locale/ja.test.js
+PASS test/locale/sv-fi.test.js
+PASS test/plugin/weekYear.test.js
+PASS test/query.test.js
+PASS test/locale/he.test.js
+PASS test/locale/hu.test.js
+PASS test/plugin/arraySupport.test.js
+PASS test/locale/sk.test.js
+PASS test/locale/cs.test.js
+PASS test/plugin.test.js
+PASS test/plugin/buddhistEra.test.js
+PASS test/locale/et.test.js
+PASS test/plugin/isoWeeksInYear.test.js
+PASS test/locale/ku.test.js
+PASS test/plugin/bigIntSupport.test.js
+PASS test/locale/ar-sa.test.js
+PASS test/locale/ar-ly.test.js
+PASS test/locale/ar-tn.test.js
+PASS test/locale/en.test.js
+PASS test/locale/zh-cn.test.js
+PASS test/locale/ar-kw.test.js
+PASS test/locale/lt.test.js
+PASS test/locale/ar-iq.test.js
+PASS test/locale/hr.test.js
+PASS test/locale/ar-dz.test.js
+PASS test/locale/ar-ma.test.js
+PASS test/plugin/isLeapYear.test.js
+PASS test/constructor.test.js
+PASS test/locale/zh.test.js
+PASS test/plugin/isTomorrow.test.js
+PASS test/plugin/isYesterday.test.js
+PASS test/locale/zh-hk.test.js
+PASS test/locale/sv.test.js
+PASS test/locale/zh-tw.test.js
+PASS test/plugin/isToday.test.js
+PASS test/plugin/toObject.test.js
+PASS test/plugin/declarations.test.js
+PASS test/plugin/isMoment.test.js
+PASS test/plugin/toArray.test.js
+
+
+>>>>> Tests Timed Out: 90 seconds exceeded

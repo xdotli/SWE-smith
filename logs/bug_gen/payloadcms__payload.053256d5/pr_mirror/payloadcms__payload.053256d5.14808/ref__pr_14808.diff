@@ -1,0 +1,286 @@
+diff --git a/packages/payload/src/query-presets/config.ts b/packages/payload/src/query-presets/config.ts
+index f3f94e0bbd4..38763d08c8f 100644
+--- a/packages/payload/src/query-presets/config.ts
++++ b/packages/payload/src/query-presets/config.ts
+@@ -14,7 +14,7 @@ export const getQueryPresetsConfig = (config: Config): CollectionConfig => ({
+   slug: queryPresetsCollectionSlug,
+   access: getAccess(config),
+   admin: {
+-    defaultColumns: ['title', 'isShared', 'access', 'where', 'columns'],
++    defaultColumns: ['title', 'isShared', 'access', 'where', 'columns', 'groupBy'],
+     hidden: true,
+     useAsTitle: 'title',
+   },
+@@ -94,6 +94,17 @@ export const getQueryPresetsConfig = (config: Config): CollectionConfig => ({
+         return true
+       },
+     },
++    {
++      name: 'groupBy',
++      type: 'text',
++      admin: {
++        components: {
++          Cell: '@payloadcms/ui#QueryPresetsGroupByCell',
++          Field: '@payloadcms/ui#QueryPresetsGroupByField',
++        },
++      },
++      label: 'Group By',
++    },
+     {
+       name: 'relatedCollection',
+       type: 'select',
+diff --git a/packages/payload/src/query-presets/types.ts b/packages/payload/src/query-presets/types.ts
+index d4030c0374e..5adf0c40d64 100644
+--- a/packages/payload/src/query-presets/types.ts
++++ b/packages/payload/src/query-presets/types.ts
+@@ -20,6 +20,7 @@ export type QueryPreset = {
+     }
+   }
+   columns: CollectionPreferences['columns']
++  groupBy?: string
+   id: number | string
+   isShared: boolean
+   relatedCollection: CollectionSlug
+diff --git a/packages/ui/src/elements/QueryPresets/QueryPresetBar/index.tsx b/packages/ui/src/elements/QueryPresets/QueryPresetBar/index.tsx
+index 15ce25060ff..ff29a0fbe65 100644
+--- a/packages/ui/src/elements/QueryPresets/QueryPresetBar/index.tsx
++++ b/packages/ui/src/elements/QueryPresets/QueryPresetBar/index.tsx
+@@ -83,6 +83,7 @@ export const QueryPresetBar: React.FC<{
+       await refineListData(
+         {
+           columns: preset.columns ? transformColumnsToSearchParams(preset.columns) : undefined,
++          groupBy: preset.groupBy || '',
+           preset: preset.id,
+           where: preset.where,
+         },
+@@ -96,6 +97,7 @@ export const QueryPresetBar: React.FC<{
+     await refineListData(
+       {
+         columns: [],
++        groupBy: '',
+         preset: '',
+         where: {},
+       },
+@@ -141,6 +143,7 @@ export const QueryPresetBar: React.FC<{
+       await fetch(`${apiRoute}/payload-query-presets/${activePreset.id}`, {
+         body: JSON.stringify({
+           columns: transformColumnsToPreferences(query.columns),
++          groupBy: query.groupBy,
+           where: query.where,
+         }),
+         credentials: 'include',
+@@ -178,6 +181,7 @@ export const QueryPresetBar: React.FC<{
+     apiRoute,
+     activePreset?.id,
+     query.columns,
++    query.groupBy,
+     query.where,
+     t,
+     presetConfig?.labels?.singular,
+@@ -216,6 +220,7 @@ export const QueryPresetBar: React.FC<{
+                 await refineListData(
+                   {
+                     columns: transformColumnsToSearchParams(activePreset.columns),
++                    groupBy: activePreset.groupBy || '',
+                     where: activePreset.where,
+                   },
+                   false,
+@@ -263,6 +268,7 @@ export const QueryPresetBar: React.FC<{
+       <CreateNewPresetDrawer
+         initialData={{
+           columns: transformColumnsToPreferences(query.columns),
++          groupBy: query.groupBy,
+           relatedCollection: collectionSlug,
+           where: query.where,
+         }}
+diff --git a/packages/ui/src/elements/QueryPresets/cells/GroupByCell/index.tsx b/packages/ui/src/elements/QueryPresets/cells/GroupByCell/index.tsx
+new file mode 100644
+index 00000000000..187ea0b9fc7
+--- /dev/null
++++ b/packages/ui/src/elements/QueryPresets/cells/GroupByCell/index.tsx
+@@ -0,0 +1,63 @@
++import type { DefaultCellComponentProps } from 'payload'
++
++import { toWords } from 'payload/shared'
++import React, { useMemo } from 'react'
++
++import { useAuth } from '../../../../providers/Auth/index.js'
++import { useConfig } from '../../../../providers/Config/index.js'
++import { useTranslation } from '../../../../providers/Translation/index.js'
++import { reduceFieldsToOptions } from '../../../../utilities/reduceFieldsToOptions.js'
++
++export const QueryPresetsGroupByCell: React.FC<DefaultCellComponentProps> = ({
++  cellData,
++  rowData,
++}) => {
++  const { i18n } = useTranslation()
++  const { permissions } = useAuth()
++  const { config } = useConfig()
++
++  // Get the related collection from the row data
++  const relatedCollection = rowData?.relatedCollection as string
++
++  // Get the collection config for the related collection
++  const collectionConfig = useMemo(() => {
++    if (!relatedCollection) {
++      return null
++    }
++
++    return config.collections?.find((col) => col.slug === relatedCollection)
++  }, [relatedCollection, config.collections])
++
++  // Reduce fields to options to get proper labels
++  const reducedFields = useMemo(() => {
++    if (!collectionConfig) {
++      return []
++    }
++
++    const fieldPermissions = permissions?.collections?.[relatedCollection]?.fields
++
++    return reduceFieldsToOptions({
++      fieldPermissions,
++      fields: collectionConfig.fields,
++      i18n,
++    })
++  }, [collectionConfig, permissions, relatedCollection, i18n])
++
++  if (!cellData || typeof cellData !== 'string') {
++    return <div>No group by selected</div>
++  }
++
++  const isDescending = cellData.startsWith('-')
++  const fieldName = isDescending ? cellData.slice(1) : cellData
++  const direction = isDescending ? 'descending' : 'ascending'
++
++  // Find the field option to get the proper label
++  const fieldOption = reducedFields.find((field) => field.value === fieldName)
++  const displayLabel = fieldOption?.label || toWords(fieldName)
++
++  return (
++    <div>
++      {displayLabel} ({direction})
++    </div>
++  )
++}
+diff --git a/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.scss b/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.scss
+new file mode 100644
+index 00000000000..cd75b2ac412
+--- /dev/null
++++ b/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.scss
+@@ -0,0 +1,17 @@
++@import '../../../../scss/styles';
++
++@layer payload-default {
++  .query-preset-group-by-field {
++    .field-label {
++      margin-bottom: calc(var(--base) / 2);
++    }
++
++    .value-wrapper {
++      background-color: var(--theme-elevation-50);
++      padding: var(--base);
++      display: flex;
++      flex-wrap: wrap;
++      gap: calc(var(--base) / 2);
++    }
++  }
++}
+diff --git a/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.tsx b/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.tsx
+new file mode 100644
+index 00000000000..3b1baabbbc1
+--- /dev/null
++++ b/packages/ui/src/elements/QueryPresets/fields/GroupByField/index.tsx
+@@ -0,0 +1,78 @@
++'use client'
++import type { TextFieldClientComponent } from 'payload'
++
++import { toWords } from 'payload/shared'
++import React, { useMemo } from 'react'
++
++import { FieldLabel } from '../../../../fields/FieldLabel/index.js'
++import { useField } from '../../../../forms/useField/index.js'
++import { useAuth } from '../../../../providers/Auth/index.js'
++import { useConfig } from '../../../../providers/Config/index.js'
++import { useTranslation } from '../../../../providers/Translation/index.js'
++import { reduceFieldsToOptions } from '../../../../utilities/reduceFieldsToOptions.js'
++import { Pill } from '../../../Pill/index.js'
++import './index.scss'
++
++export const QueryPresetsGroupByField: TextFieldClientComponent = ({
++  field: { label, required },
++}) => {
++  const { path, value } = useField()
++  const { i18n } = useTranslation()
++  const { permissions } = useAuth()
++  const { config } = useConfig()
++
++  // Get the relatedCollection from the document data
++  const relatedCollectionField = useField({ path: 'relatedCollection' })
++  const relatedCollection = relatedCollectionField.value as string
++
++  // Get the collection config for the related collection
++  const collectionConfig = useMemo(() => {
++    if (!relatedCollection) {
++      return null
++    }
++
++    return config.collections?.find((col) => col.slug === relatedCollection)
++  }, [relatedCollection, config.collections])
++
++  // Reduce fields to options to get proper labels
++  const reducedFields = useMemo(() => {
++    if (!collectionConfig) {
++      return []
++    }
++
++    const fieldPermissions = permissions?.collections?.[relatedCollection]?.fields
++
++    return reduceFieldsToOptions({
++      fieldPermissions,
++      fields: collectionConfig.fields,
++      i18n,
++    })
++  }, [collectionConfig, permissions, relatedCollection, i18n])
++
++  const renderGroupBy = (groupByValue: string) => {
++    if (!groupByValue) {
++      return 'No group by selected'
++    }
++
++    const isDescending = groupByValue.startsWith('-')
++    const fieldName = isDescending ? groupByValue.slice(1) : groupByValue
++    const direction = isDescending ? 'descending' : 'ascending'
++
++    // Find the field option to get the proper label
++    const fieldOption = reducedFields.find((field) => field.value === fieldName)
++    const displayLabel = fieldOption?.label || toWords(fieldName)
++
++    return (
++      <Pill pillStyle="always-white" size="small">
++        <b>{displayLabel}</b> ({direction})
++      </Pill>
++    )
++  }
++
++  return (
++    <div className="field-type query-preset-group-by-field">
++      <FieldLabel as="h3" label={label} path={path} required={required} />
++      <div className="value-wrapper">{renderGroupBy(value as string)}</div>
++    </div>
++  )
++}
+diff --git a/packages/ui/src/exports/client/index.ts b/packages/ui/src/exports/client/index.ts
+index be38350fa1d..ac3bfaffbfe 100644
+--- a/packages/ui/src/exports/client/index.ts
++++ b/packages/ui/src/exports/client/index.ts
+@@ -32,8 +32,10 @@ export { OrderableTable } from '../../elements/Table/OrderableTable.js'
+ export { QueryPresetsColumnsCell } from '../../elements/QueryPresets/cells/ColumnsCell/index.js'
+ export { QueryPresetsWhereCell } from '../../elements/QueryPresets/cells/WhereCell/index.js'
+ export { QueryPresetsAccessCell } from '../../elements/QueryPresets/cells/AccessCell/index.js'
++export { QueryPresetsGroupByCell } from '../../elements/QueryPresets/cells/GroupByCell/index.js'
+ export { QueryPresetsColumnField } from '../../elements/QueryPresets/fields/ColumnsField/index.js'
+ export { QueryPresetsWhereField } from '../../elements/QueryPresets/fields/WhereField/index.js'
++export { QueryPresetsGroupByField } from '../../elements/QueryPresets/fields/GroupByField/index.js'
+ 
+ // elements
+ export { ConfirmationModal } from '../../elements/ConfirmationModal/index.js'

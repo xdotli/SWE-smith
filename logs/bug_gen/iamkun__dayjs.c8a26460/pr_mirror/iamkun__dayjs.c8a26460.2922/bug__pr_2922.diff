@@ -1,0 +1,12 @@
+diff --git a/src/locale/en-au.js b/src/locale/en-au.js
+index 90c83c4..52c2dc3 100644
+--- a/src/locale/en-au.js
++++ b/src/locale/en-au.js
+@@ -37,5 +37,4 @@ const locale = {
+ 
+ dayjs.locale(locale, null, true)
+ 
+-export default locale
+-
++export default locale
+\ No newline at end of file

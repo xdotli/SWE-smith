@@ -1,0 +1,20 @@
+[
+  {
+    "repo": "payloadcms__payload.053256d5",
+    "instance_id": "payloadcms__payload.053256d5.14819",
+    "base_commit": "053256d5cef6411bc29b9a69be0b2b62d5397c40",
+    "patch": "diff --git a/packages/ui/src/elements/SelectMany/index.tsx b/packages/ui/src/elements/SelectMany/index.tsx\nindex aef666d6e..cd00ea684 100644\n--- a/packages/ui/src/elements/SelectMany/index.tsx\n+++ b/packages/ui/src/elements/SelectMany/index.tsx\n@@ -25,8 +25,9 @@ export const SelectMany: React.FC<{\n         }\n       }}\n       pillStyle=\"white\"\n+      size=\"small\"\n     >\n       {`Select ${count}`}\n     </Pill>\n   )\n-}\n+}\n\\ No newline at end of file\n",
+    "problem_statement": "UI Elements - SelectMany useTranslation\n### Describe the Bug.\n\nThe SelectMany field in Payload CMS currently does not support translations.\n\n<img width=\"829\" height=\"326\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/045db6c1-a8c2-45a7-a707-fc359175875f\" />\n\n### Reproduction Steps\n\nCurrently, the SelectMany element does not support translations.\nAfter checking the file node_modules/@payloadcms/ui/dist/elements/SelectMany/index.js, I noticed that useTranslation was previously included but is now commented out. It would be great if translation support could be properly implemented in a future release.\n\nIs it possible to fix this in the next update?\n\n<img width=\"752\" height=\"625\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/11ffbd2d-e21e-4fd3-8f99-1a474d81da6f\" />\n\n### Environment Info\n\n```text\nBinaries:\n  Node: 23.5.0\n  npm: 11.3.0\n  Yarn: 1.22.22\n  pnpm: 10.22.0\nRelevant Packages:\n  payload: 3.66.0\n  next: 15.4.8\n  @payloadcms/db-postgres: 3.66.0\n  @payloadcms/drizzle: 3.64.0\n  @payloadcms/graphql: 3.64.0\n  @payloadcms/live-preview: 3.65.0\n  @payloadcms/live-preview-react: 3.66.0\n  @payloadcms/next/utilities: 3.66.0\n  @payloadcms/plugin-form-builder: 3.66.0\n  @payloadcms/plugin-nested-docs: 3.66.0\n  @payloadcms/plugin-redirects: 3.66.0\n  @payloadcms/plugin-search: 3.66.0\n  @payloadcms/plugin-seo: 3.66.0\n  @payloadcms/richtext-lexical: 3.66.0\n  @payloadcms/translations: 3.66.0\n  @payloadcms/ui/shared: 3.66.0\n  react: 19.2.1\n  react-dom: 19.1.0\nOperating System:\n  Platform: linux\n  Arch: x64\n  Version: #173-Ubuntu SMP Tue Oct 14 17:51:00 UTC 2025\n  Available memory (MB): 31930\n  Available CPU cores: 28\n```\n",
+    "fail_to_pass": [],
+    "pass_to_pass": []
+  },
+  {
+    "repo": "payloadcms__payload.053256d5",
+    "instance_id": "payloadcms__payload.053256d5.14808",
+    "base_commit": "053256d5cef6411bc29b9a69be0b2b62d5397c40",
+    "patch": "diff --git a/packages/ui/src/exports/client/index.ts b/packages/ui/src/exports/client/index.ts\nindex 51c379e38..d3dfc14ab 100644\n--- a/packages/ui/src/exports/client/index.ts\n+++ b/packages/ui/src/exports/client/index.ts\n@@ -235,4 +235,4 @@ export { Text as TextCondition } from '../../elements/WhereBuilder/Condition/Tex\n export { Select as SelectCondition } from '../../elements/WhereBuilder/Condition/Select/index.js'\n export { RelationshipField as RelationshipCondition } from '../../elements/WhereBuilder/Condition/Relationship/index.js'\n export { NumberField as NumberCondition } from '../../elements/WhereBuilder/Condition/Number/index.js'\n-export { DateField as DateCondition } from '../../elements/WhereBuilder/Condition/Date/index.js'\n+export { DateField as DateCondition } from '../../elements/WhereBuilder/Condition/Date/index.js'\n\\ No newline at end of file\n",
+    "problem_statement": "",
+    "fail_to_pass": [],
+    "pass_to_pass": []
+  }
+]

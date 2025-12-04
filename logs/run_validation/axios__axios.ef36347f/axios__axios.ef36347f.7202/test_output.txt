@@ -1,0 +1,26 @@
++ cd /testbed
++ : '>>>>> Start Test Output'
++ npm test
+
+> axios@1.10.0 test
+> npm run test:eslint && npm run test:mocha && npm run test:karma && npm run test:dtslint && npm run test:exports
+
+
+> axios@1.10.0 test:eslint
+> node bin/ssl_hotfix.js eslint lib/**/*.js
+
+Running eslint lib/adapters/adapters.js lib/adapters/fetch.js lib/adapters/http.js lib/adapters/xhr.js lib/cancel/CancelToken.js lib/cancel/CanceledError.js lib/cancel/isCancel.js lib/core/Axios.js lib/core/AxiosError.js lib/core/AxiosHeaders.js lib/core/InterceptorManager.js lib/core/buildFullPath.js lib/core/dispatchRequest.js lib/core/mergeConfig.js lib/core/settle.js lib/core/transformData.js lib/defaults/index.js lib/defaults/transitional.js lib/env/data.js lib/helpers/AxiosTransformStream.js lib/helpers/AxiosURLSearchParams.js lib/helpers/HttpStatusCode.js lib/helpers/ZlibHeaderTransformStream.js lib/helpers/bind.js lib/helpers/buildURL.js lib/helpers/callbackify.js lib/helpers/combineURLs.js lib/helpers/composeSignals.js lib/helpers/cookies.js lib/helpers/deprecatedMethod.js lib/helpers/formDataToJSON.js lib/helpers/formDataToStream.js lib/helpers/fromDataURI.js lib/helpers/isAbsoluteURL.js lib/helpers/isAxiosError.js lib/helpers/isURLSameOrigin.js lib/helpers/null.js lib/helpers/parseHeaders.js lib/helpers/parseProtocol.js lib/helpers/progressEventReducer.js lib/helpers/readBlob.js lib/helpers/resolveConfig.js lib/helpers/speedometer.js lib/helpers/spread.js lib/helpers/throttle.js lib/helpers/toFormData.js lib/helpers/toURLEncodedForm.js lib/helpers/trackStream.js lib/helpers/validator.js lib/platform/index.js on v18.20.8
+
+Setting --openssl-legacy-provider as ssl hotfix
+
+/testbed/lib/adapters/http.js
+  432:47  error  Parsing error: Unexpected token
+
+✖ 1 problem (1 error, 0 warnings)
+
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.6.4
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+npm notice To update run: npm install -g npm@11.6.4
+npm notice
++ : '>>>>> End Test Output'

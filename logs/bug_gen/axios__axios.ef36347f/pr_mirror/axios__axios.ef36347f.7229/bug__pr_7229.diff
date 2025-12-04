@@ -1,0 +1,13 @@
+diff --git a/lib/adapters/http.js b/lib/adapters/http.js
+index 28d3d2bb64..dfa6386d32 100755
+--- a/lib/adapters/http.js
++++ b/lib/adapters/http.js
+@@ -816,8 +816,6 @@ export default isHttpAdapterSupported && function httpAdapter(config) {
+ 
+     // Handle errors
+     req.on('error', function handleRequestError(err) {
+-      // @todo remove
+-      // if (req.aborted && err.code !== AxiosError.ERR_FR_TOO_MANY_REDIRECTS) return;
+       reject(AxiosError.from(err, null, config, req));
+     });
+ 

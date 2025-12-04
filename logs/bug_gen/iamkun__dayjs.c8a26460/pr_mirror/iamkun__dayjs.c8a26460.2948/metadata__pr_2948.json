@@ -1,0 +1,19 @@
+{
+    "recover_status": "success",
+    "cost": 0,
+    "rewrites": {},
+    "direct_patch": true,
+    "instance_ref": {
+        "repo": "iamkun/dayjs",
+        "pull_number": 2948,
+        "instance_id": "iamkun__dayjs.c8a26460.2948",
+        "issue_numbers": [],
+        "base_commit": "c8a26460",
+        "patch": "diff --git a/src/plugin/devHelper/index.js b/src/plugin/devHelper/index.js\nindex bdb83caf7..2f163a25f 100644\n--- a/src/plugin/devHelper/index.js\n+++ b/src/plugin/devHelper/index.js\n@@ -26,6 +26,15 @@ export default (o, c, d) => {\n       }\n       return oldLocale(preset, object, isLocal)\n     }\n+\n+    const oldDiff = proto.diff\n+    proto.diff = function (date, unit, float) {\n+      const isInvalidDate = !date || !d(date).isValid()\n+      if (isInvalidDate) {\n+        console.warn('Invalid usage: diff() requires a valid comparison date as the first argument. https://day.js.org/docs/en/display/difference')\n+      }\n+\n+      return oldDiff.call(this, date, unit, float)\n+    }\n   }\n }\n-\n",
+        "test_patch": "diff --git a/test/plugin/devHelper.test.js b/test/plugin/devHelper.test.js\nindex c69190a14..ff63d434d 100644\n--- a/test/plugin/devHelper.test.js\n+++ b/test/plugin/devHelper.test.js\n@@ -1,6 +1,8 @@\n import MockDate from 'mockdate'\n import dayjs from '../../src'\n+import customParseFormat from '../../src/plugin/customParseFormat'\n import devHelper from '../../src/plugin/devHelper'\n+import localeData from '../../src/plugin/localeData'\n \n dayjs.extend(devHelper)\n \n@@ -38,3 +40,46 @@ it('Warning: Setting locale before loading locale', () => {\n   dayjs.locale('zh-cn')\n   expect(consoleSpy).toHaveBeenCalledWith('Guessing you may want to use locale zh-cn, you have to load it before using it. https://day.js.org/docs/en/i18n/loading-into-nodejs')\n })\n+\n+describe('dev-helper: diff() usage warnings', () => {\n+  const diffWarningMsg = 'Invalid usage: diff() requires a valid comparison date as the first argument. https://day.js.org/docs/en/display/difference'\n+\n+  beforeAll(() => {\n+    dayjs.extend(customParseFormat)\n+    dayjs.extend(localeData)\n+  })\n+\n+  beforeEach(() => {\n+    jest.clearAllMocks()\n+  })\n+\n+  it('warns when diff() is called with no comparison date', () => {\n+    const consoleSpy = jest.spyOn(console, 'warn')\n+    dayjs('2025-01-10').diff()\n+    expect(consoleSpy).toHaveBeenCalledWith(diffWarningMsg)\n+  })\n+\n+  it('warns when diff() is called with just the unit', () => {\n+    const consoleSpy = jest.spyOn(console, 'warn')\n+    dayjs('2025-01-10').diff('days')\n+    expect(consoleSpy).toHaveBeenCalledWith(diffWarningMsg)\n+  })\n+\n+  it('warns when diff() is called with an invalid comparison date (unparsable string)', () => {\n+    const consoleSpy = jest.spyOn(console, 'warn')\n+    dayjs('2025-01-10').diff('invalid-date', 'days')\n+    expect(consoleSpy).toHaveBeenCalledWith(diffWarningMsg)\n+  })\n+\n+  it('does NOT warn when diff() is called with a valid string date', () => {\n+    const consoleSpy = jest.spyOn(console, 'warn')\n+    dayjs('2025-01-10').diff('2025-01-09', 'days')\n+    expect(consoleSpy).not.toHaveBeenCalledWith(diffWarningMsg)\n+  })\n+\n+  it('does NOT warn when diff() is called with a valid Day.js instance', () => {\n+    const consoleSpy = jest.spyOn(console, 'warn')\n+    dayjs('2025-01-10').diff(dayjs(), 'days')\n+    expect(consoleSpy).not.toHaveBeenCalledWith(diffWarningMsg)\n+  })\n+})\n",
+        "problem_statement": "",
+        "hints_text": "",
+        "created_at": "2025-10-26T16:53:07Z",
+        "pr_mirror": "iamkun__dayjs.c8a26460"
+    }
+}

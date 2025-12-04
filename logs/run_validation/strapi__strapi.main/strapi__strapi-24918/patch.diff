@@ -1,0 +1,46 @@
+diff --git a/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx b/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx
+index 0b344ad118ec..4d934adc0ffd 100644
+--- a/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx
++++ b/packages/core/content-type-builder/admin/src/components/AIChat/Chat.tsx
+@@ -340,6 +340,7 @@ const ChatInput = (props: React.FormHTMLAttributes<HTMLFormElement>) => {
+                 <IconButton
+                   label={t('chat.tooltips.send-message', 'Send')}
+                   variant="default"
++                  type="submit"
+                   // allow sending an empty message if there are attachments
+                   disabled={input.trim().length === 0 && attachments.length === 0}
+                 >
+diff --git a/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx b/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx
+index 635122fb56c8..4d9b03d8f870 100644
+--- a/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx
++++ b/packages/core/content-type-builder/admin/src/components/AIChat/components/Messages/Message.tsx
+@@ -19,6 +19,8 @@ import { Marker } from './Marker';
+ const MarkdownStyles = styled(Typography)`
+   max-width: 65ch;
+   margin: 0 auto;
++  overflow-wrap: anywhere;
++  word-break: break-word;
+ 
+   h1,
+   h2,
+@@ -77,6 +79,11 @@ const MarkdownStyles = styled(Typography)`
+   }
+ `;
+ 
++const UserMessageTypography = styled(Typography)`
++  overflow-wrap: anywhere;
++  word-break: break-word;
++`;
++
+ // ---------------------------
+ // Tool: schemaGenerationTool helpers
+ // ---------------------------
+@@ -195,7 +202,7 @@ const UserMessage = ({ message }: { message: UserMessageType }) => {
+         <Box background="neutral150" borderStyle="none" padding={['10px', '16px']} hasRadius>
+           {message.parts.map((content, index) => {
+             if (content.type !== 'text') return null;
+-            return <Typography key={index}>{content.text}</Typography>;
++            return <UserMessageTypography key={index}>{content.text}</UserMessageTypography>;
+           })}
+         </Box>
+       ) : null}

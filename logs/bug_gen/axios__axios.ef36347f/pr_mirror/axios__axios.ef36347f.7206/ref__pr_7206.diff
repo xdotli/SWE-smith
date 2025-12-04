@@ -1,0 +1,14 @@
+diff --git a/lib/adapters/http.js b/lib/adapters/http.js
+index 524c278505..ccc89be66d 100755
+--- a/lib/adapters/http.js
++++ b/lib/adapters/http.js
+@@ -858,6 +858,9 @@ export default isHttpAdapterSupported && function httpAdapter(config) {
+           req
+         ));
+       });
++    } else {
++      // explicitly reset the socket timeout value for a possible `keep-alive` request
++      req.setTimeout(0);
+     }
+ 
+ 

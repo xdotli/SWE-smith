@@ -1,0 +1,12 @@
+diff --git a/src/locale/ga.js b/src/locale/ga.js
+index 1e433cd..2477a37 100644
+--- a/src/locale/ga.js
++++ b/src/locale/ga.js
+@@ -37,5 +37,4 @@ const locale = {
+ 
+ dayjs.locale(locale, null, true)
+ 
+-export default locale
+-
++export default locale
+\ No newline at end of file

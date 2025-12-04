@@ -1,0 +1,11 @@
+diff --git a/packages/ui/src/exports/client/index.ts b/packages/ui/src/exports/client/index.ts
+index 51c379e38..d3dfc14ab 100644
+--- a/packages/ui/src/exports/client/index.ts
++++ b/packages/ui/src/exports/client/index.ts
+@@ -235,4 +235,4 @@ export { Text as TextCondition } from '../../elements/WhereBuilder/Condition/Tex
+ export { Select as SelectCondition } from '../../elements/WhereBuilder/Condition/Select/index.js'
+ export { RelationshipField as RelationshipCondition } from '../../elements/WhereBuilder/Condition/Relationship/index.js'
+ export { NumberField as NumberCondition } from '../../elements/WhereBuilder/Condition/Number/index.js'
+-export { DateField as DateCondition } from '../../elements/WhereBuilder/Condition/Date/index.js'
++export { DateField as DateCondition } from '../../elements/WhereBuilder/Condition/Date/index.js'
+\ No newline at end of file
