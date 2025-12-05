@@ -1,0 +1,1324 @@
+diff --git a/products/logs/frontend/LogsScene.tsx b/products/logs/frontend/LogsScene.tsx
+index d48921c..8491afd 100644
+--- a/products/logs/frontend/LogsScene.tsx
++++ b/products/logs/frontend/LogsScene.tsx
+@@ -9,11 +9,13 @@ import {
+     LemonSegmentedButton,
+     LemonSelect,
+     LemonTable,
++    SpinnerOverlay,
+     Tooltip,
+ } from '@posthog/lemon-ui'
+ 
+ import { CopyToClipboardInline } from 'lib/components/CopyToClipboard'
+ import { ProductIntroduction } from 'lib/components/ProductIntroduction/ProductIntroduction'
++import { Sparkline } from 'lib/components/Sparkline'
+ import { TZLabel, TZLabelProps } from 'lib/components/TZLabel'
+ import { ListHog } from 'lib/components/hedgehogs'
+ import { FEATURE_FLAGS } from 'lib/constants'
+@@ -34,7 +36,6 @@ import { LogMessage, ProductKey } from '~/queries/schema/schema-general'
+ import { PropertyOperator } from '~/types'
+ 
+ import { LogTag } from 'products/logs/frontend/components/LogTag'
+-import { LogsSparkline } from 'products/logs/frontend/components/LogsSparkline'
+ import { LogsTableRowActions } from 'products/logs/frontend/components/LogsTable/LogsTableRowActions'
+ import { VirtualizedLogsList } from 'products/logs/frontend/components/VirtualizedLogsList'
+ import { LogsFilterGroup } from 'products/logs/frontend/components/filters/LogsFilters/FilterGroup'
+@@ -53,8 +54,9 @@ export const scene: SceneExport = {
+ }
+ 
+ export function LogsScene(): JSX.Element {
+-    const { logsLoading } = useValues(logsLogic)
+-    const { runQuery, highlightNextLog, highlightPreviousLog, toggleExpandLog } = useActions(logsLogic)
++    const { sparklineData, sparklineLoading, logsLoading } = useValues(logsLogic)
++    const { runQuery, setDateRangeFromSparkline, highlightNextLog, highlightPreviousLog, toggleExpandLog } =
++        useActions(logsLogic)
+     const { highlightedLogId: sceneHighlightedLogId } = useValues(logsLogic)
+ 
+     useEffect(() => {
+@@ -79,6 +81,10 @@ export function LogsScene(): JSX.Element {
+         [sceneHighlightedLogId, logsLoading, runQuery]
+     )
+ 
++    const onSelectionChange = (selection: { startIndex: number; endIndex: number }): void => {
++        setDateRangeFromSparkline(selection.startIndex, selection.endIndex)
++    }
++
+     return (
+         <SceneContent>
+             <SceneTitleSection
+@@ -109,7 +115,21 @@ export function LogsScene(): JSX.Element {
+                 isEmpty={false}
+             />
+             <Filters />
+-            <LogsSparkline />
++            <div className="relative h-40 flex flex-col">
++                {sparklineData.data.length > 0 ? (
++                    <Sparkline
++                        labels={sparklineData.labels}
++                        data={sparklineData.data}
++                        className="w-full flex-1"
++                        onSelectionChange={onSelectionChange}
++                    />
++                ) : !sparklineLoading ? (
++                    <div className="flex-1 text-muted flex items-center justify-center">
++                        No results matching filters
++                    </div>
++                ) : null}
++                {sparklineLoading && <SpinnerOverlay />}
++            </div>
+             <SceneDivider />
+             <LogsListContainer />
+         </SceneContent>
+@@ -341,309 +361,4 @@ function LogsTable({
+                                             pinned
+                                                 ? 'text-primary opacity-100'
+                                                 : 'text-muted opacity-0 group-hover:opacity-100'
+-                                        )}
+-                                    />
+-                                    <LogsTableRowActions log={record} />
+-                                </div>
+-                            )
+-                        },
+-                    },
+-                    {
+-                        title: 'Timestamp',
+-                        key: 'timestamp',
+-                        dataIndex: 'timestamp',
+-                        width: 180,
+-                        render: (_, { timestamp }) => (
+-                            <TZLabel time={timestamp} {...tzLabelFormat} showNow={false} showToday={false} />
+-                        ),
+-                    },
+-                    {
+-                        title: 'Level',
+-                        key: 'severity_text',
+-                        dataIndex: 'severity_text',
+-                        width: 100,
+-                        render: (_, record) => <LogTag level={record.severity_text} />,
+-                    },
+-                    {
+-                        title: 'Message',
+-                        key: 'body',
+-                        dataIndex: 'body',
+-                        render: (_, { cleanBody, parsedBody }) => {
+-                            if (parsedBody && prettifyJson) {
+-                                return (
+-                                    <pre className={cn('text-xs m-0', wrapBody ? '' : 'whitespace-nowrap')}>
+-                                        {JSON.stringify(parsedBody, null, 2)}
+-                                    </pre>
+-                                )
+-                            }
+-
+-                            return <div className={cn(wrapBody ? '' : 'whitespace-nowrap')}>{cleanBody}</div>
+-                        },
+-                    },
+-                ]}
+-                expandable={{
+-                    noIndent: true,
+-                    expandedRowRender: (log) => <ExpandedLog log={log} />,
+-                    isRowExpanded: (record) => expandedLogIds.has(record.uuid),
+-                    onRowExpand: (record) => toggleExpandLog(record.uuid),
+-                    onRowCollapse: (record) => toggleExpandLog(record.uuid),
+-                }}
+-            />
+-        </div>
+-    )
+-}
+-
+-const ExpandedLog = ({ log }: { log: LogMessage }): JSX.Element => {
+-    const { expandedAttributeBreaksdowns, tabId } = useValues(logsLogic)
+-    const { addFilter, toggleAttributeBreakdown } = useActions(logsLogic)
+-
+-    const attributes = log.attributes
+-    const rows = Object.entries(attributes).map(([key, value]) => ({ key, value }))
+-
+-    return (
+-        <LemonTable
+-            embedded
+-            showHeader={false}
+-            columns={[
+-                {
+-                    key: 'actions',
+-                    width: 0,
+-                    render: (_, record) => (
+-                        <div className="flex gap-x-0">
+-                            <LemonButton
+-                                tooltip="Add as filter"
+-                                size="xsmall"
+-                                onClick={() => addFilter(record.key, record.value)}
+-                            >
+-                                <IconPlusSquare />
+-                            </LemonButton>
+-                            <LemonButton
+-                                tooltip="Exclude as filter"
+-                                size="xsmall"
+-                                onClick={() => addFilter(record.key, record.value, PropertyOperator.IsNot)}
+-                            >
+-                                <IconMinusSquare />
+-                            </LemonButton>
+-                            <LemonButton
+-                                tooltip="Show breakdown"
+-                                size="xsmall"
+-                                onClick={() => toggleAttributeBreakdown(record.key)}
+-                            >
+-                                <IconFilter />
+-                            </LemonButton>
+-                        </div>
+-                    ),
+-                },
+-                {
+-                    title: 'Key',
+-                    key: 'key',
+-                    dataIndex: 'key',
+-                    width: 0,
+-                },
+-                {
+-                    title: 'Value',
+-                    key: 'value',
+-                    dataIndex: 'value',
+-                    render: (_, record) => (
+-                        <CopyToClipboardInline
+-                            explicitValue={String(record.value)}
+-                            description="attribute value"
+-                            iconSize="xsmall"
+-                            iconPosition="start"
+-                            selectable
+-                            className="gap-1"
+-                        >
+-                            {String(record.value)}
+-                        </CopyToClipboardInline>
+-                    ),
+-                },
+-            ]}
+-            dataSource={rows}
+-            expandable={{
+-                noIndent: true,
+-                showRowExpansionToggle: false,
+-                isRowExpanded: (record) => expandedAttributeBreaksdowns.includes(record.key),
+-                expandedRowRender: (record) => (
+-                    <AttributeBreakdowns attribute={record.key} addFilter={addFilter} tabId={tabId} />
+-                ),
+-            }}
+-        />
+-    )
+-}
+-
+-const Filters = (): JSX.Element => {
+-    const { logsLoading, liveTailRunning, liveTailDisabledReason } = useValues(logsLogic)
+-    const { runQuery, zoomDateRange, setLiveTailRunning } = useActions(logsLogic)
+-
+-    return (
+-        <div className="flex flex-col gap-y-1.5">
+-            <div className="flex justify-between gap-y-2 flex-wrap-reverse">
+-                <div className="flex gap-x-1 gap-y-2 flex-wrap">
+-                    <SeverityLevelsFilter />
+-                    <ServiceFilter />
+-                </div>
+-                <div className="flex gap-x-1">
+-                    <LemonButton
+-                        size="small"
+-                        icon={<IconMinusSquare />}
+-                        type="secondary"
+-                        onClick={() => zoomDateRange(2)}
+-                    />
+-                    <LemonButton
+-                        size="small"
+-                        icon={<IconPlusSquare />}
+-                        type="secondary"
+-                        onClick={() => zoomDateRange(0.5)}
+-                    />
+-                    <DateRangeFilter />
+-                    <LemonButton
+-                        size="small"
+-                        icon={<IconRefresh />}
+-                        type="secondary"
+-                        onClick={() => runQuery()}
+-                        loading={logsLoading || liveTailRunning}
+-                        disabledReason={liveTailRunning ? 'Disable live tail to manually refresh' : undefined}
+-                    >
+-                        {liveTailRunning ? 'Tailing...' : logsLoading ? 'Loading...' : 'Search'}
+-                    </LemonButton>
+-                    <LemonButton
+-                        size="small"
+-                        type={liveTailRunning ? 'primary' : 'secondary'}
+-                        icon={liveTailRunning ? <IconPauseCircle /> : <IconPlayCircle />}
+-                        onClick={() => setLiveTailRunning(!liveTailRunning)}
+-                        disabledReason={liveTailRunning ? undefined : liveTailDisabledReason}
+-                    >
+-                        Live tail
+-                    </LemonButton>
+-                </div>
+-            </div>
+-            <LogsFilterGroup />
+-        </div>
+-    )
+-}
+-
+-const DisplayOptions = (): JSX.Element => {
+-    const { orderBy, wrapBody, prettifyJson, logsPageSize, totalLogsMatchingFilters, parsedLogs, sparklineLoading } =
+-        useValues(logsLogic)
+-    const { setOrderBy, setWrapBody, setPrettifyJson, setLogsPageSize } = useActions(logsLogic)
+-
+-    return (
+-        <div className="flex justify-between">
+-            <div className="flex gap-2">
+-                <LemonSegmentedButton
+-                    value={orderBy}
+-                    onChange={setOrderBy}
+-                    options={[
+-                        {
+-                            value: 'earliest',
+-                            label: 'Earliest',
+-                        },
+-                        {
+-                            value: 'latest',
+-                            label: 'Latest',
+-                        },
+-                    ]}
+-                    size="small"
+-                />
+-                <LemonCheckbox checked={wrapBody} bordered onChange={setWrapBody} label="Wrap message" size="small" />
+-                <LemonCheckbox
+-                    checked={prettifyJson}
+-                    bordered
+-                    onChange={setPrettifyJson}
+-                    label="Prettify JSON"
+-                    size="small"
+-                />
+-            </div>
+-            <div className="flex items-center gap-4">
+-                {!sparklineLoading && totalLogsMatchingFilters > 0 && (
+-                    <span className="text-muted text-xs">
+-                        Showing {humanFriendlyNumber(parsedLogs.length)} of{' '}
+-                        {humanFriendlyNumber(totalLogsMatchingFilters)} logs
+-                    </span>
+-                )}
+-                <LemonField.Pure label="Page size" inline className="items-center gap-2">
+-                    <LemonSelect
+-                        value={logsPageSize}
+-                        onChange={(value: number) => setLogsPageSize(value)}
+-                        size="small"
+-                        type="secondary"
+-                        options={[
+-                            { value: 100, label: '100' },
+-                            { value: 200, label: '200' },
+-                            { value: 500, label: '500' },
+-                            { value: 1000, label: '1000' },
+-                        ]}
+-                    />
+-                </LemonField.Pure>
+-                <span className="text-muted text-xs flex items-center gap-1">
+-                    <KeyboardShortcut arrowup />
+-                    <KeyboardShortcut arrowdown />
+-                    or
+-                    <KeyboardShortcut j />
+-                    <KeyboardShortcut k />
+-                    navigate
+-                    <span className="mx-1">·</span>
+-                    <KeyboardShortcut enter />
+-                    expand
+-                    <span className="mx-1">·</span>
+-                    <KeyboardShortcut r />
+-                    refresh
+-                </span>
+-            </div>
+-        </div>
+-    )
+-}
+-
+-const VirtualizedLogsListDisplayOptions = (): JSX.Element => {
+-    const { orderBy, wrapBody, prettifyJson, totalLogsMatchingFilters, sparklineLoading } = useValues(logsLogic)
+-    const { setOrderBy, setWrapBody, setPrettifyJson } = useActions(logsLogic)
+-
+-    return (
+-        <div className="flex justify-between">
+-            <div className="flex gap-2">
+-                <LemonSegmentedButton
+-                    value={orderBy}
+-                    onChange={setOrderBy}
+-                    options={[
+-                        {
+-                            value: 'earliest',
+-                            label: 'Earliest',
+-                        },
+-                        {
+-                            value: 'latest',
+-                            label: 'Latest',
+-                        },
+-                    ]}
+-                    size="small"
+-                />
+-                <LemonCheckbox checked={wrapBody} bordered onChange={setWrapBody} label="Wrap message" size="small" />
+-                <LemonCheckbox
+-                    checked={prettifyJson}
+-                    bordered
+-                    onChange={setPrettifyJson}
+-                    label="Prettify JSON"
+-                    size="small"
+-                />
+-            </div>
+-            <div className="flex items-center gap-4">
+-                {!sparklineLoading && totalLogsMatchingFilters > 0 && (
+-                    <span className="text-muted text-xs">{humanFriendlyNumber(totalLogsMatchingFilters)} logs</span>
+-                )}
+-                <span className="text-muted text-xs flex items-center gap-1">
+-                    <KeyboardShortcut arrowup />
+-                    <KeyboardShortcut arrowdown />
+-                    or
+-                    <KeyboardShortcut j />
+-                    <KeyboardShortcut k />
+-                    navigate
+-                    <span className="mx-1">·</span>
+-                    <KeyboardShortcut enter />
+-                    expand
+-                    <span className="mx-1">·</span>
+-                    <KeyboardShortcut r />
+-                    refresh
+-                </span>
+-            </div>
+-        </div>
+-    )
+-}
++                                        )}
+\ No newline at end of file
+diff --git a/products/logs/frontend/components/LogsSparkline.tsx b/products/logs/frontend/components/LogsSparkline.tsx
+deleted file mode 100644
+index 0a75f25..0000000
+--- a/products/logs/frontend/components/LogsSparkline.tsx
++++ /dev/null
+@@ -1,142 +0,0 @@
+-import { useActions, useValues } from 'kea'
+-import { useCallback, useMemo } from 'react'
+-
+-import { LemonSelect, SpinnerOverlay } from '@posthog/lemon-ui'
+-
+-import { AnyScaleOptions, Sparkline } from 'lib/components/Sparkline'
+-import { dayjs } from 'lib/dayjs'
+-import { shortTimeZone } from 'lib/utils'
+-import { teamLogic } from 'scenes/teamLogic'
+-
+-import { SparklineTimezone, logsLogic } from '../logsLogic'
+-
+-export function LogsSparkline(): JSX.Element {
+-    const { sparklineData, sparklineLoading, sparklineTimezone } = useValues(logsLogic)
+-    const { setDateRangeFromSparkline, setSparklineTimezone } = useActions(logsLogic)
+-    const { timezone: projectTimezone } = useValues(teamLogic)
+-
+-    const deviceTimezone = shortTimeZone()
+-
+-    // Determine which timezone string to use for formatting
+-    const activeTimezone = useMemo(() => {
+-        switch (sparklineTimezone) {
+-            case SparklineTimezone.UTC:
+-                return 'UTC'
+-            case SparklineTimezone.Project:
+-                return projectTimezone
+-            case SparklineTimezone.Device:
+-            default:
+-                return undefined // undefined means local
+-        }
+-    }, [sparklineTimezone, projectTimezone])
+-
+-    // Build timezone options, deduplicating if any match
+-    const timezoneOptions = useMemo(() => {
+-        const options: { value: SparklineTimezone; label: string }[] = [{ value: SparklineTimezone.UTC, label: 'UTC' }]
+-
+-        const projectTzLabel = shortTimeZone(projectTimezone) ?? projectTimezone
+-        if (projectTimezone !== 'UTC') {
+-            options.push({ value: SparklineTimezone.Project, label: `Project (${projectTzLabel})` })
+-        }
+-
+-        if (deviceTimezone && deviceTimezone !== 'UTC' && deviceTimezone !== projectTzLabel) {
+-            options.push({ value: SparklineTimezone.Device, label: `Device (${deviceTimezone})` })
+-        }
+-
+-        return options
+-    }, [projectTimezone, deviceTimezone])
+-
+-    const showTimezoneSelector = timezoneOptions.length > 1
+-
+-    const { timeUnit, tickFormat } = useMemo(() => {
+-        if (!sparklineData.dates.length) {
+-            return { timeUnit: 'hour' as const, tickFormat: 'HH:mm:ss' }
+-        }
+-        const firstDate = dayjs(sparklineData.dates[0])
+-        const lastDate = dayjs(sparklineData.dates[sparklineData.dates.length - 1])
+-        const hoursDiff = lastDate.diff(firstDate, 'hours')
+-
+-        if (hoursDiff <= 1) {
+-            return { timeUnit: 'second' as const, tickFormat: 'HH:mm:ss' }
+-        } else if (hoursDiff <= 6) {
+-            return { timeUnit: 'minute' as const, tickFormat: 'HH:mm:ss' }
+-        } else if (hoursDiff <= 48) {
+-            return { timeUnit: 'hour' as const, tickFormat: 'HH:mm' }
+-        }
+-        return { timeUnit: 'day' as const, tickFormat: 'D MMM HH:mm' }
+-    }, [sparklineData.dates])
+-
+-    const withXScale = useCallback(
+-        (scale: AnyScaleOptions): AnyScaleOptions => {
+-            return {
+-                ...scale,
+-                type: 'timeseries',
+-                ticks: {
+-                    display: true,
+-                    maxRotation: 0,
+-                    maxTicksLimit: 6,
+-                    font: {
+-                        size: 10,
+-                        lineHeight: 1,
+-                    },
+-                    callback: function (value: string | number) {
+-                        const d = activeTimezone ? dayjs(value).tz(activeTimezone) : dayjs(value)
+-                        return d.format(tickFormat)
+-                    },
+-                },
+-                time: {
+-                    unit: timeUnit,
+-                },
+-            } as AnyScaleOptions
+-        },
+-        [timeUnit, tickFormat, activeTimezone]
+-    )
+-
+-    const renderLabel = useCallback(
+-        (label: string): string => {
+-            const d = activeTimezone ? dayjs(label).tz(activeTimezone) : dayjs(label)
+-            const tz = activeTimezone === 'UTC' ? 'UTC' : (shortTimeZone(activeTimezone, d.toDate()) ?? 'Local')
+-            return `${d.format('D MMM YYYY HH:mm:ss')} ${tz}`
+-        },
+-        [activeTimezone]
+-    )
+-
+-    const sparklineLabels = useMemo(() => {
+-        return sparklineData.dates.map((date) => dayjs(date).toISOString())
+-    }, [sparklineData.dates])
+-
+-    const onSelectionChange = useCallback(
+-        (selection: { startIndex: number; endIndex: number }): void => {
+-            setDateRangeFromSparkline(selection.startIndex, selection.endIndex)
+-        },
+-        [setDateRangeFromSparkline]
+-    )
+-
+-    return (
+-        <div className="relative h-40 flex flex-col">
+-            {showTimezoneSelector && (
+-                <div className="absolute top-1 right-1 z-10">
+-                    <LemonSelect
+-                        size="xsmall"
+-                        value={sparklineTimezone}
+-                        onChange={(value) => value && setSparklineTimezone(value)}
+-                        options={timezoneOptions}
+-                    />
+-                </div>
+-            )}
+-            {sparklineData.data.length > 0 ? (
+-                <Sparkline
+-                    labels={sparklineLabels}
+-                    data={sparklineData.data}
+-                    className="w-full flex-1"
+-                    onSelectionChange={onSelectionChange}
+-                    withXScale={withXScale}
+-                    renderLabel={renderLabel}
+-                />
+-            ) : !sparklineLoading ? (
+-                <div className="flex-1 text-muted flex items-center justify-center">No results matching filters</div>
+-            ) : null}
+-            {sparklineLoading && <SpinnerOverlay />}
+-        </div>
+-    )
+-}
+diff --git a/products/logs/frontend/logsLogic.test.ts b/products/logs/frontend/logsLogic.test.ts
+index d8a6a00..3a11b16 100644
+--- a/products/logs/frontend/logsLogic.test.ts
++++ b/products/logs/frontend/logsLogic.test.ts
+@@ -3,7 +3,7 @@ import { expectLogic } from 'kea-test-utils'
+ import { LogMessage } from '~/queries/schema/schema-general'
+ import { initKeaTests } from '~/test/init'
+ 
+-import { SparklineTimezone, logsLogic } from './logsLogic'
++import { logsLogic } from './logsLogic'
+ 
+ const createMockLog = (uuid: string): LogMessage => ({
+     uuid,
+@@ -194,24 +194,4 @@ describe('logsLogic', () => {
+             })
+         })
+     })
+-
+-    describe('sparklineTimezone', () => {
+-        it('updates when setSparklineTimezone is called', async () => {
+-            await expectLogic(logic, () => {
+-                logic.actions.setSparklineTimezone(SparklineTimezone.Device)
+-            })
+-                .toDispatchActions(['setSparklineTimezone'])
+-                .toMatchValues({
+-                    sparklineTimezone: SparklineTimezone.Device,
+-                })
+-
+-            await expectLogic(logic, () => {
+-                logic.actions.setSparklineTimezone(SparklineTimezone.UTC)
+-            })
+-                .toDispatchActions(['setSparklineTimezone'])
+-                .toMatchValues({
+-                    sparklineTimezone: SparklineTimezone.UTC,
+-                })
+-        })
+-    })
+-})
++})
+\ No newline at end of file
+diff --git a/products/logs/frontend/logsLogic.tsx b/products/logs/frontend/logsLogic.tsx
+index a0b3774..670b943 100644
+--- a/products/logs/frontend/logsLogic.tsx
++++ b/products/logs/frontend/logsLogic.tsx
+@@ -38,12 +38,6 @@ const NEW_QUERY_STARTED_ERROR_MESSAGE = 'new query started' as const
+ const DEFAULT_LIVE_TAIL_POLL_INTERVAL_MS = 1000
+ const DEFAULT_LIVE_TAIL_POLL_INTERVAL_MAX_MS = 5000
+ 
+-export enum SparklineTimezone {
+-    UTC = 'utc',
+-    Project = 'project',
+-    Device = 'device',
+-}
+-
+ const parseLogAttributes = (logs: LogMessage[]): void => {
+     logs.forEach((row) => {
+         Object.keys(row.attributes).forEach((key) => {
+@@ -53,6 +47,12 @@ const parseLogAttributes = (logs: LogMessage[]): void => {
+     })
+ }
+ 
++export enum SparklineTimezone {
++    UTC = 'utc',
++    Project = 'project',
++    Device = 'device',
++}
++
+ export interface LogsLogicProps {
+     tabId: string
+ }
+@@ -263,7 +263,6 @@ export const logsLogic = kea<logsLogicType>([
+         expireLiveTail: () => true,
+         setLiveTailExpired: (liveTailExpired: boolean) => ({ liveTailExpired }),
+         addLogsToSparkline: (logs: LogMessage[]) => logs,
+-        setSparklineTimezone: (sparklineTimezone: SparklineTimezone) => ({ sparklineTimezone }),
+     }),
+ 
+     reducers({
+@@ -346,711 +345,4 @@ export const logsLogic = kea<logsLogicType>([
+         logsAbortController: [
+             null as AbortController | null,
+             {
+-                setLogsAbortController: (_, { logsAbortController }) => logsAbortController,
+-            },
+-        ],
+-        sparklineAbortController: [
+-            null as AbortController | null,
+-            {
+-                setSparklineAbortController: (_, { sparklineAbortController }) => sparklineAbortController,
+-            },
+-        ],
+-        liveTailAbortController: [
+-            null as AbortController | null,
+-            {
+-                setLiveTailAbortController: (_, { liveTailAbortController }) => liveTailAbortController,
+-            },
+-        ],
+-        hasRunQuery: [
+-            false as boolean,
+-            {
+-                fetchLogsSuccess: () => true,
+-                fetchLogsFailure: () => true,
+-            },
+-        ],
+-        logsLoading: [
+-            false as boolean,
+-            {
+-                fetchLogs: () => true,
+-                fetchLogsSuccess: () => false,
+-                fetchLogsFailure: () => true,
+-                fetchNextLogsPage: () => true,
+-                fetchNextLogsPageSuccess: () => false,
+-                fetchNextLogsPageFailure: () => true,
+-            },
+-        ],
+-
+-        sparklineLoading: [
+-            false as boolean,
+-            {
+-                fetchSparkline: () => true,
+-                fetchSparklineSuccess: () => false,
+-                fetchSparklineFailure: () => true,
+-            },
+-        ],
+-        openFilterOnInsert: [
+-            false as boolean,
+-            {
+-                setFilterGroup: (_, { openFilterOnInsert }) => openFilterOnInsert,
+-            },
+-        ],
+-        expandedAttributeBreaksdowns: [
+-            [] as string[],
+-            {
+-                setExpandedAttributeBreaksdowns: (_, { expandedAttributeBreaksdowns }) => expandedAttributeBreaksdowns,
+-            },
+-        ],
+-        pinnedLogs: [
+-            [] as LogMessage[],
+-            { persist: true },
+-            {
+-                pinLog: (state, { log }) => [...state, log],
+-                unpinLog: (state, { logId }) => state.filter((log) => log.uuid !== logId),
+-            },
+-        ],
+-        liveTailRunning: [
+-            false as boolean,
+-            {
+-                setLiveTailRunning: (_, { enabled }) => enabled,
+-                runQuery: () => false,
+-            },
+-        ],
+-        sparklineTimezone: [
+-            SparklineTimezone.UTC as SparklineTimezone,
+-            { persist: true },
+-            {
+-                setSparklineTimezone: (_, { sparklineTimezone }) => sparklineTimezone,
+-            },
+-        ],
+-        liveTailPollInterval: [
+-            DEFAULT_LIVE_TAIL_POLL_INTERVAL_MS as number,
+-            {
+-                setLiveTailInterval: (_, { interval }) => interval,
+-            },
+-        ],
+-        highlightedLogId: [
+-            DEFAULT_HIGHLIGHTED_LOG_ID,
+-            {
+-                setHighlightedLogId: (_, { highlightedLogId }) => highlightedLogId,
+-            },
+-        ],
+-        hasMoreLogsToLoad: [
+-            true as boolean,
+-            {
+-                setHasMoreLogsToLoad: (_, { hasMoreLogsToLoad }) => hasMoreLogsToLoad,
+-                clearLogs: () => true,
+-            },
+-        ],
+-        expandedLogIds: [
+-            new Set<string>(),
+-            {
+-                toggleExpandLog: (state, { logId }) => {
+-                    const newSet = new Set(state)
+-                    if (newSet.has(logId)) {
+-                        newSet.delete(logId)
+-                    } else {
+-                        newSet.add(logId)
+-                    }
+-                    return newSet
+-                },
+-                clearLogs: () => new Set<string>(),
+-            },
+-        ],
+-    }),
+-
+-    loaders(({ values, actions }) => ({
+-        logs: [
+-            [] as LogMessage[],
+-            {
+-                clearLogs: () => [],
+-                truncateLogs: ({ limit }) => values.logs.slice(0, limit),
+-                fetchLogs: async () => {
+-                    const logsController = new AbortController()
+-                    const signal = logsController.signal
+-                    actions.cancelInProgressLogs(logsController)
+-
+-                    const response = await api.logs.query({
+-                        query: {
+-                            limit: values.initialLogsLimit ?? values.logsPageSize,
+-                            orderBy: values.orderBy,
+-                            dateRange: values.utcDateRange,
+-                            searchTerm: values.searchTerm,
+-                            filterGroup: values.filterGroup as PropertyGroupFilter,
+-                            severityLevels: values.severityLevels,
+-                            serviceNames: values.serviceNames,
+-                        },
+-                        signal,
+-                    })
+-                    actions.setLogsAbortController(null)
+-                    actions.setHasMoreLogsToLoad(!!response.hasMore)
+-                    parseLogAttributes(response.results)
+-                    return response.results
+-                },
+-                fetchNextLogsPage: async ({ limit }, breakpoint) => {
+-                    const logsController = new AbortController()
+-                    const signal = logsController.signal
+-                    actions.cancelInProgressLogs(logsController)
+-
+-                    let dateRange: DateRange
+-
+-                    if (values.orderBy === 'earliest') {
+-                        if (!values.newestLogTimestamp) {
+-                            return values.logs
+-                        }
+-                        dateRange = {
+-                            date_from: values.newestLogTimestamp,
+-                            date_to: values.utcDateRange.date_to,
+-                        }
+-                    } else {
+-                        if (!values.oldestLogTimestamp) {
+-                            return values.logs
+-                        }
+-                        dateRange = {
+-                            date_from: values.utcDateRange.date_from,
+-                            date_to: values.oldestLogTimestamp,
+-                        }
+-                    }
+-                    await breakpoint(300)
+-                    const response = await api.logs.query({
+-                        query: {
+-                            limit: limit ?? values.logsPageSize,
+-                            orderBy: values.orderBy,
+-                            dateRange,
+-                            searchTerm: values.searchTerm,
+-                            filterGroup: values.filterGroup as PropertyGroupFilter,
+-                            severityLevels: values.severityLevels,
+-                            serviceNames: values.serviceNames,
+-                        },
+-                        signal,
+-                    })
+-                    actions.setLogsAbortController(null)
+-                    actions.setHasMoreLogsToLoad(!!response.hasMore)
+-                    parseLogAttributes(response.results)
+-                    return [...values.logs, ...response.results]
+-                },
+-                setLogs: ({ logs }) => logs,
+-            },
+-        ],
+-        sparkline: [
+-            [] as any[],
+-            {
+-                fetchSparkline: async () => {
+-                    const sparklineController = new AbortController()
+-                    const signal = sparklineController.signal
+-                    actions.cancelInProgressSparkline(sparklineController)
+-
+-                    const response = await api.logs.sparkline({
+-                        query: {
+-                            orderBy: values.orderBy,
+-                            dateRange: values.utcDateRange,
+-                            searchTerm: values.searchTerm,
+-                            filterGroup: values.filterGroup as PropertyGroupFilter,
+-                            severityLevels: values.severityLevels,
+-                            serviceNames: values.serviceNames,
+-                        },
+-                        signal,
+-                    })
+-                    actions.setSparklineAbortController(null)
+-                    return response
+-                },
+-                setSparkline: ({ sparkline }) => sparkline,
+-            },
+-        ],
+-    })),
+-
+-    selectors({
+-        tabId: [(_, p) => [p.tabId], (tabId: string) => tabId],
+-        liveTailDisabledReason: [
+-            (s) => [s.orderBy, s.dateRange, s.logsLoading, s.liveTailExpired],
+-            (
+-                orderBy: LogsQuery['orderBy'],
+-                dateRange: DateRange,
+-                logsLoading: boolean,
+-                liveTailExpired: boolean
+-            ): string | undefined => {
+-                if (orderBy !== 'latest') {
+-                    return 'Live tail only works with "Latest" ordering'
+-                }
+-
+-                if (dateRange.date_to) {
+-                    return 'Live tail requires an open-ended time range'
+-                }
+-
+-                if (logsLoading) {
+-                    return 'Wait for query to finish'
+-                }
+-
+-                if (liveTailExpired) {
+-                    return 'Live tail has expired, run search again to live tail'
+-                }
+-
+-                return undefined
+-            },
+-        ],
+-        utcDateRange: [
+-            (s) => [s.dateRange],
+-            (dateRange) => ({
+-                date_from: dayjs(dateRange.date_from).isValid()
+-                    ? dayjs(dateRange.date_from).toISOString()
+-                    : dateRange.date_from,
+-                date_to: dayjs(dateRange.date_to).isValid()
+-                    ? dayjs(dateRange.date_to).toISOString()
+-                    : dateRange.date_to,
+-                explicitDate: dateRange.explicitDate,
+-            }),
+-        ],
+-        parsedLogs: [
+-            (s) => [s.logs],
+-            (logs: LogMessage[]): ParsedLogMessage[] => {
+-                const seen = new Set<string>()
+-                const result: ParsedLogMessage[] = []
+-
+-                for (const log of logs) {
+-                    if (seen.has(log.uuid)) {
+-                        continue
+-                    }
+-                    seen.add(log.uuid)
+-                    const cleanBody = colors.unstyle(log.body)
+-                    let parsedBody: JsonType | null = null
+-                    try {
+-                        parsedBody = JSON.parse(cleanBody)
+-                    } catch {
+-                        // Not JSON, that's fine
+-                    }
+-                    result.push({ ...log, cleanBody, parsedBody })
+-                }
+-
+-                return result
+-            },
+-        ],
+-        pinnedParsedLogs: [
+-            (s) => [s.pinnedLogs],
+-            (pinnedLogs: LogMessage[]): ParsedLogMessage[] => {
+-                return pinnedLogs.map((log: LogMessage) => {
+-                    const cleanBody = colors.unstyle(log.body)
+-                    let parsedBody: JsonType | null = null
+-                    try {
+-                        parsedBody = JSON.parse(cleanBody)
+-                    } catch {
+-                        // Not JSON, that's fine
+-                    }
+-                    return { ...log, cleanBody, parsedBody }
+-                })
+-            },
+-        ],
+-        isPinned: [
+-            (s) => [s.pinnedLogs],
+-            (pinnedLogs: LogMessage[]) => (logId: string) => pinnedLogs.some((log) => log.uuid === logId),
+-        ],
+-        visibleLogsTimeRange: [
+-            (s) => [s.parsedLogs, s.orderBy],
+-            (
+-                parsedLogs: ParsedLogMessage[],
+-                orderBy: LogsQuery['orderBy']
+-            ): { date_from: string; date_to: string } | null => {
+-                if (parsedLogs.length === 0) {
+-                    return null
+-                }
+-                const firstTimestamp = parsedLogs[0].timestamp
+-                const lastTimestamp = parsedLogs[parsedLogs.length - 1].timestamp
+-
+-                // When orderBy is 'latest', first log is newest, last log is oldest
+-                // When orderBy is 'earliest', first log is oldest, last log is newest
+-                if (orderBy === 'latest') {
+-                    return {
+-                        date_from: dayjs(lastTimestamp).toISOString(),
+-                        date_to: dayjs(firstTimestamp).toISOString(),
+-                    }
+-                }
+-                return {
+-                    date_from: dayjs(firstTimestamp).toISOString(),
+-                    date_to: dayjs(lastTimestamp).toISOString(),
+-                }
+-            },
+-        ],
+-        sparklineData: [
+-            (s) => [s.sparkline],
+-            (sparkline: any[]) => {
+-                let lastTime = ''
+-                let i = -1
+-                const labels: string[] = []
+-                const dates: string[] = []
+-                const data = Object.entries(
+-                    sparkline.reduce((accumulator, currentItem) => {
+-                        if (currentItem.time !== lastTime) {
+-                            labels.push(
+-                                humanFriendlyDetailedTime(currentItem.time, 'YYYY-MM-DD', 'HH:mm:ss', {
+-                                    showNow: false,
+-                                })
+-                            )
+-                            dates.push(currentItem.time)
+-                            lastTime = currentItem.time
+-                            i++
+-                        }
+-                        const key = currentItem.level
+-                        if (!accumulator[key]) {
+-                            accumulator[key] = [...Array(sparkline.length)].map(() => 0)
+-                        }
+-                        accumulator[key][i] += currentItem.count
+-                        return accumulator
+-                    }, {})
+-                )
+-                    .map(([level, data]) => ({
+-                        name: level,
+-                        values: data as number[],
+-                        color: {
+-                            fatal: 'danger-dark',
+-                            error: 'danger',
+-                            warn: 'warning',
+-                            info: 'brand-blue',
+-                            debug: 'muted',
+-                            trace: 'muted-alt',
+-                        }[level],
+-                    }))
+-                    .filter((series) => series.values.reduce((a, b) => a + b) > 0)
+-
+-                return { data, labels, dates }
+-            },
+-        ],
+-        oldestLogTimestamp: [
+-            (s) => [s.logs],
+-            (logs): string | null => {
+-                if (!logs.length) {
+-                    return null
+-                }
+-                const oldest = logs.reduce((min, log) => {
+-                    const logTime = dayjs(log.timestamp)
+-                    return !min || logTime.isBefore(dayjs(min)) ? log.timestamp : min
+-                }, logs[0].timestamp)
+-                return oldest
+-            },
+-        ],
+-        newestLogTimestamp: [
+-            (s) => [s.logs],
+-            (logs): string | null => {
+-                if (!logs.length) {
+-                    return null
+-                }
+-                const newest = logs.reduce((max, log) => {
+-                    const logTime = dayjs(log.timestamp)
+-                    return !max || logTime.isAfter(dayjs(max)) ? log.timestamp : max
+-                }, logs[0].timestamp)
+-                return newest
+-            },
+-        ],
+-        totalLogsMatchingFilters: [
+-            (s) => [s.sparkline],
+-            (sparkline): number => sparkline.reduce((sum, item) => sum + item.count, 0),
+-        ],
+-        logsRemainingToLoad: [
+-            (s) => [s.totalLogsMatchingFilters, s.logs],
+-            (totalLogsMatchingFilters, logs): number => totalLogsMatchingFilters - logs.length,
+-        ],
+-    }),
+-
+-    listeners(({ values, actions, cache }) => ({
+-        fetchLogsFailure: ({ error }) => {
+-            if (error !== NEW_QUERY_STARTED_ERROR_MESSAGE) {
+-                lemonToast.error(`Failed to load logs: ${error}`)
+-            }
+-        },
+-        fetchNextLogsPageFailure: ({ error }) => {
+-            if (error !== NEW_QUERY_STARTED_ERROR_MESSAGE) {
+-                lemonToast.error(`Failed to load more logs: ${error}`)
+-            }
+-        },
+-        runQuery: async ({ debounce }, breakpoint) => {
+-            if (debounce) {
+-                await breakpoint(debounce)
+-            }
+-            actions.clearLogs()
+-            actions.fetchLogs()
+-            actions.fetchSparkline()
+-            actions.cancelInProgressLiveTail(null)
+-        },
+-        cancelInProgressLogs: ({ logsAbortController }) => {
+-            if (values.logsAbortController !== null) {
+-                values.logsAbortController.abort(NEW_QUERY_STARTED_ERROR_MESSAGE)
+-            }
+-            actions.setLogsAbortController(logsAbortController)
+-        },
+-        cancelInProgressSparkline: ({ sparklineAbortController }) => {
+-            if (values.sparklineAbortController !== null) {
+-                values.sparklineAbortController.abort(NEW_QUERY_STARTED_ERROR_MESSAGE)
+-            }
+-            actions.setSparklineAbortController(sparklineAbortController)
+-        },
+-        cancelInProgressLiveTail: ({ liveTailAbortController }) => {
+-            if (values.liveTailAbortController !== null) {
+-                values.liveTailAbortController.abort('live tail request cancelled')
+-            }
+-            actions.setLiveTailAbortController(liveTailAbortController)
+-            cache.disposables.dispose('liveTailTimer')
+-        },
+-        toggleAttributeBreakdown: ({ key }) => {
+-            const breakdowns = [...values.expandedAttributeBreaksdowns]
+-            const index = breakdowns.indexOf(key)
+-            index >= 0 ? breakdowns.splice(index, 1) : breakdowns.push(key)
+-            actions.setExpandedAttributeBreaksdowns(breakdowns)
+-        },
+-        zoomDateRange: ({ multiplier }) => {
+-            const newDateRange = zoomDateRange(values.dateRange, multiplier)
+-            actions.setDateRange(newDateRange)
+-        },
+-        setDateRangeFromSparkline: ({ startIndex, endIndex }) => {
+-            const dates = values.sparklineData.dates
+-            const dateFrom = dates[startIndex]
+-            const dateTo = dates[endIndex + 1]
+-
+-            if (!dateFrom) {
+-                return
+-            }
+-
+-            // NOTE: I don't know how accurate this really is but its a good starting point
+-            const newDateRange = {
+-                date_from: dateFrom,
+-                date_to: dateTo,
+-            }
+-            actions.setDateRange(newDateRange)
+-        },
+-        expireLiveTail: async ({}, breakpoint) => {
+-            await breakpoint(30000)
+-            if (values.liveTailRunning) {
+-                return
+-            }
+-            actions.setLiveTailExpired(true)
+-        },
+-        addFilter: ({ key, value, operator }) => {
+-            const currentGroup = values.filterGroup.values[0] as UniversalFiltersGroup
+-
+-            const newGroup: UniversalFiltersGroup = {
+-                ...currentGroup,
+-                values: [
+-                    ...currentGroup.values,
+-                    {
+-                        key,
+-                        value: [value],
+-                        operator,
+-                        type: PropertyFilterType.Log,
+-                    },
+-                ],
+-            }
+-
+-            actions.setFilterGroup({ ...values.filterGroup, values: [newGroup] }, false)
+-        },
+-        togglePinLog: ({ logId }) => {
+-            const isPinned = values.pinnedLogs.some((log) => log.uuid === logId)
+-            if (isPinned) {
+-                actions.unpinLog(logId)
+-            } else {
+-                const logToPin = values.logs.find((log) => log.uuid === logId)
+-                if (logToPin) {
+-                    actions.pinLog(logToPin)
+-                }
+-            }
+-        },
+-        applyLogsPageSize: ({ logsPageSize }) => {
+-            const currentCount = values.logs.length
+-
+-            if (logsPageSize > currentCount && values.hasMoreLogsToLoad) {
+-                actions.fetchNextLogsPage(logsPageSize - currentCount)
+-            } else if (logsPageSize < currentCount) {
+-                actions.truncateLogs(logsPageSize)
+-                actions.setHasMoreLogsToLoad(true)
+-            }
+-        },
+-        highlightNextLog: () => {
+-            const logs = values.parsedLogs
+-            if (logs.length === 0) {
+-                return
+-            }
+-
+-            const currentIndex = values.highlightedLogId
+-                ? logs.findIndex((log) => log.uuid === values.highlightedLogId)
+-                : -1
+-
+-            if (currentIndex === -1) {
+-                actions.setHighlightedLogId(logs[0].uuid)
+-            } else if (currentIndex < logs.length - 1) {
+-                actions.setHighlightedLogId(logs[currentIndex + 1].uuid)
+-            } else if (values.hasMoreLogsToLoad && !values.logsLoading) {
+-                actions.fetchNextLogsPage()
+-            }
+-        },
+-        highlightPreviousLog: () => {
+-            const logs = values.parsedLogs
+-            if (logs.length === 0) {
+-                return
+-            }
+-
+-            const currentIndex = values.highlightedLogId
+-                ? logs.findIndex((log) => log.uuid === values.highlightedLogId)
+-                : -1
+-
+-            if (currentIndex === -1) {
+-                actions.setHighlightedLogId(logs[logs.length - 1].uuid)
+-            } else if (currentIndex > 0) {
+-                actions.setHighlightedLogId(logs[currentIndex - 1].uuid)
+-            }
+-        },
+-        setLiveTailRunning: async ({ enabled }) => {
+-            if (enabled) {
+-                actions.pollForNewLogs()
+-            } else {
+-                actions.cancelInProgressLiveTail(null)
+-                actions.expireLiveTail()
+-            }
+-        },
+-        pollForNewLogs: async () => {
+-            if (!values.liveTailRunning || values.orderBy !== 'latest' || document.hidden) {
+-                return
+-            }
+-
+-            const liveTailController = new AbortController()
+-            const signal = liveTailController.signal
+-            actions.cancelInProgressLiveTail(liveTailController)
+-            let duration = 0
+-
+-            try {
+-                const start = Date.now()
+-                const response = await api.logs.query({
+-                    query: {
+-                        limit: values.logsPageSize,
+-                        orderBy: values.orderBy,
+-                        dateRange: values.utcDateRange,
+-                        searchTerm: values.searchTerm,
+-                        filterGroup: values.filterGroup as PropertyGroupFilter,
+-                        severityLevels: values.severityLevels,
+-                        serviceNames: values.serviceNames,
+-                        liveLogsCheckpoint: values.liveLogsCheckpoint ?? undefined,
+-                    },
+-                    signal,
+-                })
+-                duration = Date.now() - start
+-
+-                if (response.results.length > 0) {
+-                    // the live_logs_checkpoint is the latest known timestamp for which we know we have all logs up to that point
+-                    // it's returned from clickhouse as a value on every log row - but the value is fixed per query
+-                    actions.setLiveLogsCheckpoint(response.results[0].live_logs_checkpoint ?? null)
+-                }
+-
+-                response.results.forEach((row) => {
+-                    Object.keys(row.attributes).forEach((key) => {
+-                        const value = row.attributes[key]
+-                        row.attributes[key] = typeof value === 'string' ? value : JSON.stringify(value)
+-                    })
+-                })
+-
+-                const existingUuids = new Set(values.logs.map((log) => log.uuid))
+-                const newLogs = response.results.filter((log) => !existingUuids.has(log.uuid))
+-
+-                if (newLogs.length > 0) {
+-                    actions.setLiveTailInterval(DEFAULT_LIVE_TAIL_POLL_INTERVAL_MS)
+-                    actions.setLogs(
+-                        [
+-                            ...newLogs.map((log) => ({ ...log, new: true })),
+-                            ...values.logs.map((log) => ({ ...log, new: false })),
+-                        ]
+-                            .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+-                            .slice(0, values.logsPageSize)
+-                    )
+-                    actions.addLogsToSparkline(newLogs)
+-                } else {
+-                    const newInterval = Math.min(
+-                        values.liveTailPollInterval * 1.5,
+-                        DEFAULT_LIVE_TAIL_POLL_INTERVAL_MAX_MS
+-                    )
+-                    actions.setLiveTailInterval(newInterval)
+-                }
+-            } catch (error) {
+-                if (signal.aborted) {
+-                    return
+-                }
+-                console.error('Live tail polling error:', error)
+-                actions.setLiveTailRunning(false)
+-            } finally {
+-                actions.setLiveTailAbortController(null)
+-                if (values.liveTailRunning) {
+-                    cache.disposables.add(() => {
+-                        const timerId = setTimeout(
+-                            () => {
+-                                actions.pollForNewLogs()
+-                            },
+-                            Math.max(duration, values.liveTailPollInterval)
+-                        )
+-                        return () => clearTimeout(timerId)
+-                    }, 'liveTailTimer')
+-                }
+-            }
+-        },
+-        // insert logs into the sparkline data
+-        addLogsToSparkline: (logs: LogMessage[]) => {
+-            // if the sparkline hasn't loaded do nothing.
+-            if (!values.sparkline || values.sparkline.length < 2) {
+-                return
+-            }
+-
+-            const first_bucket = values.sparklineData.dates[0]
+-            const last_bucket = values.sparklineData.dates[values.sparklineData.dates.length - 1]
+-            const sparklineTimeWindow = dayjs(last_bucket).diff(first_bucket, 'seconds')
+-            const interval = dayjs(values.sparklineData.dates[1]).diff(first_bucket, 'seconds')
+-            let latest_time_bucket = dayjs(last_bucket)
+-
+-            const sparklineMap: Map<string, { time: string; level: string; count: number }> = new Map()
+-
+-            for (const bucket of values.sparkline) {
+-                const key = `${dayjs(bucket.time).toISOString()}_${bucket.level}`
+-                sparklineMap.set(key, { ...bucket })
+-            }
+-
+-            for (const log of logs) {
+-                const time_bucket = dayjs.unix(Math.floor(dayjs(log.timestamp).unix() / interval) * interval)
+-                if (time_bucket.isAfter(latest_time_bucket)) {
+-                    latest_time_bucket = time_bucket
+-                }
+-                const key = `${time_bucket.toISOString()}_${log.level}`
+-                if (sparklineMap.has(key)) {
+-                    sparklineMap.get(key)!.count += 1
+-                } else {
+-                    sparklineMap.set(key, { time: time_bucket.toISOString(), level: log.level, count: 1 })
+-                }
+-            }
+-            actions.setSparkline(
+-                Array.from(sparklineMap.values())
+-                    .sort((a, b) => dayjs(a.time).diff(dayjs(b.time)) || a.level.localeCompare(b.level))
+-                    .filter((item) => latest_time_bucket.diff(dayjs(item.time), 'seconds') <= sparklineTimeWindow)
+-            )
+-        },
+-        copyLinkToLog: ({ logId }: { logId: string }) => {
+-            const url = new URL(window.location.href)
+-            url.searchParams.set('highlightedLogId', logId)
+-            if (values.visibleLogsTimeRange) {
+-                url.searchParams.set(
+-                    'dateRange',
+-                    JSON.stringify({
+-                        date_from: values.visibleLogsTimeRange.date_from,
+-                        date_to: values.visibleLogsTimeRange.date_to,
+-                        explicitDate: true,
+-                    })
+-                )
+-            }
+-            if (values.logs.length > 0) {
+-                url.searchParams.set('initialLogsLimit', String(values.logs.length))
+-            }
+-            void copyToClipboard(url.toString(), 'link to log')
+-        },
+-    })),
+-
+-    events(({ values, actions }) => ({
+-        beforeUnmount: () => {
+-            actions.setLiveTailRunning(false)
+-            actions.cancelInProgressLiveTail(null)
+-            if (values.logsAbortController) {
+-                values.logsAbortController.abort('unmounting component')
+-            }
+-            if (values.sparklineAbortController) {
+-                values.sparklineAbortController.abort('unmounting component')
+-            }
+-        },
+-    })),
+-])
++                setLogsAbortController: (_, { logsAbortController }) => logsAbort
+\ No newline at end of file

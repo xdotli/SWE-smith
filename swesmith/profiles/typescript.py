@@ -265,6 +265,212 @@ RUN pnpm install
         return parse_log_jest(log)
 
 
+@dataclass
+class MedusajsMedusa56ed9cf9(TypeScriptProfile):
+    """Medusa - E-commerce platform with comprehensive test coverage."""
+    owner: str = "medusajs"
+    repo: str = "medusa"
+    commit: str = "56ed9cf9"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800  # 30 min for integration tests
+    timeout_ref: int = 3600  # 1 hour for full suite
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class AppsmithorgAppsmith7046aeb3(TypeScriptProfile):
+    """Appsmith - Open-source internal tool builder with comprehensive tests."""
+    owner: str = "appsmithorg"
+    repo: str = "appsmith"
+    commit: str = "7046aeb3"
+    test_cmd: str = "cd app/client && pnpm test -- --run"
+    timeout: int = 1800  # 30 min for large test suite
+    timeout_ref: int = 3600  # 1 hour for full suite
+    arch: str = "x86_64"
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm yarn
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+WORKDIR /testbed/app/client
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class HoppscotchHoppscotchMain(TypeScriptProfile):
+    """Hoppscotch - Open source API development ecosystem."""
+    owner: str = "hoppscotch"
+    repo: str = "hoppscotch"
+    commit: str = "main"
+    test_cmd: str = "pnpm test"
+    timeout: int = 1200  # 20 min for tests
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git postgresql-client
+RUN npm install -g pnpm
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class NocodbNocodbDevelop(TypeScriptProfile):
+    """NocoDB - Open source Airtable alternative."""
+    owner: str = "nocodb"
+    repo: str = "nocodb"
+    commit: str = "develop"
+    test_cmd: str = "cd packages/nocodb && pnpm test"
+    timeout: int = 1800  # 30 min for tests
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm lerna
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class CalcomCalComMain(TypeScriptProfile):
+    """Cal.com - Open-source scheduling platform with good test coverage."""
+    owner: str = "calcom"
+    repo: str = "cal.com"
+    commit: str = "main"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class TwentyhqTwentyMain(TypeScriptProfile):
+    """Twenty - Modern CRM with good test coverage."""
+    owner: str = "twentyhq"
+    repo: str = "twenty"
+    commit: str = "main"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class PostHogPosthogMain(TypeScriptProfile):
+    """PostHog - Product analytics platform with test coverage."""
+    owner: str = "PostHog"
+    repo: str = "posthog"
+    commit: str = "main"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
+@dataclass
+class DubincDubMain(TypeScriptProfile):
+    """Dub - Link management platform with test coverage."""
+    owner: str = "dubinc"
+    repo: str = "dub"
+    commit: str = "main"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_jest(log)
+
+
 # Register all TypeScript profiles with the global registry
 from swesmith.profiles.base import registry
 

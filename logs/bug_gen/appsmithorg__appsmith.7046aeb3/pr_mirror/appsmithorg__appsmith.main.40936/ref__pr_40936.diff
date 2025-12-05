@@ -1,0 +1,377 @@
+diff --git a/app/client/src/ce/entities/FeatureFlag.ts b/app/client/src/ce/entities/FeatureFlag.ts
+index 120af37c6d6..d8efbcae67d 100644
+--- a/app/client/src/ce/entities/FeatureFlag.ts
++++ b/app/client/src/ce/entities/FeatureFlag.ts
+@@ -62,6 +62,8 @@ export const FEATURE_FLAG = {
+   license_ai_agent_instance_enabled: "license_ai_agent_instance_enabled",
+   release_jsobjects_onpageunloadactions_enabled:
+     "release_jsobjects_onpageunloadactions_enabled",
++  configure_block_event_tracking_for_anonymous_users:
++    "configure_block_event_tracking_for_anonymous_users",
+ } as const;
+ 
+ export type FeatureFlag = keyof typeof FEATURE_FLAG;
+@@ -113,6 +115,7 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+   release_reactive_actions_enabled: false,
+   license_ai_agent_instance_enabled: false,
+   release_jsobjects_onpageunloadactions_enabled: false,
++  configure_block_event_tracking_for_anonymous_users: false,
+ };
+ 
+ export const AB_TESTING_EVENT_KEYS = {
+diff --git a/app/client/src/ce/sagas/userSagas.tsx b/app/client/src/ce/sagas/userSagas.tsx
+index 874d041f04c..c83357d335a 100644
+--- a/app/client/src/ce/sagas/userSagas.tsx
++++ b/app/client/src/ce/sagas/userSagas.tsx
+@@ -7,6 +7,7 @@ import {
+   take,
+   type TakeEffect,
+ } from "redux-saga/effects";
++import type { SagaIterator } from "redux-saga";
+ import type {
+   ReduxAction,
+   ReduxActionWithPromise,
+@@ -88,6 +89,7 @@ import {
+   segmentInitUncertain,
+ } from "actions/analyticsActions";
+ import { getSegmentState } from "selectors/analyticsSelectors";
++import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
+ 
+ export function* getCurrentUserSaga(action?: {
+   payload?: { userProfile?: ApiResponse };
+@@ -150,7 +152,28 @@ function* getSessionRecordingConfig() {
+   };
+ }
+ 
+-function* initTrackers(currentUser: User) {
++function shouldTrackUser(
++  currentUser: User,
++  licenseActive: boolean,
++  featureFlag: boolean,
++): boolean {
++  try {
++    const isAnonymous =
++      currentUser?.isAnonymous || currentUser?.username === "anonymousUser";
++
++    if (!isAnonymous) {
++      return true;
++    }
++
++    const telemetryOn = currentUser?.enableTelemetry ?? false;
++
++    return isAnonymous && (licenseActive || (telemetryOn && !featureFlag));
++  } catch (error) {
++    return true;
++  }
++}
++
++function* initTrackers(currentUser: User): SagaIterator {
+   try {
+     const isFFFetched: boolean = yield select(getFeatureFlagsFetched);
+ 
+@@ -162,7 +185,21 @@ function* initTrackers(currentUser: User) {
+       getSessionRecordingConfig,
+     );
+ 
+-    yield call(AnalyticsUtil.initialize, currentUser, sessionRecordingConfig);
++    const featureFlags: FeatureFlags = yield select(selectFeatureFlags);
++    const organizationConfig = yield select(getOrganizationConfig);
++
++    const shouldTrack = shouldTrackUser(
++      currentUser,
++      organizationConfig.license.active,
++      featureFlags.configure_block_event_tracking_for_anonymous_users,
++    );
++
++    yield call(
++      AnalyticsUtil.initialize,
++      currentUser,
++      sessionRecordingConfig,
++      shouldTrack,
++    );
+     yield put(segmentInitSuccess());
+   } catch (e) {
+     log.error(e);
+diff --git a/app/client/src/ce/utils/AnalyticsUtil.tsx b/app/client/src/ce/utils/AnalyticsUtil.tsx
+index bcd16f595d4..1312995a432 100644
+--- a/app/client/src/ce/utils/AnalyticsUtil.tsx
++++ b/app/client/src/ce/utils/AnalyticsUtil.tsx
+@@ -30,13 +30,14 @@ let segmentAnalytics: SegmentSingleton | null = null;
+ async function initialize(
+   user: User,
+   sessionRecordingConfig: SessionRecordingConfig,
++  shouldTrackUser: boolean,
+ ) {
+   // SentryUtil.init();
+   await SmartlookUtil.init();
+ 
+   segmentAnalytics = SegmentSingleton.getInstance();
+ 
+-  await segmentAnalytics.init();
++  await segmentAnalytics.init(shouldTrackUser);
+ 
+   // Mixpanel needs to be initialized after Segment
+   await MixpanelSingleton.getInstance().init(sessionRecordingConfig);
+diff --git a/app/client/src/utils/Analytics/segment.test.ts b/app/client/src/utils/Analytics/segment.test.ts
+index 3a67b1c2a79..274919bc099 100644
+--- a/app/client/src/utils/Analytics/segment.test.ts
++++ b/app/client/src/utils/Analytics/segment.test.ts
+@@ -58,7 +58,7 @@ describe("SegmentSingleton", () => {
+   describe("init", () => {
+     it("should initialize successfully with API key", async () => {
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init();
++      const result = await segment.init(true);
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).toHaveBeenCalledWith(
+@@ -73,7 +73,15 @@ describe("SegmentSingleton", () => {
+       });
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init();
++      const result = await segment.init(true);
++
++      expect(result).toBe(true);
++      expect(mockAnalyticsBrowser.load).not.toHaveBeenCalled();
++    });
++
++    it("should not initialize when shouldTrackUser is false", async () => {
++      const segment = SegmentSingleton.getInstance();
++      const result = await segment.init(false);
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).not.toHaveBeenCalled();
+@@ -89,7 +97,7 @@ describe("SegmentSingleton", () => {
+       });
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init();
++      const result = await segment.init(true);
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).toHaveBeenCalledWith(
+@@ -119,7 +127,7 @@ describe("SegmentSingleton", () => {
+       const eventData = { test: "data" };
+ 
+       segment.track("test-event", eventData);
+-      await segment.init();
++      await segment.init(true);
+ 
+       expect(mockAnalytics.track).toHaveBeenCalledWith("test-event", eventData);
+     });
+@@ -127,7 +135,7 @@ describe("SegmentSingleton", () => {
+     it("should track events directly when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init();
++      await segment.init(true);
+ 
+       const eventData = { test: "data" };
+ 
+@@ -141,7 +149,7 @@ describe("SegmentSingleton", () => {
+     it("should call analytics identify when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init();
++      await segment.init(true);
+ 
+       const userId = "test-user";
+       const traits = { name: "Test User" };
+@@ -156,7 +164,7 @@ describe("SegmentSingleton", () => {
+     it("should call analytics reset when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init();
++      await segment.init(true);
+ 
+       segment.reset();
+ 
+@@ -169,7 +177,7 @@ describe("SegmentSingleton", () => {
+       mockAnalyticsBrowser.load.mockRejectedValueOnce(new Error("Init failed"));
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init();
++      const result = await segment.init(true);
+ 
+       expect(result).toBe(false);
+       expect(log.error).toHaveBeenCalledWith(
+@@ -182,7 +190,7 @@ describe("SegmentSingleton", () => {
+     it("should not track events after avoidTracking is called", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init();
++      await segment.init(true);
+ 
+       // Track an event before calling avoidTracking
+       segment.track("pre-avoid-event", { data: "value" });
+@@ -214,7 +222,7 @@ describe("SegmentSingleton", () => {
+       segment.avoidTracking();
+ 
+       // Initialize
+-      await segment.init();
++      await segment.init(true);
+ 
+       // Analytics track should not be called since we're avoiding tracking
+       expect(mockAnalytics.track).not.toHaveBeenCalled();
+diff --git a/app/client/src/utils/Analytics/segment.ts b/app/client/src/utils/Analytics/segment.ts
+index d03c89f5fd9..c15055484ca 100644
+--- a/app/client/src/utils/Analytics/segment.ts
++++ b/app/client/src/utils/Analytics/segment.ts
+@@ -49,7 +49,7 @@ class SegmentSingleton {
+     }
+   }
+ 
+-  public async init(): Promise<boolean> {
++  public async init(shouldTrackUser: boolean): Promise<boolean> {
+     const { segment } = getAppsmithConfigs();
+ 
+     if (!segment.enabled) {
+@@ -58,6 +58,12 @@ class SegmentSingleton {
+       return true;
+     }
+ 
++    if (!shouldTrackUser) {
++      this.avoidTracking();
++
++      return true;
++    }
++
+     if (this.analytics) {
+       log.warn("Segment is already initialized.");
+ 
+diff --git a/app/server/appsmith-interfaces/src/main/java/com/appsmith/external/enums/FeatureFlagEnum.java b/app/server/appsmith-interfaces/src/main/java/com/appsmith/external/enums/FeatureFlagEnum.java
+index 3d26e6c8f3d..49309885d8f 100644
+--- a/app/server/appsmith-interfaces/src/main/java/com/appsmith/external/enums/FeatureFlagEnum.java
++++ b/app/server/appsmith-interfaces/src/main/java/com/appsmith/external/enums/FeatureFlagEnum.java
+@@ -15,6 +15,7 @@ public enum FeatureFlagEnum {
+     release_embed_hide_share_settings_enabled,
+     rollout_datasource_test_rate_limit_enabled,
+     release_gs_all_sheets_options_enabled,
++    configure_block_event_tracking_for_anonymous_users,
+     /**
+      * Feature flag to detect if the git reset optimization is enabled
+      */
+diff --git a/app/server/appsmith-server/src/main/java/com/appsmith/server/services/AnalyticsServiceImpl.java b/app/server/appsmith-server/src/main/java/com/appsmith/server/services/AnalyticsServiceImpl.java
+index 22073d5952e..35720c5f4ca 100644
+--- a/app/server/appsmith-server/src/main/java/com/appsmith/server/services/AnalyticsServiceImpl.java
++++ b/app/server/appsmith-server/src/main/java/com/appsmith/server/services/AnalyticsServiceImpl.java
+@@ -9,6 +9,7 @@
+ import com.segment.analytics.Analytics;
+ import lombok.extern.slf4j.Slf4j;
+ import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.context.annotation.Lazy;
+ import org.springframework.stereotype.Service;
+ 
+ @Slf4j
+@@ -24,7 +25,8 @@ public AnalyticsServiceImpl(
+             UserUtils userUtils,
+             ProjectProperties projectProperties,
+             UserDataRepository userDataRepository,
+-            DeploymentProperties deploymentProperties) {
++            DeploymentProperties deploymentProperties,
++            @Lazy FeatureFlagService featureFlagService) {
+         super(
+                 analytics,
+                 sessionUserService,
+@@ -33,6 +35,7 @@ public AnalyticsServiceImpl(
+                 userUtils,
+                 projectProperties,
+                 deploymentProperties,
+-                userDataRepository);
++                userDataRepository,
++                featureFlagService);
+     }
+ }
+diff --git a/app/server/appsmith-server/src/main/java/com/appsmith/server/services/ce/AnalyticsServiceCEImpl.java b/app/server/appsmith-server/src/main/java/com/appsmith/server/services/ce/AnalyticsServiceCEImpl.java
+index 4fb98dd8a18..92d32e1eb72 100644
+--- a/app/server/appsmith-server/src/main/java/com/appsmith/server/services/ce/AnalyticsServiceCEImpl.java
++++ b/app/server/appsmith-server/src/main/java/com/appsmith/server/services/ce/AnalyticsServiceCEImpl.java
+@@ -1,6 +1,7 @@
+ package com.appsmith.server.services.ce;
+ 
+ import com.appsmith.external.constants.AnalyticsEvents;
++import com.appsmith.external.enums.FeatureFlagEnum;
+ import com.appsmith.external.helpers.Identifiable;
+ import com.appsmith.external.models.ActionDTO;
+ import com.appsmith.external.models.BaseDomain;
+@@ -15,6 +16,7 @@
+ import com.appsmith.server.helpers.UserUtils;
+ import com.appsmith.server.repositories.UserDataRepository;
+ import com.appsmith.server.services.ConfigService;
++import com.appsmith.server.services.FeatureFlagService;
+ import com.appsmith.server.services.SessionUserService;
+ import com.segment.analytics.Analytics;
+ import com.segment.analytics.messages.IdentifyMessage;
+@@ -24,6 +26,7 @@
+ import org.apache.commons.lang3.ObjectUtils;
+ import org.apache.commons.lang3.StringUtils;
+ import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.context.annotation.Lazy;
+ import reactor.core.publisher.Mono;
+ 
+ import java.util.HashMap;
+@@ -48,6 +51,7 @@ public class AnalyticsServiceCEImpl implements AnalyticsServiceCE {
+     private final SessionUserService sessionUserService;
+     private final CommonConfig commonConfig;
+     private final ConfigService configService;
++    private final FeatureFlagService featureFlagService;
+ 
+     private final UserUtils userUtils;
+ 
+@@ -65,11 +69,13 @@ public AnalyticsServiceCEImpl(
+             UserUtils userUtils,
+             ProjectProperties projectProperties,
+             DeploymentProperties deploymentProperties,
+-            UserDataRepository userDataRepository) {
++            UserDataRepository userDataRepository,
++            @Lazy FeatureFlagService featureFlagService) {
+         this.analytics = analytics;
+         this.sessionUserService = sessionUserService;
+         this.commonConfig = commonConfig;
+         this.configService = configService;
++        this.featureFlagService = featureFlagService;
+         this.userUtils = userUtils;
+         this.projectProperties = projectProperties;
+         this.deploymentProperties = deploymentProperties;
+@@ -319,7 +325,26 @@ public <T> Mono<T> sendObjectEvent(AnalyticsEvents event, T object, Map<String,
+ 
+         Mono<User> userMono = sessionUserService.getCurrentUser().switchIfEmpty(Mono.just(anonymousUser));
+ 
+-        return userMono.flatMap(user -> Mono.zip(
++        return userMono.flatMap(user -> {
++                    // if the user is anonymous, check if the feature flag
++                    // configure_block_event_tracking_for_anonymous_users is enabled.  If yes, then do not send the
++                    // analytics event.
++                    if (user.isAnonymous()) {
++                        return featureFlagService
++                                .check(FeatureFlagEnum.configure_block_event_tracking_for_anonymous_users)
++                                .flatMap(isDisabled -> {
++                                    if (isDisabled) {
++                                        log.debug("Analytics event {} is not sent for anonymous user", eventTag);
++                                        return Mono.empty();
++                                    } else {
++                                        return Mono.just(user);
++                                    }
++                                });
++                    }
++
++                    return Mono.just(user);
++                })
++                .flatMap(user -> Mono.zip(
+                         user.isAnonymous()
+                                 ? ExchangeUtils.getAnonymousUserIdFromCurrentRequest()
+                                 : Mono.just(user.getUsername()),
+@@ -363,8 +388,10 @@ public <T> Mono<T> sendObjectEvent(AnalyticsEvents event, T object, Map<String,
+                         analyticsProperties.remove(FieldName.CLOUD_HOSTED_EXTRA_PROPS);
+                     }
+ 
+-                    return sendEvent(eventTag, username, analyticsProperties).thenReturn(object);
+-                });
++                    return sendEvent(eventTag, username, analyticsProperties);
++                })
++                // Return the original object after sending the event
++                .then(Mono.just(object));
+     }
+ 
+     /**

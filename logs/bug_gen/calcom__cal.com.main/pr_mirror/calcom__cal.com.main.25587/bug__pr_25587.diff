@@ -1,0 +1,979 @@
+diff --git a/apps/web/app/(use-page-wrapper)/settings/(settings-layout)/teams/[id]/members/page.tsx b/apps/web/app/(use-page-wrapper)/settings/(settings-layout)/teams/[id]/members/page.tsx
+index 3cf44ce..3f29aa8 100644
+--- a/apps/web/app/(use-page-wrapper)/settings/(settings-layout)/teams/[id]/members/page.tsx
++++ b/apps/web/app/(use-page-wrapper)/settings/(settings-layout)/teams/[id]/members/page.tsx
+@@ -5,11 +5,13 @@ import { headers, cookies } from "next/headers";
+ import { redirect } from "next/navigation";
+ 
+ import { getServerSession } from "@calcom/features/auth/lib/getServerSession";
+-import { getTeamMemberPermissions } from "@calcom/features/pbac/lib/team-member-permissions";
++import { Resource, CustomAction } from "@calcom/features/pbac/domain/types/permission-registry";
++import { getSpecificPermissions } from "@calcom/features/pbac/lib/resource-permissions";
+ import { RoleManagementFactory } from "@calcom/features/pbac/services/role-management.factory";
+ import SettingsHeader from "@calcom/features/settings/appDir/SettingsHeader";
+ import { PrismaAttributeRepository } from "@calcom/lib/server/repository/PrismaAttributeRepository";
+ import { prisma } from "@calcom/prisma";
++import { MembershipRole } from "@calcom/prisma/enums";
+ import { viewerTeamsRouter } from "@calcom/trpc/server/routers/viewer/teams/_router";
+ 
+ import { buildLegacyRequest } from "@lib/buildLegacyCtx";
+@@ -31,7 +33,7 @@ const getCachedTeamRoles = unstable_cache(
+     try {
+       const roleManager = await RoleManagementFactory.getInstance().createRoleManager(organizationId);
+       return await roleManager.getTeamRoles(teamId);
+-    } catch {
++    } catch (error) {
+       // PBAC not enabled or error occurred, return empty array
+       return [];
+     }
+@@ -47,7 +49,7 @@ const getCachedTeamAttributes = unstable_cache(
+ 
+     try {
+       return await attributeRepo.findAllByOrgIdWithOptions({ orgId: organizationId });
+-    } catch {
++    } catch (error) {
+       return [];
+     }
+   },
+@@ -77,15 +79,65 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
+   const organizationId = team.parentId || teamId;
+ 
+   // Load PBAC roles and attributes if available
+-  const [roles, attributes, memberPermissions] = await Promise.all([
++  const [roles, attributes] = await Promise.all([
+     getCachedTeamRoles(teamId, organizationId),
+     getCachedTeamAttributes(organizationId),
+-    getTeamMemberPermissions({
+-      userId: session.user.id,
+-      team,
+-    }),
+   ]);
+ 
++  const fallbackRolesCanListMembers: MembershipRole[] = [MembershipRole.ADMIN, MembershipRole.OWNER];
++
++  // If the team is not private we allow members to list other members
++  if (!team.isPrivate) {
++    fallbackRolesCanListMembers.push(MembershipRole.MEMBER);
++  }
++
++  // Get specific PBAC permissions for team member actions
++  const permissions = await getSpecificPermissions({
++    userId: session.user.id,
++    teamId: teamId,
++    resource: Resource.Team,
++    userRole: team.membership.role,
++    actions: [
++      CustomAction.Invite,
++      CustomAction.ChangeMemberRole,
++      CustomAction.Remove,
++      CustomAction.ListMembers,
++      CustomAction.ListMembersPrivate,
++      CustomAction.Impersonate,
++    ],
++    fallbackRoles: {
++      [CustomAction.Invite]: {
++        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
++      },
++      [CustomAction.ChangeMemberRole]: {
++        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
++      },
++      [CustomAction.Remove]: {
++        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
++      },
++      [CustomAction.ListMembers]: {
++        roles: fallbackRolesCanListMembers,
++      },
++      [CustomAction.Impersonate]: {
++        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
++      },
++      [CustomAction.ListMembersPrivate]: {
++        roles: fallbackRolesCanListMembers,
++      },
++    },
++  });
++
++  // Map specific permissions to member actions
++  const memberPermissions = {
++    canListMembers: team.isPrivate
++      ? permissions[CustomAction.ListMembersPrivate]
++      : permissions[CustomAction.ListMembers],
++    canInvite: permissions[CustomAction.Invite],
++    canChangeMemberRole: permissions[CustomAction.ChangeMemberRole],
++    canRemove: permissions[CustomAction.Remove],
++    canImpersonate: permissions[CustomAction.Impersonate],
++  };
++
+   const facetedTeamValues = {
+     roles,
+     teams: [team],
+@@ -110,4 +162,4 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
+   );
+ };
+ 
+-export default Page;
++export default Page;
+\ No newline at end of file
+diff --git a/packages/features/ee/teams/components/EditMemberSheet.test.tsx b/packages/features/ee/teams/components/EditMemberSheet.test.tsx
+deleted file mode 100644
+index 77f8e48..0000000
+--- a/packages/features/ee/teams/components/EditMemberSheet.test.tsx
++++ /dev/null
+@@ -1,327 +0,0 @@
+-import { render } from "@testing-library/react";
+-import React, { type ReactNode } from "react";
+-import { vi } from "vitest";
+-
+-import type { MemberPermissions } from "@calcom/features/users/components/UserTable/types";
+-import { MembershipRole } from "@calcom/prisma/enums";
+-
+-import { EditMemberSheet } from "./EditMemberSheet";
+-import type { State, User } from "./MemberList";
+-
+-// Mock dependencies
+-vi.mock("@calcom/lib/hooks/useLocale", () => ({
+-  useLocale: () => ({
+-    t: (key: string) => key,
+-  }),
+-}));
+-
+-vi.mock("@calcom/trpc/react", () => ({
+-  trpc: {
+-    viewer: {
+-      pbac: {
+-        getTeamRoles: {
+-          useQuery: () => ({
+-            data: undefined,
+-            isPending: false,
+-          }),
+-        },
+-      },
+-      teams: {
+-        getUserConnectedApps: {
+-          useQuery: () => ({
+-            data: {},
+-            isPending: false,
+-          }),
+-        },
+-        changeMemberRole: {
+-          useMutation: () => ({
+-            mutate: vi.fn(),
+-            mutateAsync: vi.fn(),
+-          }),
+-        },
+-        listMembers: {
+-          cancel: vi.fn(),
+-          getInfiniteData: vi.fn(),
+-          invalidate: vi.fn(),
+-        },
+-        get: {
+-          setData: vi.fn(),
+-          invalidate: vi.fn(),
+-        },
+-      },
+-    },
+-    useUtils: () => ({
+-      viewer: {
+-        teams: {
+-          listMembers: {
+-            cancel: vi.fn(),
+-            getInfiniteData: vi.fn(),
+-            invalidate: vi.fn(),
+-          },
+-          get: {
+-            setData: vi.fn(),
+-            invalidate: vi.fn(),
+-          },
+-        },
+-      },
+-    }),
+-  },
+-}));
+-
+-const mockSetEditMode = vi.fn();
+-const mockSetMutationLoading = vi.fn();
+-
+-vi.mock("@calcom/features/users/components/UserTable/EditSheet/store", () => ({
+-  useEditMode: vi.fn((selector) => {
+-    const state = {
+-      editMode: false,
+-      setEditMode: mockSetEditMode,
+-      mutationLoading: false,
+-      setMutationLoading: mockSetMutationLoading,
+-    };
+-    if (typeof selector === "function") {
+-      return selector(state);
+-    }
+-    return state;
+-  }),
+-}));
+-
+-// Mock SheetFooterControls to verify props
+-let capturedProps: { canChangeMemberRole?: boolean; canEditAttributesForUser?: boolean }[] = [];
+-vi.mock("@calcom/features/users/components/UserTable/EditSheet/SheetFooterControls", () => ({
+-  SheetFooterControls: (props: { canChangeMemberRole?: boolean; canEditAttributesForUser?: boolean }) => {
+-    capturedProps.push(props);
+-    return React.createElement("div", { "data-testid": "sheet-footer-controls" }, "SheetFooterControls");
+-  },
+-}));
+-
+-// Mock other UI components
+-vi.mock("@calcom/ui/components/sheet", () => ({
+-  Sheet: ({ children }: { children: ReactNode }) =>
+-    React.createElement("div", { "data-testid": "sheet" }, children),
+-  SheetContent: ({ children }: { children: ReactNode }) =>
+-    React.createElement("div", { "data-testid": "sheet-content" }, children),
+-  SheetHeader: ({ children }: { children: ReactNode }) =>
+-    React.createElement("div", { "data-testid": "sheet-header" }, children),
+-  SheetBody: ({ children }: { children: ReactNode }) =>
+-    React.createElement("div", { "data-testid": "sheet-body" }, children),
+-  SheetFooter: ({ children }: { children: ReactNode }) =>
+-    React.createElement("div", { "data-testid": "sheet-footer" }, children),
+-}));
+-
+-vi.mock("@calcom/ui/components/form", () => ({
+-  Form: ({ children }: { children: ReactNode }) => React.createElement("form", null, children),
+-  ToggleGroup: () => React.createElement("div", { "data-testid": "toggle-group" }, "ToggleGroup"),
+-  Select: () => React.createElement("div", { "data-testid": "select" }, "Select"),
+-}));
+-
+-vi.mock("@calcom/ui/components/avatar", () => ({
+-  Avatar: () => React.createElement("div", { "data-testid": "avatar" }, "Avatar"),
+-}));
+-
+-vi.mock("@calcom/ui/components/skeleton", () => ({
+-  Skeleton: ({ children }: { children: ReactNode }) => React.createElement("div", null, children),
+-  Loader: () => React.createElement("div", { "data-testid": "loader" }, "Loading..."),
+-}));
+-
+-vi.mock("@calcom/features/users/components/UserTable/EditSheet/DisplayInfo", () => ({
+-  DisplayInfo: () => <div data-testid="display-info">DisplayInfo</div>,
+-}));
+-
+-describe("EditMemberSheet", () => {
+-  const mockDispatch = vi.fn();
+-
+-  // Create a minimal mock user that satisfies the User type
+-  const mockUser = {
+-    id: 1,
+-    name: "Test User",
+-    email: "test@example.com",
+-    username: "testuser",
+-    role: MembershipRole.MEMBER,
+-    accepted: true,
+-    avatarUrl: "",
+-    bookerUrl: "https://cal.com",
+-    lastActiveAt: "2024-01-01",
+-    customRoleId: null,
+-  } as User;
+-
+-  const mockState: State = {
+-    editSheet: {
+-      user: mockUser,
+-      showModal: true,
+-    },
+-    deleteMember: {
+-      showModal: false,
+-    },
+-    impersonateMember: {
+-      showModal: false,
+-    },
+-    teamAvailability: {
+-      showModal: false,
+-    },
+-  };
+-
+-  beforeEach(() => {
+-    vi.clearAllMocks();
+-    mockSetEditMode.mockClear();
+-    mockSetMutationLoading.mockClear();
+-    capturedProps = [];
+-  });
+-
+-  describe("Fix verification: canChangeMemberRole prop passing", () => {
+-    it("should pass canChangeMemberRole=true to SheetFooterControls when permissions.canChangeMemberRole is true", () => {
+-      const permissions: MemberPermissions = {
+-        canListMembers: false,
+-        canInvite: false,
+-        canChangeMemberRole: true,
+-        canRemove: false,
+-        canImpersonate: false,
+-      };
+-
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={permissions}
+-        />
+-      );
+-
+-      // Verify SheetFooterControls was called with canChangeMemberRole=true
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: true,
+-        })
+-      );
+-    });
+-
+-    it("should pass canChangeMemberRole=false to SheetFooterControls when permissions.canChangeMemberRole is false", () => {
+-      const permissions: MemberPermissions = {
+-        canListMembers: false,
+-        canInvite: false,
+-        canChangeMemberRole: false,
+-        canRemove: false,
+-        canImpersonate: false,
+-      };
+-
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={permissions}
+-        />
+-      );
+-
+-      // Verify SheetFooterControls was called with canChangeMemberRole=false
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: false,
+-        })
+-      );
+-    });
+-
+-    it("should pass canChangeMemberRole=undefined to SheetFooterControls when permissions is undefined", () => {
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={undefined}
+-        />
+-      );
+-
+-      // Verify SheetFooterControls was called with canChangeMemberRole=undefined
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: undefined,
+-        })
+-      );
+-    });
+-
+-    it("should pass canChangeMemberRole=undefined to SheetFooterControls when permissions object exists but canChangeMemberRole is undefined", () => {
+-      const permissions: Partial<MemberPermissions> = {
+-        canListMembers: true,
+-        canInvite: false,
+-        // canChangeMemberRole is intentionally omitted
+-      };
+-
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={permissions as MemberPermissions}
+-        />
+-      );
+-
+-      // Verify SheetFooterControls was called with canChangeMemberRole=undefined
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: undefined,
+-        })
+-      );
+-    });
+-
+-    it("should pass canEditAttributesForUser from permissions to SheetFooterControls", () => {
+-      const permissions: MemberPermissions = {
+-        canListMembers: false,
+-        canInvite: false,
+-        canChangeMemberRole: true,
+-        canRemove: false,
+-        canImpersonate: false,
+-        canEditAttributesForUser: true,
+-      };
+-
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={permissions}
+-        />
+-      );
+-
+-      // Verify SheetFooterControls was called with both props
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: true,
+-          canEditAttributesForUser: true,
+-        })
+-      );
+-    });
+-
+-    it("should correctly extract canChangeMemberRole from permissions object (verifies fix)", () => {
+-      // This test specifically verifies the fix where permissions?.canChangeMemberRole
+-      // is now correctly passed to SheetFooterControls
+-      const permissions: MemberPermissions = {
+-        canListMembers: false,
+-        canInvite: false,
+-        canChangeMemberRole: true, // This should be passed to SheetFooterControls
+-        canRemove: false,
+-        canImpersonate: false,
+-      };
+-
+-      render(
+-        <EditMemberSheet
+-          state={mockState}
+-          dispatch={mockDispatch}
+-          currentMember={MembershipRole.OWNER}
+-          teamId={1}
+-          permissions={permissions}
+-        />
+-      );
+-
+-      expect(capturedProps).toContainEqual(
+-        expect.objectContaining({
+-          canChangeMemberRole: true,
+-        })
+-      );
+-    });
+-  });
+-});
+diff --git a/packages/features/ee/teams/components/EditMemberSheet.tsx b/packages/features/ee/teams/components/EditMemberSheet.tsx
+index 8611d8d..64ed3a5 100644
+--- a/packages/features/ee/teams/components/EditMemberSheet.tsx
++++ b/packages/features/ee/teams/components/EditMemberSheet.tsx
+@@ -8,7 +8,6 @@ import { shallow } from "zustand/shallow";
+ import { DisplayInfo } from "@calcom/features/users/components/UserTable/EditSheet/DisplayInfo";
+ import { SheetFooterControls } from "@calcom/features/users/components/UserTable/EditSheet/SheetFooterControls";
+ import { useEditMode } from "@calcom/features/users/components/UserTable/EditSheet/store";
+-import type { MemberPermissions } from "@calcom/features/users/components/UserTable/types";
+ import { useLocale } from "@calcom/lib/hooks/useLocale";
+ import { MembershipRole } from "@calcom/prisma/enums";
+ import { trpc } from "@calcom/trpc/react";
+@@ -35,13 +34,11 @@ export function EditMemberSheet({
+   dispatch,
+   currentMember,
+   teamId,
+-  permissions,
+ }: {
+   state: State;
+   dispatch: Dispatch<Action>;
+   currentMember: MembershipRole;
+   teamId: number;
+-  permissions?: MemberPermissions;
+ }) {
+   const { t } = useLocale();
+   const { user } = state.editSheet;
+@@ -280,10 +277,7 @@ export function EditMemberSheet({
+               </div>
+             </SheetBody>
+             <SheetFooter className="mt-auto">
+-              <SheetFooterControls
+-                canChangeMemberRole={permissions?.canChangeMemberRole}
+-                canEditAttributesForUser={permissions?.canEditAttributesForUser}
+-              />
++              <SheetFooterControls />
+             </SheetFooter>
+           </Form>
+         ) : (
+@@ -292,4 +286,4 @@ export function EditMemberSheet({
+       </SheetContent>
+     </Sheet>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/packages/features/ee/teams/components/MemberList.tsx b/packages/features/ee/teams/components/MemberList.tsx
+index ff1ee16..5e25e5d 100644
+--- a/packages/features/ee/teams/components/MemberList.tsx
++++ b/packages/features/ee/teams/components/MemberList.tsx
+@@ -446,393 +446,4 @@ function MemberListContent(props: Props) {
+             process.env.NEXT_PUBLIC_TEAM_IMPERSONATION === "true";
+           return (
+             <>
+-              {props.team.membership?.accepted && (
+-                <div className="flex items-center justify-end">
+-                  <ButtonGroup combined containerProps={{ className: "border-default hidden md:flex" }}>
+-                    {/* TODO: bring availability back. right now its ugly and broken
+-                    <Tooltip
+-                      content={
+-                        user.accepted
+-                          ? t("team_view_user_availability")
+-                          : t("team_view_user_availability_disabled")
+-                      }>
+-                      <Button
+-                        disabled={!user.accepted}
+-                        onClick={() =>
+-                          user.accepted
+-                            ? dispatch({
+-                                type: "TEAM_AVAILABILITY",
+-                                payload: {
+-                                  user,
+-                                  showModal: true,
+-                                },
+-                              })
+-                            : null
+-                        }
+-                        color="secondary"
+-                        variant="icon"
+-                        StartIcon="clock"
+-                      />
+-                    </Tooltip> */}
+-                    {!!user.accepted && (
+-                      <Tooltip content={t("view_public_page")}>
+-                        <Button
+-                          target="_blank"
+-                          href={`${user.bookerUrl}/${user.username}`}
+-                          color="secondary"
+-                          className={classNames(!editMode ? "rounded-r-md" : "")}
+-                          variant="icon"
+-                          StartIcon="external-link"
+-                          disabled={!user.accepted}
+-                        />
+-                      </Tooltip>
+-                    )}
+-                    {editMode && (
+-                      <Dropdown>
+-                        <DropdownMenuTrigger asChild>
+-                          <Button
+-                            className="ltr:radix-state-open:rounded-r-(--btn-group-radius) rtl:radix-state-open:rounded-l-(--btn-group-radius)"
+-                            color="secondary"
+-                            variant="icon"
+-                            StartIcon="ellipsis"
+-                          />
+-                        </DropdownMenuTrigger>
+-                        <DropdownMenuPortal>
+-                          <DropdownMenuContent>
+-                            {canChangeRole ? (
+-                              <DropdownMenuItem>
+-                                <DropdownItem
+-                                  type="button"
+-                                  onClick={() =>
+-                                    dispatch({
+-                                      type: "EDIT_USER_SHEET",
+-                                      payload: {
+-                                        user,
+-                                        showModal: true,
+-                                      },
+-                                    })
+-                                  }
+-                                  StartIcon="pencil">
+-                                  {t("edit")}
+-                                </DropdownItem>
+-                              </DropdownMenuItem>
+-                            ) : null}
+-                            {impersonationMode && (
+-                              <>
+-                                <DropdownMenuItem>
+-                                  <DropdownItem
+-                                    type="button"
+-                                    onClick={() =>
+-                                      dispatch({
+-                                        type: "SET_IMPERSONATE_ID",
+-                                        payload: {
+-                                          user,
+-                                          showModal: true,
+-                                        },
+-                                      })
+-                                    }
+-                                    StartIcon="lock">
+-                                    {t("impersonate")}
+-                                  </DropdownItem>
+-                                </DropdownMenuItem>
+-                                <DropdownMenuSeparator />
+-                              </>
+-                            )}
+-                            {canResendInvitation && (
+-                              <DropdownMenuItem>
+-                                <DropdownItem
+-                                  type="button"
+-                                  onClick={() => {
+-                                    resendInvitationMutation.mutate({
+-                                      teamId: props.team?.id,
+-                                      email: user.email,
+-                                      language: i18n.language,
+-                                    });
+-                                  }}
+-                                  StartIcon="send">
+-                                  {t("resend_invitation")}
+-                                </DropdownItem>
+-                              </DropdownMenuItem>
+-                            )}
+-                            {canRemove ? (
+-                              <DropdownMenuItem>
+-                                <DropdownItem
+-                                  type="button"
+-                                  onClick={() =>
+-                                    dispatch({
+-                                      type: "SET_DELETE_ID",
+-                                      payload: {
+-                                        user,
+-                                        showModal: true,
+-                                      },
+-                                    })
+-                                  }
+-                                  color="destructive"
+-                                  StartIcon="user-x">
+-                                  {t("remove")}
+-                                </DropdownItem>
+-                              </DropdownMenuItem>
+-                            ) : null}
+-                          </DropdownMenuContent>
+-                        </DropdownMenuPortal>
+-                      </Dropdown>
+-                    )}
+-                  </ButtonGroup>
+-                  <div className="flex md:hidden">
+-                    <Dropdown>
+-                      <DropdownMenuTrigger asChild>
+-                        <Button type="button" variant="icon" color="minimal" StartIcon="ellipsis" />
+-                      </DropdownMenuTrigger>
+-                      <DropdownMenuPortal>
+-                        <DropdownMenuContent>
+-                          <DropdownMenuItem className="outline-none">
+-                            <DropdownItem
+-                              disabled={!user.accepted}
+-                              href={!user.accepted ? undefined : `/${user.username}`}
+-                              target="_blank"
+-                              type="button"
+-                              StartIcon="external-link">
+-                              {t("view_public_page")}
+-                            </DropdownItem>
+-                          </DropdownMenuItem>
+-                          {editMode && (
+-                            <>
+-                              <DropdownMenuItem>
+-                                <DropdownItem
+-                                  type="button"
+-                                  onClick={() =>
+-                                    dispatch({
+-                                      type: "EDIT_USER_SHEET",
+-                                      payload: {
+-                                        user,
+-                                        showModal: true,
+-                                      },
+-                                    })
+-                                  }
+-                                  StartIcon="pencil">
+-                                  {t("edit")}
+-                                </DropdownItem>
+-                              </DropdownMenuItem>
+-                              <DropdownMenuItem>
+-                                <DropdownItem
+-                                  type="button"
+-                                  color="destructive"
+-                                  onClick={() =>
+-                                    dispatch({
+-                                      type: "SET_DELETE_ID",
+-                                      payload: {
+-                                        user,
+-                                        showModal: true,
+-                                      },
+-                                    })
+-                                  }
+-                                  StartIcon="user-x">
+-                                  {t("remove")}
+-                                </DropdownItem>
+-                              </DropdownMenuItem>
+-                            </>
+-                          )}
+-                        </DropdownMenuContent>
+-                      </DropdownMenuPortal>
+-                    </Dropdown>
+-                  </div>
+-                </div>
+-              )}
+-            </>
+-          );
+-        },
+-      },
+-    ];
+-
+-    return cols;
+-  }, [props.isOrgAdminOrOwner, dispatch, totalRowCount, session?.user.id]);
+-  //we must flatten the array of arrays from the useInfiniteQuery hook
+-  const flatData = useMemo(() => data?.pages?.flatMap((page) => page.members) ?? [], [data]) as User[];
+-
+-  const table = useReactTable({
+-    data: flatData,
+-    columns: memorisedColumns,
+-    enableRowSelection: true,
+-    debugTable: true,
+-    manualPagination: true,
+-    initialState: {
+-      columnVisibility: initalColumnVisibility,
+-      columnPinning: {
+-        right: ["actions"],
+-      },
+-    },
+-    state: {
+-      columnFilters,
+-      rowSelection,
+-    },
+-    onRowSelectionChange: setRowSelection,
+-    getCoreRowModel: getCoreRowModel(),
+-    getFilteredRowModel: getFilteredRowModel(),
+-    getSortedRowModel: getSortedRowModel(),
+-    getFacetedUniqueValues: (_, columnId) => () => {
+-      if (facetedTeamValues) {
+-        switch (columnId) {
+-          case "role": {
+-            // Include both traditional roles and PBAC custom roles
+-            const allRoles = facetedTeamValues.roles.map((role) => ({
+-              label: role.name,
+-              value: role.id,
+-            }));
+-
+-            return convertFacetedValuesToMap(allRoles);
+-          }
+-          default:
+-            return new Map();
+-        }
+-      }
+-      return new Map();
+-    },
+-    getRowId: (row) => `${row.id}`,
+-  });
+-
+-  useFetchMoreOnBottomReached({
+-    tableContainerRef,
+-    hasNextPage,
+-    fetchNextPage,
+-    isFetching,
+-  });
+-
+-  const numberOfSelectedRows = table.getSelectedRowModel().rows.length;
+-
+-  return (
+-    <>
+-      <DataTableWrapper
+-        testId="team-member-list-container"
+-        table={table}
+-        tableContainerRef={tableContainerRef}
+-        isPending={isPending}
+-        enableColumnResizing={true}
+-        paginationMode="infinite"
+-        hasNextPage={hasNextPage}
+-        fetchNextPage={fetchNextPage}
+-        isFetching={isFetching}
+-        totalRowCount={totalRowCount}
+-        ToolbarLeft={
+-          <>
+-            <DataTableToolbar.SearchBar />
+-            <DataTableFilters.ColumnVisibilityButton table={table} />
+-            <DataTableFilters.FilterBar table={table} />
+-          </>
+-        }
+-        ToolbarRight={
+-          <>
+-            <DataTableFilters.ClearFiltersButton />
+-            {props.permissions.canInvite && (
+-              <DataTableToolbar.CTA
+-                type="button"
+-                color="primary"
+-                StartIcon="plus"
+-                onClick={() => { props.setShowMemberInvitationModal(true); posthog.capture("teams_add_new_members_button_clicked") }}
+-                data-testid="new-member-button">
+-                {t("add")}
+-              </DataTableToolbar.CTA>
+-            )}
+-          </>
+-        }>
+-        {numberOfSelectedRows >= 2 && dynamicLinkVisible && (
+-          <DataTableSelectionBar.Root className="bottom-[7.3rem]! md:bottom-32!">
+-            <DynamicLink table={table} domain={domain} />
+-          </DataTableSelectionBar.Root>
+-        )}
+-        {numberOfSelectedRows > 0 && (
+-          <DataTableSelectionBar.Root className="bottom-16! justify-center md:w-max">
+-            <p className="text-brand-subtle px-2 text-center text-xs leading-none sm:text-sm sm:font-medium">
+-              {t("number_selected", { count: numberOfSelectedRows })}
+-            </p>
+-            {numberOfSelectedRows >= 2 && (
+-              <DataTableSelectionBar.Button
+-                color="secondary"
+-                onClick={() => setDynamicLinkVisible(!dynamicLinkVisible)}
+-                icon="handshake">
+-                {t("group_meeting")}
+-              </DataTableSelectionBar.Button>
+-            )}
+-            <EventTypesList table={table} teamId={props.team.id} />
+-            <DeleteBulkTeamMembers
+-              users={table.getSelectedRowModel().flatRows.map((row) => row.original)}
+-              onRemove={() => table.toggleAllPageRowsSelected(false)}
+-              isOrg={checkIsOrg(props.team)}
+-              teamId={props.team.id}
+-            />
+-          </DataTableSelectionBar.Root>
+-        )}
+-      </DataTableWrapper>
+-      {state.deleteMember.showModal && (
+-        <Dialog
+-          open={true}
+-          onOpenChange={(open) =>
+-            !open &&
+-            dispatch({
+-              type: "CLOSE_MODAL",
+-            })
+-          }>
+-          <ConfirmationDialogContent
+-            variety="danger"
+-            title={t("remove_member")}
+-            confirmBtnText={t("confirm_remove_member")}
+-            onConfirm={removeMember}>
+-            {t("remove_member_confirmation_message")}
+-          </ConfirmationDialogContent>
+-        </Dialog>
+-      )}
+-
+-      {state.impersonateMember.showModal && state.impersonateMember.user?.username && (
+-        <Dialog
+-          open={true}
+-          onOpenChange={() =>
+-            dispatch({
+-              type: "CLOSE_MODAL",
+-            })
+-          }>
+-          <DialogContent type="creation" title={t("impersonate")} description={t("impersonation_user_tip")}>
+-            <form
+-              onSubmit={async (e) => {
+-                e.preventDefault();
+-                await signIn("impersonation-auth", {
+-                  username: state.impersonateMember.user?.email,
+-                  teamId: props.team.id,
+-                });
+-                dispatch({
+-                  type: "CLOSE_MODAL",
+-                });
+-              }}>
+-              <DialogFooter showDivider className="mt-8">
+-                <DialogClose color="secondary">{t("cancel")}</DialogClose>
+-                <Button color="primary" type="submit">
+-                  {t("impersonate")}
+-                </Button>
+-              </DialogFooter>
+-            </form>
+-          </DialogContent>
+-        </Dialog>
+-      )}
+-      {state.teamAvailability.showModal && (
+-        <Dialog
+-          open={true}
+-          onOpenChange={() => {
+-            dispatch({
+-              type: "CLOSE_MODAL",
+-            });
+-          }}>
+-          <DialogContent type="creation" size="md">
+-            <TeamAvailabilityModal team={props.team} member={state.teamAvailability.user} />
+-          </DialogContent>
+-        </Dialog>
+-      )}
+-      {state.editSheet.showModal && (
+-        <EditMemberSheet
+-          dispatch={dispatch}
+-          state={state}
+-          currentMember={props.team.membership.role}
+-          teamId={props.team.id}
+-          permissions={props.permissions}
+-        />
+-      )}
+-    </>
+-  );
+-}
++              {props.team.membership?.accepted &&
+\ No newline at end of file
+diff --git a/packages/features/pbac/lib/team-member-permissions.ts b/packages/features/pbac/lib/team-member-permissions.ts
+deleted file mode 100644
+index ad27cdf..0000000
+--- a/packages/features/pbac/lib/team-member-permissions.ts
++++ /dev/null
+@@ -1,80 +0,0 @@
+-import type { MemberPermissions } from "@calcom/features/users/components/UserTable/types";
+-import { MembershipRole } from "@calcom/prisma/enums";
+-
+-import { Resource, CustomAction } from "../domain/types/permission-registry";
+-import { getSpecificPermissions } from "./resource-permissions";
+-
+-interface TeamWithMembership {
+-  id: number;
+-  isPrivate: boolean;
+-  membership: {
+-    role: MembershipRole;
+-    accepted: boolean;
+-  };
+-}
+-
+-interface GetTeamMemberPermissionsOptions {
+-  userId: number;
+-  team: TeamWithMembership;
+-}
+-
+-/**
+- * Gets team member permissions using PBAC or fallback to role-based permissions.
+- */
+-export async function getTeamMemberPermissions({
+-  userId,
+-  team,
+-}: GetTeamMemberPermissionsOptions): Promise<MemberPermissions> {
+-  // Determine fallback roles for ListMembers based on team privacy
+-  const fallbackRolesCanListMembers: MembershipRole[] = [MembershipRole.ADMIN, MembershipRole.OWNER];
+-  if (!team.isPrivate) {
+-    fallbackRolesCanListMembers.push(MembershipRole.MEMBER);
+-  }
+-
+-  // Get specific PBAC permissions for team member actions
+-  const permissions = await getSpecificPermissions({
+-    userId,
+-    teamId: team.id,
+-    resource: Resource.Team,
+-    userRole: team.membership.role,
+-    actions: [
+-      CustomAction.Invite,
+-      CustomAction.ChangeMemberRole,
+-      CustomAction.Remove,
+-      CustomAction.ListMembers,
+-      CustomAction.ListMembersPrivate,
+-      CustomAction.Impersonate,
+-    ],
+-    fallbackRoles: {
+-      [CustomAction.Invite]: {
+-        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
+-      },
+-      [CustomAction.ChangeMemberRole]: {
+-        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
+-      },
+-      [CustomAction.Remove]: {
+-        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
+-      },
+-      [CustomAction.ListMembers]: {
+-        roles: fallbackRolesCanListMembers,
+-      },
+-      [CustomAction.Impersonate]: {
+-        roles: [MembershipRole.ADMIN, MembershipRole.OWNER],
+-      },
+-      [CustomAction.ListMembersPrivate]: {
+-        roles: fallbackRolesCanListMembers,
+-      },
+-    },
+-  });
+-
+-  // Map specific permissions to member actions
+-  return {
+-    canListMembers: team.isPrivate
+-      ? permissions[CustomAction.ListMembersPrivate]
+-      : permissions[CustomAction.ListMembers],
+-    canInvite: permissions[CustomAction.Invite],
+-    canChangeMemberRole: permissions[CustomAction.ChangeMemberRole],
+-    canRemove: permissions[CustomAction.Remove],
+-    canImpersonate: permissions[CustomAction.Impersonate],
+-  };
+-}

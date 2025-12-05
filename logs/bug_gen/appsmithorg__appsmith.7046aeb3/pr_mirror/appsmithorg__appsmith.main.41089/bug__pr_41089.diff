@@ -1,0 +1,3677 @@
+diff --git a/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts b/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
+index c6d2e3e..c5ba902 100644
+--- a/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
++++ b/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
+@@ -382,753 +382,4 @@ describe("DataTreeEvaluator", () => {
+       type: "INPUT_WIDGET_V2",
+       reactivePaths: {
+         defaultText: EvaluationSubstitutionType.TEMPLATE,
+-        isValid: EvaluationSubstitutionType.TEMPLATE,
+-        value: EvaluationSubstitutionType.TEMPLATE,
+-        text: EvaluationSubstitutionType.TEMPLATE,
+-      },
+-    },
+-    {},
+-    new Set(),
+-  );
+-  const input1unEvalEntity = unEvalEntity;
+-  const input1ConfigEntity = configEntity;
+-  //Text1
+-
+-  const unEvalTree: UnEvalTree = {
+-    Text1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text1",
+-        text: "Label",
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-    Text2: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text2",
+-        text: "{{Text1.text}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-    Text3: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text3",
+-        text: "{{Text1.text}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-    Dropdown1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Dropdown1",
+-        options: [
+-          {
+-            label: "test",
+-            value: "valueTest",
+-          },
+-          {
+-            label: "test2",
+-            value: "valueTest2",
+-          },
+-        ],
+-        type: "SELECT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-    Table1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Table1",
+-        tableData:
+-          "{{Api1.data.map(datum => ({ ...datum, raw: Text1.text }) )}}",
+-        dynamicBindingPathList: [{ key: "tableData" }],
+-        type: "TABLE_WIDGET",
+-        searchText: undefined,
+-        selectedRowIndex: undefined,
+-        selectedRowIndices: undefined,
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-    Text4: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        text: "{{Table1.selectedRow.test}}",
+-        widgetName: "Text4",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-        reactivePaths: {
+-          text: EvaluationSubstitutionType.TEMPLATE,
+-        },
+-        validationPaths: {
+-          text: { type: ValidationTypes.TEXT },
+-        },
+-      },
+-      {},
+-      new Set(),
+-    ).unEvalEntity,
+-  };
+-
+-  const configTree: ConfigTree = {
+-    Text1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text1",
+-        text: "Label",
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-    Text2: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text2",
+-        text: "{{Text1.text}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-    Text3: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text3",
+-        text: "{{Text1.text}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-    Dropdown1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Dropdown1",
+-        options: [
+-          {
+-            label: "test",
+-            value: "valueTest",
+-          },
+-          {
+-            label: "test2",
+-            value: "valueTest2",
+-          },
+-        ],
+-        type: "SELECT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-    Table1: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Table1",
+-        tableData:
+-          "{{Api1.data.map(datum => ({ ...datum, raw: Text1.text }) )}}",
+-        dynamicBindingPathList: [{ key: "tableData" }],
+-        type: "TABLE_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-    Text4: generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "Text4",
+-        text: "{{Table1.selectedRow.test}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-        reactivePaths: {
+-          text: EvaluationSubstitutionType.TEMPLATE,
+-        },
+-        validationPaths: {
+-          text: { type: ValidationTypes.TEXT },
+-        },
+-        dynamicTriggerPathList: [],
+-      },
+-      {},
+-      new Set(),
+-    ).configEntity,
+-  };
+-
+-  const evaluator = new DataTreeEvaluator(WIDGET_CONFIG_MAP);
+-
+-  it("Checks the number of clone operations in first tree flow", async () => {
+-    await evaluator.setupFirstTree(
+-      unEvalTree,
+-      configTree,
+-      {},
+-      {
+-        appId: "appId",
+-        pageId: "pageId",
+-        timestamp: "timestamp",
+-        appMode: APP_MODE.PUBLISHED,
+-        instanceId: "instanceId",
+-        dslVersion: 1,
+-      },
+-    );
+-    evaluator.evalAndValidateFirstTree();
+-    // Hard check to not regress on the number of clone operations. Try to improve this number.
+-    expect(klonaFullSpy).toBeCalledTimes(15);
+-    expect(klonaJsonSpy).toBeCalledTimes(28);
+-  });
+-
+-  it("Evaluates a binding in first run", () => {
+-    const evaluation = evaluator.evalTree;
+-    const dependencies = evaluator.dependencies;
+-
+-    expect(evaluation).toHaveProperty("Text1.text", "Label");
+-    expect(evaluation).toHaveProperty("Text2.text", "Label");
+-    expect(evaluation).toHaveProperty("Text3.text", "Label");
+-    expect(sortObjectWithArray(dependencies)).toStrictEqual(
+-      initialdependencies,
+-    );
+-  });
+-
+-  it("Evaluates a value change in update run", () => {
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Text1: {
+-        ...unEvalTree.Text1,
+-        text: "Hey there",
+-      },
+-    };
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Text: {
+-        ...configTree.Text1,
+-      },
+-    };
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-
+-    expect(dataTree).toHaveProperty("Text1.text", "Hey there");
+-    expect(dataTree).toHaveProperty("Text2.text", "Hey there");
+-    expect(dataTree).toHaveProperty("Text3.text", "Hey there");
+-  });
+-
+-  it("Evaluates a dependency change in update run", () => {
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Text3: {
+-        ...unEvalTree.Text3,
+-        text: "Label 3",
+-      },
+-    };
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Text3: {
+-        ...configTree.Text3,
+-        dynamicBindingPathList: [],
+-      },
+-    };
+-    const expectedDependencies = {
+-      ...initialdependencies,
+-      // Binding has been removed
+-      ["Text3.text"]: [],
+-    };
+-
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-
+-    const dataTree = evaluator.evalTree;
+-    const updatedDependencies = evaluator.dependencies;
+-
+-    expect(dataTree).toHaveProperty("Text1.text", "Label");
+-    expect(dataTree).toHaveProperty("Text2.text", "Label");
+-    expect(dataTree).toHaveProperty("Text3.text", "Label 3");
+-
+-    expect(sortObjectWithArray(updatedDependencies)).toStrictEqual(
+-      expectedDependencies,
+-    );
+-  });
+-
+-  it("Overrides with default value", () => {
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Input1: input1unEvalEntity,
+-    };
+-
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Input1: input1ConfigEntity,
+-    };
+-    const expectedDependencies = {
+-      ...initialdependencies,
+-      Input1: [
+-        "Input1.defaultText",
+-        "Input1.isValid",
+-        "Input1.text",
+-        "Input1.value",
+-      ],
+-      "Input1.isValid": ["Input1.text"],
+-      "Input1.text": ["Input1.defaultText"],
+-      "Input1.value": ["Input1.text"],
+-    };
+-
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-
+-    expect(dataTree).toHaveProperty("Input1.text", "Default value");
+-    expect(sortObjectWithArray(evaluator.dependencies)).toStrictEqual(
+-      expectedDependencies,
+-    );
+-  });
+-
+-  it("Evaluates for value changes in nested diff paths", () => {
+-    const bindingPaths = {
+-      options: EvaluationSubstitutionType.TEMPLATE,
+-      defaultOptionValue: EvaluationSubstitutionType.TEMPLATE,
+-      isRequired: EvaluationSubstitutionType.TEMPLATE,
+-      isVisible: EvaluationSubstitutionType.TEMPLATE,
+-      isDisabled: EvaluationSubstitutionType.TEMPLATE,
+-    };
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Dropdown2: {
+-        ...BASE_WIDGET,
+-        widgetName: "Dropdown2",
+-        options: [
+-          {
+-            label: "newValue",
+-            value: "valueTest",
+-          },
+-          {
+-            label: "test2",
+-            value: "valueTest2",
+-          },
+-        ],
+-        type: "SELECT_WIDGET",
+-      },
+-    } as unknown as UnEvalTree;
+-
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Dropdown2: {
+-        ...BASE_WIDGET_CONFIG,
+-        type: "SELECT_WIDGET",
+-        bindingPaths,
+-        reactivePaths: {
+-          ...bindingPaths,
+-          isValid: EvaluationSubstitutionType.TEMPLATE,
+-          selectedOption: EvaluationSubstitutionType.TEMPLATE,
+-          selectedOptionValue: EvaluationSubstitutionType.TEMPLATE,
+-          selectedOptionLabel: EvaluationSubstitutionType.TEMPLATE,
+-        },
+-        propertyOverrideDependency: {},
+-        validationPaths: {},
+-      },
+-    } as unknown as ConfigTree;
+-    const expectedDependencies = { ...initialdependencies };
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-    const updatedDependencies = evaluator.dependencies;
+-
+-    expect(dataTree).toHaveProperty("Dropdown2.options.0.label", "newValue");
+-    expect(sortObjectWithArray(updatedDependencies)).toStrictEqual(
+-      expectedDependencies,
+-    );
+-  });
+-
+-  it("Adds an entity with a complicated binding", () => {
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Api1: {
+-        ...BASE_ACTION,
+-        data: [
+-          {
+-            test: "Hey",
+-          },
+-          {
+-            test: "Ho",
+-          },
+-        ],
+-      },
+-    } as unknown as UnEvalTree;
+-
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Api1: {
+-        ...BASE_ACTION_CONFIG,
+-        name: "Api1",
+-      },
+-    } as unknown as ConfigTree;
+-
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-    const updatedDependencies = evaluator.dependencies;
+-
+-    expect(dataTree).toHaveProperty("Table1.tableData", [
+-      {
+-        test: "Hey",
+-        raw: "Label",
+-      },
+-      {
+-        test: "Ho",
+-        raw: "Label",
+-      },
+-    ]);
+-    expect(sortObjectWithArray(updatedDependencies)).toStrictEqual({
+-      ...initialdependencies,
+-      "Table1.tableData": ["Api1.data", "Text1.text"],
+-      "Text3.text": ["Text1.text"],
+-    });
+-  });
+-
+-  it("Selects a row", () => {
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      Table1: {
+-        ...unEvalTree.Table1,
+-        selectedRowIndex: 0,
+-        selectedRow: {
+-          test: "Hey",
+-          raw: "Label",
+-        },
+-      },
+-      Api1: {
+-        ...BASE_ACTION,
+-        data: [
+-          {
+-            test: "Hey",
+-          },
+-          {
+-            test: "Ho",
+-          },
+-        ],
+-      },
+-    } as unknown as UnEvalTree;
+-    const updatedConfigTree = {
+-      ...configTree,
+-      Table1: {
+-        ...configTree.Table1,
+-      },
+-      Api1: {
+-        ...BASE_ACTION_CONFIG,
+-        name: "Api1",
+-      },
+-    } as unknown as ConfigTree;
+-
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-    const updatedDependencies = evaluator.dependencies;
+-
+-    expect(dataTree).toHaveProperty("Table1.tableData", [
+-      {
+-        test: "Hey",
+-        raw: "Label",
+-      },
+-      {
+-        test: "Ho",
+-        raw: "Label",
+-      },
+-    ]);
+-    expect(dataTree).toHaveProperty("Text4.text", "Hey");
+-
+-    expect(sortObjectWithArray(updatedDependencies)).toStrictEqual({
+-      ...initialdependencies,
+-      "Table1.selectedRow": [],
+-      "Table1.tableData": ["Api1.data", "Text1.text"],
+-      "Text3.text": ["Text1.text"],
+-    });
+-  });
+-
+-  it("Honors predefined action dependencyMap", () => {
+-    const updatedTree1 = {
+-      ...unEvalTree,
+-      Text1: {
+-        ...unEvalTree.Text1,
+-        text: "Test",
+-      },
+-      Api2: {
+-        ...BASE_ACTION,
+-        config: {
+-          ...BASE_ACTION.config,
+-          body: "",
+-          pluginSpecifiedTemplates: [
+-            {
+-              value: false,
+-            },
+-          ],
+-        },
+-      },
+-    };
+-    const updatedConfigTree1 = {
+-      ...configTree,
+-      Text1: {
+-        ...configTree.Text1,
+-      },
+-      Api2: {
+-        ...BASE_ACTION_CONFIG,
+-        name: "Api2",
+-        dependencyMap: {
+-          "config.body": ["config.pluginSpecifiedTemplates[0].value"],
+-        },
+-        reactivePaths: {
+-          ...BASE_ACTION_CONFIG.reactivePaths,
+-          "config.body": EvaluationSubstitutionType.TEMPLATE,
+-        },
+-      },
+-    } as unknown as ConfigTree;
+-
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedTree1,
+-      updatedConfigTree1,
+-    );
+-
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree1,
+-      unEvalUpdates,
+-      [],
+-    );
+-    expect(evaluator.dependencies["Api2.config.body"]).toStrictEqual([
+-      "Api2.config.pluginSpecifiedTemplates[0].value",
+-    ]);
+-    const updatedTree2 = {
+-      ...updatedTree1,
+-      Api2: {
+-        ...updatedTree1.Api2,
+-        config: {
+-          ...updatedTree1.Api2.config,
+-          body: "{ 'name': {{ Text1.text }} }",
+-        },
+-      },
+-    };
+-
+-    const updatedConfigTree2 = {
+-      ...updatedConfigTree1,
+-      Api2: {
+-        ...updatedConfigTree1.Api2,
+-        dynamicBindingPathList: [
+-          {
+-            key: "config.body",
+-          },
+-        ],
+-      },
+-    };
+-
+-    const { evalOrder: newEvalOrder, unEvalUpdates: unEvalUpdates2 } =
+-      evaluator.setupUpdateTree(updatedTree2, updatedConfigTree2);
+-
+-    evaluator.evalAndValidateSubTree(
+-      newEvalOrder,
+-      updatedConfigTree2,
+-      unEvalUpdates2,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-
+-    expect(evaluator.dependencies["Api2.config.body"]).toStrictEqual([
+-      "Api2.config.pluginSpecifiedTemplates[0].value",
+-      "Text1.text",
+-    ]);
+-    // @ts-expect-error: Types are not available
+-    expect(dataTree.Api2.config.body).toBe("{ 'name': Test }");
+-    const updatedTree3 = {
+-      ...updatedTree2,
+-      Api2: {
+-        ...updatedTree2.Api2,
+-        config: {
+-          ...updatedTree2.Api2.config,
+-          pluginSpecifiedTemplates: [
+-            {
+-              value: true,
+-            },
+-          ],
+-        },
+-      },
+-    };
+-    const updatedConfigTree3 = {
+-      ...updatedConfigTree2,
+-      Api2: {
+-        ...updatedConfigTree2.Api2,
+-        reactivePaths: {
+-          ...updatedConfigTree2.Api2.reactivePaths,
+-          "config.body": EvaluationSubstitutionType.SMART_SUBSTITUTE,
+-        },
+-      },
+-    };
+-
+-    const { evalOrder: newEvalOrder2, unEvalUpdates: unEvalUpdates3 } =
+-      evaluator.setupUpdateTree(updatedTree3, updatedConfigTree3);
+-
+-    evaluator.evalAndValidateSubTree(
+-      newEvalOrder2,
+-      updatedConfigTree3,
+-      unEvalUpdates3,
+-      [],
+-    );
+-    const dataTree3 = evaluator.evalTree;
+-
+-    expect(evaluator.dependencies["Api2.config.body"]).toStrictEqual([
+-      "Api2.config.pluginSpecifiedTemplates[0].value",
+-      "Text1.text",
+-    ]);
+-    // @ts-expect-error: Types are not available
+-    expect(dataTree3.Api2.config.body).toBe("{ 'name': \"Test\" }");
+-  });
+-
+-  it("Prevents data mutation in eval cycle", () => {
+-    const { configEntity, unEvalEntity } = generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "TextX",
+-        text: "{{Text1.text = 123}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    );
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      TextX: unEvalEntity,
+-    };
+-    const updatedConfigTree = {
+-      ...configTree,
+-      TextX: configEntity,
+-    };
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    expect(evalOrder).toContain("TextX.text");
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    const dataTree = evaluator.evalTree;
+-
+-    expect(dataTree).toHaveProperty("TextX.text", 123);
+-    expect(dataTree).toHaveProperty("Text1.text", "Label");
+-  });
+-
+-  it("Checks the number of clone operations performed in update tree flow", () => {
+-    const { configEntity, unEvalEntity } = generateDataTreeWidget(
+-      {
+-        ...BASE_WIDGET_CONFIG,
+-        ...BASE_WIDGET,
+-        widgetName: "TextY",
+-        text: "{{Text1.text = 123}}",
+-        dynamicBindingPathList: [{ key: "text" }],
+-        type: "TEXT_WIDGET",
+-      },
+-      {},
+-      new Set(),
+-    );
+-    const updatedUnEvalTree = {
+-      ...unEvalTree,
+-      TextY: unEvalEntity,
+-    };
+-    const updatedConfigTree = {
+-      ...configTree,
+-      TextY: configEntity,
+-    };
+-    const { evalOrder, unEvalUpdates } = evaluator.setupUpdateTree(
+-      updatedUnEvalTree,
+-      updatedConfigTree,
+-    );
+-
+-    expect(evalOrder).toContain("TextY.text");
+-    expect(evalOrder.length).toBe(2);
+-    evaluator.evalAndValidateSubTree(
+-      evalOrder,
+-      updatedConfigTree,
+-      unEvalUpdates,
+-      [],
+-    );
+-    // Hard check to not regress on the number of clone operations. Try to improve this number.
+-    // Not a good assertion because in one piece of code im cloning multiple times, however the value im cloning is very small.
+-    // TODO: Improve this assertion or remove it since its just performance related assertion and not a functional assertion.
+-    expect(klonaJsonSpy).toBeCalledTimes(4);
+-  });
+-});
++        isValid: EvaluationSub
+\ No newline at end of file
+diff --git a/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts b/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
+index ceff6ba..e708ffe 100644
+--- a/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
++++ b/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
+@@ -130,6 +130,7 @@ describe("evaluateAndPushResponse", () => {
+       },
+       [],
+       [],
++      {},
+     );
+     // check if push response has been called
+     expect(pushResponseToMainThreadMock).toHaveBeenCalled();
+@@ -225,6 +226,7 @@ describe("evaluateAndGenerateResponse", () => {
+       },
+       [],
+       [],
++      {},
+     );
+     const parsedUpdates = getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+ 
+@@ -259,6 +261,7 @@ describe("evaluateAndGenerateResponse", () => {
+       },
+       [],
+       [],
++      {},
+     );
+     const parsedUpdates = getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+ 
+@@ -298,6 +301,7 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
++        {},
+       );
+ 
+       expect(webworkerResponse.workerResponse.dependencies).toEqual({
+@@ -338,6 +342,7 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
++        {},
+       );
+       const parsedUpdates =
+         getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+@@ -371,6 +376,7 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
++        {},
+       );
+ 
+       const parsedUpdates =
+@@ -414,6 +420,7 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         ["Text1.text"],
++        {},
+       );
+       const parsedUpdates =
+         getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+@@ -436,141 +443,4 @@ describe("evaluateAndGenerateResponse", () => {
+     test("should add metaUpdates in the webworker's response", () => {
+       // TODO: Fix this the next time the file is edited
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-      const updatedLabelUnevalTree = create(unEvalTree, (draft: any) => {
+-        if (draft.Text1?.text) {
+-          draft.Text1.text = UPDATED_LABEL;
+-        }
+-      });
+-      const response = evaluator.setupUpdateTree(
+-        updatedLabelUnevalTree,
+-        configTree,
+-      );
+-
+-      const metaUpdates = [
+-        {
+-          widgetId: unEvalTree.Text1.widgetId,
+-          metaPropertyPath: ["someMetaValuePath"],
+-          value: "someValue",
+-        },
+-      ];
+-      const { workerResponse } =
+-        evalTreeWithChanges.evaluateAndGenerateResponse(
+-          evaluator,
+-          response,
+-          metaUpdates,
+-          [],
+-        );
+-
+-      expect(workerResponse.evalMetaUpdates).toEqual(metaUpdates);
+-    });
+-    test("should sanitise metaUpdates in the webworker's response and strip out non serialisable properties", () => {
+-      // TODO: Fix this the next time the file is edited
+-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-      const updatedLabelUnevalTree = create(unEvalTree, (draft: any) => {
+-        if (draft.Text1?.text) {
+-          draft.Text1.text = UPDATED_LABEL;
+-        }
+-      });
+-      const response = evaluator.setupUpdateTree(
+-        updatedLabelUnevalTree,
+-        configTree,
+-      );
+-
+-      const metaUpdates = [
+-        {
+-          widgetId: unEvalTree.Text1.widgetId,
+-          metaPropertyPath: ["someMetaValuePath"],
+-          value: function () {},
+-        },
+-      ];
+-      const { workerResponse } =
+-        evalTreeWithChanges.evaluateAndGenerateResponse(
+-          evaluator,
+-          response,
+-          metaUpdates,
+-          [],
+-        );
+-
+-      // the function properties should be stripped out
+-      expect(workerResponse.evalMetaUpdates).toEqual([
+-        {
+-          widgetId: unEvalTree.Text1.widgetId,
+-          metaPropertyPath: ["someMetaValuePath"],
+-        },
+-      ]);
+-    });
+-  });
+-
+-  describe("unEvalUpdates", () => {
+-    test("should add unEvalUpdates to the web worker response", () => {
+-      // TODO: Fix this the next time the file is edited
+-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-      const updatedLabelUnevalTree = create(unEvalTree, (draft: any) => {
+-        if (draft.Text1?.text) {
+-          draft.Text1.text = UPDATED_LABEL;
+-        }
+-      });
+-      const updateTreeResponse = evaluator.setupUpdateTree(
+-        updatedLabelUnevalTree,
+-        configTree,
+-      );
+-
+-      const webworkerResponse = evalTreeWithChanges.evaluateAndGenerateResponse(
+-        evaluator,
+-        updateTreeResponse,
+-        [],
+-        [],
+-      );
+-
+-      const parsedUpdates =
+-        getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+-
+-      expect(webworkerResponse.workerResponse.unEvalUpdates).toEqual([
+-        {
+-          event: DataTreeDiffEvent.NOOP,
+-          payload: { propertyPath: "Text1.text", value: "" },
+-        },
+-      ]);
+-      expect(parsedUpdates).toEqual([
+-        { kind: "E", path: ["Text1", "text"], rhs: UPDATED_LABEL },
+-        // Text2 is updated because of the binding
+-        { kind: "E", path: ["Text2", "text"], rhs: UPDATED_LABEL },
+-      ]);
+-    });
+-    test("should ignore generating updates when unEvalUpdates is empty", () => {
+-      // TODO: Fix this the next time the file is edited
+-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-      const updatedLabelUnevalTree = create(unEvalTree, (draft: any) => {
+-        if (draft.Text1?.text) {
+-          draft.Text1.text = UPDATED_LABEL;
+-        }
+-      });
+-      const updateTreeResponse = evaluator.setupUpdateTree(
+-        updatedLabelUnevalTree,
+-        configTree,
+-      );
+-
+-      //set the evalOrder is empty so that evaluation ignores diffing the node
+-      updateTreeResponse.unEvalUpdates = [];
+-
+-      const webworkerResponse = evalTreeWithChanges.evaluateAndGenerateResponse(
+-        evaluator,
+-        updateTreeResponse,
+-        [],
+-        [],
+-      );
+-      const parsedUpdates =
+-        getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+-
+-      expect(parsedUpdates).not.toEqual(
+-        expect.arrayContaining([
+-          {
+-            kind: "N",
+-            path: ["Text1", "text"],
+-            rhs: UPDATED_LABEL,
+-          },
+-        ]),
+-      );
+-    });
+-  });
+-});
++      const updatedLabelUnevalTree = create(unE
+\ No newline at end of file
+diff --git a/app/client/src/workers/Evaluation/evalTreeWithChanges.ts b/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
+index e3feaeb..8493d2f 100644
+--- a/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
++++ b/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
+@@ -21,6 +21,7 @@ import {
+ import type DataTreeEvaluator from "workers/common/DataTreeEvaluator";
+ import type { Diff } from "deep-diff";
+ import type { DataTree } from "entities/DataTree/dataTreeTypes";
++import { klona as klonaJson } from "klona/json";
+ 
+ const getDefaultEvalResponse = (): EvalTreeResponseData => ({
+   updates: "[]",
+@@ -70,8 +71,10 @@ export function evalTreeWithChanges(
+   );
+ 
+   let setupUpdateTreeResponse = {} as UpdateTreeResponse;
++  let oldEvalTree: DataTree = {};
+ 
+   if (dataTreeEvaluator) {
++    oldEvalTree = klonaJson(dataTreeEvaluator.getEvalTree());
+     setupUpdateTreeResponse = dataTreeEvaluator.setupUpdateTreeWithDifferences(
+       updatedValuePaths,
+       pathsToSkipFromEval,
+@@ -83,6 +86,7 @@ export function evalTreeWithChanges(
+     setupUpdateTreeResponse,
+     metaUpdates,
+     pathsToSkipFromEval,
++    oldEvalTree,
+   );
+ }
+ 
+@@ -103,12 +107,14 @@ export const evaluateAndPushResponse = (
+   setupUpdateTreeResponse: UpdateTreeResponse,
+   metaUpdates: EvalMetaUpdates,
+   additionalPathsAddedAsUpdates: string[],
++  oldEvalTree: DataTree,
+ ) => {
+   const response = evaluateAndGenerateResponse(
+     dataTreeEvaluator,
+     setupUpdateTreeResponse,
+     metaUpdates,
+     additionalPathsAddedAsUpdates,
++    oldEvalTree,
+   );
+ 
+   return pushResponseToMainThread(response);
+@@ -119,6 +125,7 @@ export const evaluateAndGenerateResponse = (
+   setupUpdateTreeResponse: UpdateTreeResponse,
+   metaUpdates: EvalMetaUpdates,
+   additionalPathsAddedAsUpdates: string[],
++  oldEvalTree: DataTree,
+ ): UpdateDataTreeMessageData => {
+   // generate default response first and later add updates to it
+   const defaultResponse = getDefaultEvalResponse();
+@@ -151,6 +158,7 @@ export const evaluateAndGenerateResponse = (
+     dataTreeEvaluator.oldConfigTree,
+     unEvalUpdates,
+     [],
++    oldEvalTree,
+   );
+ 
+   const dataTree = updateEvalProps(dataTreeEvaluator) || {};
+@@ -203,4 +211,4 @@ export const pushResponseToMainThread = (data: UpdateDataTreeMessageData) => {
+       method: MAIN_THREAD_ACTION.UPDATE_DATATREE,
+     },
+   });
+-};
++};
+\ No newline at end of file
+diff --git a/app/client/src/workers/Evaluation/handlers/evalTree.ts b/app/client/src/workers/Evaluation/handlers/evalTree.ts
+index a26c7c5..6078d07 100644
+--- a/app/client/src/workers/Evaluation/handlers/evalTree.ts
++++ b/app/client/src/workers/Evaluation/handlers/evalTree.ts
+@@ -33,6 +33,7 @@ import type { CanvasWidgetsReduxState } from "ee/reducers/entityReducers/canvasW
+ import type { MetaWidgetsReduxState } from "reducers/entityReducers/metaWidgetsReducer";
+ import type { Attributes } from "instrumentation/types";
+ import { updateActionsToEvalTree } from "./updateActionData";
++import { klona as klonaJSON } from "klona/json";
+ 
+ // TODO: Fix this the next time the file is edited
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+@@ -193,6 +194,7 @@ export async function evalTree(
+       isNewTree = true;
+     } else {
+       const tree = dataTreeEvaluator.getEvalTree();
++      const oldDataTree = klonaJSON(tree);
+ 
+       // during update cycles update actions to the dataTree directly
+       // this is useful in cases where we have debounced updateActionData and a regular evaluation
+@@ -241,6 +243,7 @@ export async function evalTree(
+             configTree,
+             unEvalUpdates,
+             Object.keys(metaWidgets),
++            oldDataTree,
+           ),
+       );
+ 
+@@ -393,4 +396,4 @@ export function clearCache() {
+   DataStore.clear();
+ 
+   return true;
+-}
++}
+\ No newline at end of file
+diff --git a/app/client/src/workers/Evaluation/handlers/evalTrigger.ts b/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
+index 992730d..304265d 100644
+--- a/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
++++ b/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
+@@ -2,6 +2,7 @@ import { dataTreeEvaluator } from "./evalTree";
+ import type { EvalWorkerASyncRequest } from "../types";
+ import ExecutionMetaData from "../fns/utils/ExecutionMetaData";
+ import { evaluateAndPushResponse } from "../evalTreeWithChanges";
++import { klona as klonaJson } from "klona/json";
+ 
+ export default async function (request: EvalWorkerASyncRequest) {
+   const { data } = request;
+@@ -20,6 +21,8 @@ export default async function (request: EvalWorkerASyncRequest) {
+ 
+   ExecutionMetaData.setExecutionMetaData({ triggerMeta, eventType });
+ 
++  const oldEvalTree = klonaJson(dataTreeEvaluator.getEvalTree());
++
+   if (!triggerMeta.onPageLoad) {
+     const { evalOrder, unEvalUpdates } = dataTreeEvaluator.setupUpdateTree(
+       unEvalTree.unEvalTree,
+@@ -34,6 +37,7 @@ export default async function (request: EvalWorkerASyncRequest) {
+       { evalOrder, unEvalUpdates, jsUpdates: {} },
+       [],
+       [],
++      oldEvalTree,
+     );
+   }
+ 
+@@ -48,4 +52,4 @@ export default async function (request: EvalWorkerASyncRequest) {
+       triggerMeta,
+     },
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts b/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
+index f08cb43..c893bba 100644
+--- a/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
++++ b/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
+@@ -309,6 +309,7 @@ describe("DataTreeEvaluator", () => {
+         configTree as unknown as ConfigTree,
+         unEvalUpdates,
+         [],
++        dataTreeEvaluator.evalTree,
+       );
+ 
+       expect(dataTreeEvaluator.dependencies).toStrictEqual({
+@@ -468,865 +469,4 @@ describe("DataTreeEvaluator", () => {
+       // when Text1.text has a binding Api1.data[2].id
+       it("on consequent API failures", () => {
+         // cyclic dependency case
+-        for (let i = 0; i < 2; i++) {
+-          // success: response -> [{...}, {...}, {...}]
+-          const { evalOrder, unEvalUpdates } =
+-            dataTreeEvaluator.setupUpdateTree(
+-              arrayAccessorCyclicDependency.apiSuccessUnEvalTree,
+-              arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-            );
+-
+-          dataTreeEvaluator.evalAndValidateSubTree(
+-            evalOrder,
+-            arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-            unEvalUpdates,
+-            [],
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-          expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual([
+-            "Api1.data[2].id",
+-          ]);
+-
+-          // failure: response -> {}
+-          const { evalOrder: order, unEvalUpdates: unEvalUpdates2 } =
+-            dataTreeEvaluator.setupUpdateTree(
+-              arrayAccessorCyclicDependency.apiFailureUnEvalTree,
+-              arrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+-            );
+-
+-          dataTreeEvaluator.evalAndValidateSubTree(
+-            order,
+-            arrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+-            unEvalUpdates2,
+-            [],
+-          );
+-
+-          expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-          expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual(
+-            [],
+-          );
+-        }
+-      });
+-
+-      // when Text1.text has a binding Api1.data[2].id
+-      it("on API response array length change", () => {
+-        // success: response -> [{...}, {...}, {...}]
+-        const { evalOrder: order1, unEvalUpdates } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            arrayAccessorCyclicDependency.apiSuccessUnEvalTree,
+-            arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order1,
+-          arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          unEvalUpdates,
+-          [],
+-        );
+-
+-        // success: response -> [{...}, {...}]
+-        const { evalOrder: order2, unEvalUpdates: unEvalUpdates2 } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            arrayAccessorCyclicDependency.apiSuccessUnEvalTree2,
+-            arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order2,
+-          arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+-          unEvalUpdates2,
+-          [],
+-        );
+-
+-        expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+-        expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-        expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-          undefined,
+-        );
+-        expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual([]);
+-      });
+-    });
+-
+-    describe("nested array of objects", () => {
+-      // when Text1.text has a binding Api1.data[2][2].id
+-      it("on consequent API failures", () => {
+-        // cyclic dependency case
+-        for (let i = 0; i < 2; i++) {
+-          // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}], [{...}, {...}, {...}] ]
+-          const { evalOrder: order, unEvalUpdates } =
+-            dataTreeEvaluator.setupUpdateTree(
+-              nestedArrayAccessorCyclicDependency.apiSuccessUnEvalTree,
+-              nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-            );
+-
+-          dataTreeEvaluator.evalAndValidateSubTree(
+-            order,
+-            nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-            unEvalUpdates,
+-            [],
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-          expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(
+-            dataTreeEvaluator.dependencies["Api1.data[2][2]"],
+-          ).toStrictEqual(undefined);
+-          expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual([
+-            "Api1.data[2][2].id",
+-          ]);
+-
+-          // failure: response -> {}
+-          const { evalOrder: order1, unEvalUpdates: unEvalUpdates2 } =
+-            dataTreeEvaluator.setupUpdateTree(
+-              nestedArrayAccessorCyclicDependency.apiFailureUnEvalTree,
+-              nestedArrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+-            );
+-
+-          dataTreeEvaluator.evalAndValidateSubTree(
+-            order1,
+-            nestedArrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+-            unEvalUpdates2,
+-            [],
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-          expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-            undefined,
+-          );
+-          expect(
+-            dataTreeEvaluator.dependencies["Api1.data[2][2]"],
+-          ).toStrictEqual(undefined);
+-          expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual(
+-            [],
+-          );
+-        }
+-      });
+-
+-      // when Text1.text has a binding Api1.data[2][2].id
+-      it("on API response array length change", () => {
+-        // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}], [{...}, {...}, {...}] ]
+-        const { evalOrder: order, unEvalUpdates } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            nestedArrayAccessorCyclicDependency.apiSuccessUnEvalTree,
+-            nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order,
+-          nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          unEvalUpdates,
+-          [],
+-        );
+-
+-        // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}] ]
+-        const { evalOrder: order1, unEvalUpdates: unEvalUpdates2 } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            nestedArrayAccessorCyclicDependency.apiSuccessUnEvalTree2,
+-            nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order1,
+-          nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+-          unEvalUpdates2,
+-          [],
+-        );
+-
+-        expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+-        expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-        expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-          undefined,
+-        );
+-        expect(dataTreeEvaluator.dependencies["Api1.data[2][2]"]).toStrictEqual(
+-          undefined,
+-        );
+-        expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual([]);
+-      });
+-
+-      // when Text1.text has a binding Api1.data[2][2].id
+-      it("on API response nested array length change", () => {
+-        // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}], [{...}, {...}, {...}] ]
+-        const { evalOrder: order, unEvalUpdates } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            nestedArrayAccessorCyclicDependency.apiSuccessUnEvalTree,
+-            nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order,
+-          nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+-          unEvalUpdates,
+-          [],
+-        );
+-
+-        // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}], [] ]
+-        const { evalOrder: order1, unEvalUpdates: unEvalUpdates2 } =
+-          dataTreeEvaluator.setupUpdateTree(
+-            nestedArrayAccessorCyclicDependency.apiSuccessUnEvalTree3,
+-            nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree3,
+-          );
+-
+-        dataTreeEvaluator.evalAndValidateSubTree(
+-          order1,
+-          nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree3,
+-          unEvalUpdates2,
+-          [],
+-        );
+-        expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+-        expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+-        expect(dataTreeEvaluator.dependencies["Api1.data[2]"]).toStrictEqual(
+-          undefined,
+-        );
+-        expect(dataTreeEvaluator.dependencies["Api1.data[2][2]"]).toStrictEqual(
+-          undefined,
+-        );
+-        expect(dataTreeEvaluator.dependencies["Text1.text"]).toStrictEqual([]);
+-      });
+-    });
+-  });
+-});
+-
+-describe("replaceThisDotParams", () => {
+-  describe("no optional chaining this.params", () => {
+-    it("1. IIFEE with function keyword", () => {
+-      const code = "{{ (function() { return this.params.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe(
+-        "{{ (function() { return $params.condition })() }}",
+-      );
+-    });
+-
+-    it("2. IIFEE with arrow function", () => {
+-      const code = "{{ (() => { return this.params.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ (() => { return $params.condition })() }}");
+-    });
+-
+-    it("3. normal binding", () => {
+-      const code = "{{ this.params.condition }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ $params.condition }}");
+-    });
+-  });
+-
+-  describe("optional chaining this?.params", () => {
+-    it("1. IIFEE with function keyword", () => {
+-      const code = "{{ (function() { return this?.params.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe(
+-        "{{ (function() { return $params.condition })() }}",
+-      );
+-    });
+-
+-    it("2. IIFEE with arrow function", () => {
+-      const code = "{{ (() => { return this?.params.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ (() => { return $params.condition })() }}");
+-    });
+-
+-    it("3. normal binding", () => {
+-      const code = "{{ this?.params.condition }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ $params.condition }}");
+-    });
+-  });
+-
+-  describe("optional chaining this?.params?.condition", () => {
+-    it("1. IIFEE with function keyword", () => {
+-      const code = "{{ (function() { return this?.params?.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe(
+-        "{{ (function() { return $params?.condition })() }}",
+-      );
+-    });
+-
+-    it("2. IIFEE with arrow function", () => {
+-      const code = "{{ (() => { return this?.params?.condition })() }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ (() => { return $params?.condition })() }}");
+-    });
+-
+-    it("3. normal binding", () => {
+-      const code = "{{ this?.params?.condition }}";
+-      const replaced = replaceThisDotParams(code);
+-
+-      expect(replaced).toBe("{{ $params?.condition }}");
+-    });
+-  });
+-});
+-
+-describe("isDataField", () => {
+-  const configTree = {
+-    JSObject1: {
+-      actionId: "642d384a630f4634e27a67ff",
+-      meta: {
+-        myFun2: {
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-          runBehaviour: "MANUAL",
+-        },
+-        myFun1: {
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-          runBehaviour: "MANUAL",
+-        },
+-      },
+-      name: "JSObject1",
+-      pluginType: "JS",
+-      ENTITY_TYPE: "JSACTION",
+-      bindingPaths: {
+-        body: "SMART_SUBSTITUTE",
+-        superbaseClient: "SMART_SUBSTITUTE",
+-        myVar2: "SMART_SUBSTITUTE",
+-        myFun2: "SMART_SUBSTITUTE",
+-        myFun1: "SMART_SUBSTITUTE",
+-      },
+-      reactivePaths: {
+-        body: "SMART_SUBSTITUTE",
+-        superbaseClient: "SMART_SUBSTITUTE",
+-        myVar2: "SMART_SUBSTITUTE",
+-        myFun2: "SMART_SUBSTITUTE",
+-        myFun1: "SMART_SUBSTITUTE",
+-      },
+-      dynamicBindingPathList: [
+-        {
+-          key: "body",
+-        },
+-        {
+-          key: "superbaseClient",
+-        },
+-        {
+-          key: "myVar2",
+-        },
+-        {
+-          key: "myFun2",
+-        },
+-        {
+-          key: "myFun1",
+-        },
+-      ],
+-      variables: ["superbaseClient", "myVar2"],
+-      dependencyMap: {
+-        body: ["myFun2", "myFun1"],
+-      },
+-      actionNames: new Set(["myFun1", "myFun2"]),
+-      dynamicTriggerPathList: [
+-        {
+-          key: "myFun1",
+-        },
+-        {
+-          key: "myFun2",
+-        },
+-      ],
+-    },
+-    JSObject2: {
+-      actionId: "644242aeadc0936a9b0e71cc",
+-      meta: {
+-        myFun2: {
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-          runBehaviour: "MANUAL",
+-        },
+-        myFun1: {
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-          runBehaviour: "MANUAL",
+-        },
+-      },
+-      name: "JSObject2",
+-      pluginType: "JS",
+-      ENTITY_TYPE: "JSACTION",
+-      bindingPaths: {
+-        body: "SMART_SUBSTITUTE",
+-        supabaseClient: "SMART_SUBSTITUTE",
+-        myVar2: "SMART_SUBSTITUTE",
+-        myFun2: "SMART_SUBSTITUTE",
+-        myFun1: "SMART_SUBSTITUTE",
+-      },
+-      reactivePaths: {
+-        body: "SMART_SUBSTITUTE",
+-        supabaseClient: "SMART_SUBSTITUTE",
+-        myVar2: "SMART_SUBSTITUTE",
+-        myFun2: "SMART_SUBSTITUTE",
+-        myFun1: "SMART_SUBSTITUTE",
+-      },
+-      dynamicBindingPathList: [
+-        {
+-          key: "body",
+-        },
+-        {
+-          key: "supabaseClient",
+-        },
+-        {
+-          key: "myVar2",
+-        },
+-        {
+-          key: "myFun2",
+-        },
+-        {
+-          key: "myFun1",
+-        },
+-      ],
+-      variables: ["supabaseClient", "myVar2"],
+-      dependencyMap: {
+-        body: ["myFun2", "myFun1"],
+-      },
+-      actionNames: new Set(["myFun1", "myFun2"]),
+-      dynamicTriggerPathList: [
+-        {
+-          key: "myFun1",
+-        },
+-        {
+-          key: "myFun2",
+-        },
+-      ],
+-    },
+-    MainContainer: {
+-      defaultProps: {},
+-      defaultMetaProps: [],
+-      dynamicBindingPathList: [],
+-      logBlackList: {},
+-      bindingPaths: {},
+-      reactivePaths: {},
+-      triggerPaths: {},
+-      validationPaths: {},
+-      ENTITY_TYPE: "WIDGET",
+-      privateWidgets: {},
+-      propertyOverrideDependency: {},
+-      overridingPropertyPaths: {},
+-      type: "CANVAS_WIDGET",
+-      dynamicTriggerPathList: [],
+-      isMetaPropDirty: false,
+-      widgetId: "0",
+-    },
+-    Button1: {
+-      defaultProps: {},
+-      defaultMetaProps: ["recaptchaToken"],
+-      dynamicBindingPathList: [
+-        {
+-          key: "buttonColor",
+-        },
+-        {
+-          key: "borderRadius",
+-        },
+-        {
+-          key: "text",
+-        },
+-      ],
+-      logBlackList: {},
+-      bindingPaths: {
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      reactivePaths: {
+-        recaptchaToken: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      triggerPaths: {
+-        onClick: true,
+-      },
+-      validationPaths: {
+-        text: {
+-          type: "TEXT",
+-        },
+-        tooltip: {
+-          type: "TEXT",
+-        },
+-        isVisible: {
+-          type: "BOOLEAN",
+-        },
+-        isDisabled: {
+-          type: "BOOLEAN",
+-        },
+-        animateLoading: {
+-          type: "BOOLEAN",
+-        },
+-        googleRecaptchaKey: {
+-          type: "TEXT",
+-        },
+-        recaptchaType: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["V3", "V2"],
+-            default: "V3",
+-          },
+-        },
+-        disabledWhenInvalid: {
+-          type: "BOOLEAN",
+-        },
+-        resetFormOnClick: {
+-          type: "BOOLEAN",
+-        },
+-        buttonVariant: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["PRIMARY", "SECONDARY", "TERTIARY"],
+-            default: "PRIMARY",
+-          },
+-        },
+-        iconName: {
+-          type: "TEXT",
+-        },
+-        placement: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["START", "BETWEEN", "CENTER"],
+-            default: "CENTER",
+-          },
+-        },
+-        buttonColor: {
+-          type: "TEXT",
+-        },
+-        borderRadius: {
+-          type: "TEXT",
+-        },
+-        boxShadow: {
+-          type: "TEXT",
+-        },
+-      },
+-      ENTITY_TYPE: "WIDGET",
+-      privateWidgets: {},
+-      propertyOverrideDependency: {},
+-      overridingPropertyPaths: {},
+-      type: "BUTTON_WIDGET",
+-      dynamicTriggerPathList: [],
+-      isMetaPropDirty: false,
+-      widgetId: "19ih8rt2eo",
+-    },
+-    Button2: {
+-      defaultProps: {},
+-      defaultMetaProps: ["recaptchaToken"],
+-      dynamicBindingPathList: [
+-        {
+-          key: "buttonColor",
+-        },
+-        {
+-          key: "borderRadius",
+-        },
+-      ],
+-      logBlackList: {},
+-      bindingPaths: {
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      reactivePaths: {
+-        recaptchaToken: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      triggerPaths: {
+-        onClick: true,
+-      },
+-      validationPaths: {
+-        text: {
+-          type: "TEXT",
+-        },
+-        tooltip: {
+-          type: "TEXT",
+-        },
+-        isVisible: {
+-          type: "BOOLEAN",
+-        },
+-        isDisabled: {
+-          type: "BOOLEAN",
+-        },
+-        animateLoading: {
+-          type: "BOOLEAN",
+-        },
+-        googleRecaptchaKey: {
+-          type: "TEXT",
+-        },
+-        recaptchaType: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["V3", "V2"],
+-            default: "V3",
+-          },
+-        },
+-        disabledWhenInvalid: {
+-          type: "BOOLEAN",
+-        },
+-        resetFormOnClick: {
+-          type: "BOOLEAN",
+-        },
+-        buttonVariant: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["PRIMARY", "SECONDARY", "TERTIARY"],
+-            default: "PRIMARY",
+-          },
+-        },
+-        iconName: {
+-          type: "TEXT",
+-        },
+-        placement: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["START", "BETWEEN", "CENTER"],
+-            default: "CENTER",
+-          },
+-        },
+-        buttonColor: {
+-          type: "TEXT",
+-        },
+-        borderRadius: {
+-          type: "TEXT",
+-        },
+-        boxShadow: {
+-          type: "TEXT",
+-        },
+-      },
+-      ENTITY_TYPE: "WIDGET",
+-      privateWidgets: {},
+-      propertyOverrideDependency: {},
+-      overridingPropertyPaths: {},
+-      type: "BUTTON_WIDGET",
+-      dynamicPropertyPathList: [
+-        {
+-          key: "onClick",
+-        },
+-      ],
+-      dynamicTriggerPathList: [
+-        {
+-          key: "onClick",
+-        },
+-      ],
+-      isMetaPropDirty: false,
+-      widgetId: "vss3w1eecd",
+-    },
+-    Button3: {
+-      defaultProps: {},
+-      defaultMetaProps: ["recaptchaToken"],
+-      dynamicBindingPathList: [
+-        {
+-          key: "buttonColor",
+-        },
+-        {
+-          key: "borderRadius",
+-        },
+-      ],
+-      logBlackList: {},
+-      bindingPaths: {
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      reactivePaths: {
+-        recaptchaToken: "TEMPLATE",
+-        buttonColor: "TEMPLATE",
+-        borderRadius: "TEMPLATE",
+-        text: "TEMPLATE",
+-        tooltip: "TEMPLATE",
+-        isVisible: "TEMPLATE",
+-        isDisabled: "TEMPLATE",
+-        animateLoading: "TEMPLATE",
+-        googleRecaptchaKey: "TEMPLATE",
+-        recaptchaType: "TEMPLATE",
+-        disabledWhenInvalid: "TEMPLATE",
+-        resetFormOnClick: "TEMPLATE",
+-        buttonVariant: "TEMPLATE",
+-        iconName: "TEMPLATE",
+-        placement: "TEMPLATE",
+-        boxShadow: "TEMPLATE",
+-      },
+-      triggerPaths: {
+-        onClick: true,
+-      },
+-      validationPaths: {
+-        text: {
+-          type: "TEXT",
+-        },
+-        tooltip: {
+-          type: "TEXT",
+-        },
+-        isVisible: {
+-          type: "BOOLEAN",
+-        },
+-        isDisabled: {
+-          type: "BOOLEAN",
+-        },
+-        animateLoading: {
+-          type: "BOOLEAN",
+-        },
+-        googleRecaptchaKey: {
+-          type: "TEXT",
+-        },
+-        recaptchaType: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["V3", "V2"],
+-            default: "V3",
+-          },
+-        },
+-        disabledWhenInvalid: {
+-          type: "BOOLEAN",
+-        },
+-        resetFormOnClick: {
+-          type: "BOOLEAN",
+-        },
+-        buttonVariant: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["PRIMARY", "SECONDARY", "TERTIARY"],
+-            default: "PRIMARY",
+-          },
+-        },
+-        iconName: {
+-          type: "TEXT",
+-        },
+-        placement: {
+-          type: "TEXT",
+-          params: {
+-            allowedValues: ["START", "BETWEEN", "CENTER"],
+-            default: "CENTER",
+-          },
+-        },
+-        buttonColor: {
+-          type: "TEXT",
+-        },
+-        borderRadius: {
+-          type: "TEXT",
+-        },
+-        boxShadow: {
+-          type: "TEXT",
+-        },
+-      },
+-      ENTITY_TYPE: "WIDGET",
+-      privateWidgets: {},
+-      propertyOverrideDependency: {},
+-      overridingPropertyPaths: {},
+-      type: "BUTTON_WIDGET",
+-      dynamicPropertyPathList: [
+-        {
+-          key: "onClick",
+-        },
+-      ],
+-      dynamicTriggerPathList: [
+-        {
+-          key: "onClick",
+-        },
+-      ],
+-      isMetaPropDirty: false,
+-      widgetId: "pzom2ufg3b",
+-    },
+-  } as ConfigTree;
+-
+-  it("doesn't crash when config tree is empty", () => {
+-    const isADataField = isDataField("appsmith.store", {});
+-
+-    expect(isADataField).toBe(false);
+-  });
+-  it("works correctly", function () {
+-    const testCases = [
+-      {
+-        fullPath: "Button1.text",
+-        isDataField: true,
+-      },
+-      {
+-        fullPath: "appsmith.store",
+-        isDataField: false,
+-      },
+-      {
+-        fullPath: "JSObject2.body",
+-        isDataField: false,
+-      },
+-    ];
+-
+-    for (const testCase of testCases) {
+-      const isADataField = isDataField(testCase.fullPath, configTree);
+-
+-      expect(isADataField).toBe(testCase.isDataField);
+-    }
+-  });
+-});
++        for
+\ No newline at end of file
+diff --git a/app/client/src/workers/common/DataTreeEvaluator/index.ts b/app/client/src/workers/common/DataTreeEvaluator/index.ts
+index 15fe9a0..e529d06 100644
+--- a/app/client/src/workers/common/DataTreeEvaluator/index.ts
++++ b/app/client/src/workers/common/DataTreeEvaluator/index.ts
+@@ -435,1686 +435,4 @@ export default class DataTreeEvaluator {
+         );
+         // Pass it through parse
+         const { isValid, messages, parsed } = validateWidgetProperty(
+-          validationConfig,
+-          value,
+-          entity,
+-          propertyPath,
+-        );
+-
+-        set(entity, propertyPath, parsed);
+-
+-        resetValidationErrorsForEntityProperty({
+-          evalProps,
+-          fullPropertyPath,
+-        });
+-
+-        if (!isValid) {
+-          const evalErrors: EvaluationError[] =
+-            messages?.map((message) => ({
+-              errorType: PropertyEvaluationErrorType.VALIDATION,
+-              errorMessage: message ?? {},
+-              severity: Severity.ERROR,
+-              raw: value,
+-            })) ?? [];
+-
+-          addErrorToEntityProperty({
+-            errors: evalErrors,
+-            evalProps,
+-            fullPropertyPath,
+-            configTree,
+-          });
+-        }
+-      }
+-    }
+-  }
+-
+-  evalAndValidateFirstTree(): {
+-    evalTree: DataTree;
+-    evalMetaUpdates: EvalMetaUpdates;
+-    staleMetaIds: string[];
+-    executeReactiveActions: string[];
+-  } {
+-    const evaluationStartTime = performance.now();
+-
+-    const evaluationOrder = this.sortedDependencies;
+-
+-    const unEvalTreeClone = klonaJSON(this.oldUnEvalTree);
+-    // Evaluate
+-    const {
+-      evalMetaUpdates,
+-      evaluatedTree,
+-      executeReactiveActions,
+-      staleMetaIds,
+-    } = this.evaluateTree(
+-      unEvalTreeClone,
+-      evaluationOrder,
+-      undefined,
+-      this.oldConfigTree,
+-    );
+-
+-    /**
+-     * We need to re-validate all widgets only in case of first tree
+-     * Widget fields with custom validation functions can depend on other properties of the widget,
+-     * which aren't evaluated/validated yet, thereby store incorrect validation errors in the previous step
+-     */
+-    this.validatedTree(
+-      evaluatedTree,
+-      {
+-        evalProps: this.evalProps,
+-      },
+-      this.oldConfigTree,
+-    );
+-
+-    const evaluationEndTime = performance.now();
+-
+-    this.setEvalTree(evaluatedTree);
+-
+-    const timeTakenForEvalAndValidateFirstTree = {
+-      evaluation: getFixedTimeDifference(
+-        evaluationEndTime,
+-        evaluationStartTime,
+-      ),
+-    };
+-
+-    this.logs.push({ timeTakenForEvalAndValidateFirstTree });
+-
+-    return {
+-      evalTree: this.getEvalTree(),
+-      evalMetaUpdates,
+-      staleMetaIds,
+-      executeReactiveActions,
+-    };
+-  }
+-
+-  /**
+-   *  TODO: This is a temporary fix to update unevalTree with JSObjectCollection state.
+-   * In ideal scenario, the unevalTree should be updated with JSObjectCollection state in the dataTreeFactory itself. We will need to try to send
+-   * {
+-   * "JsObject1": {
+-   *    function1: "function() { return 1; }",
+-   *    "function1.data": {},
+-   *    function2: "function() { return 2; }",
+-   *    "function2.data": {},
+-   *  }
+-   * }
+-   *  */
+-  updateUnEvalTreeJSFunction(unevalTree: DataTree, configTree: ConfigTree) {
+-    //add functions and variables to unevalTree
+-    const unEvalJSCollection = JSObjectCollection.getUnEvalState();
+-
+-    Object.keys(unEvalJSCollection).forEach((entityName) => {
+-      const entity = unevalTree[entityName];
+-
+-      if (!isJSAction(entity)) return;
+-
+-      const updates = unEvalJSCollection[entityName];
+-
+-      if (unevalTree[entityName]) {
+-        Object.keys(updates).forEach((key) => {
+-          const data = get(unevalTree, `${entityName}.${key}.data`, undefined);
+-
+-          if (isJSObjectFunction(unevalTree, entityName, key, configTree)) {
+-            set(unevalTree, `${entityName}.${key}`, new String(updates[key]));
+-            set(unevalTree, `${entityName}.${key}.data`, data);
+-          } else {
+-            set(unevalTree, `${entityName}.${key}`, updates[key]);
+-          }
+-        });
+-      }
+-    });
+-
+-    return unevalTree;
+-  }
+-
+-  /**
+-   *
+-   * In this method, we find the updatedJSobjects then parse the updated jsObject body and update the resolved functions and variable accordingly.
+-   * getUpdatedLocalUnEvalTreeAfterJSUpdates- We update the unevalTree with the updated jsObject properties.
+-   */
+-  generateJSObjectUpdates({
+-    affectedJSObjects = { isAllAffected: false, ids: [] },
+-    configTree,
+-    unEvalTree,
+-    webworkerTelemetry,
+-  }: {
+-    unEvalTree: UnEvalTree;
+-    configTree: ConfigTree;
+-    webworkerTelemetry: Record<string, WebworkerSpanData | Attributes>;
+-    affectedJSObjects: AffectedJSObjects;
+-  }) {
+-    //get difference in js collection body to be parsed
+-    const oldUnEvalTreeJSCollections = getJSEntities(this.oldUnEvalTree);
+-    const localUnEvalTreeJSCollection = getJSEntities(unEvalTree);
+-    const jsDifferences = profileFn(
+-      "SetupUpdateTree.Diff1",
+-      undefined,
+-      webworkerTelemetry,
+-      () =>
+-        convertMicroDiffToDeepDiff(
+-          microDiff(
+-            getOnlyAffectedJSObjects(
+-              oldUnEvalTreeJSCollections,
+-              affectedJSObjects,
+-            ),
+-            getOnlyAffectedJSObjects(
+-              localUnEvalTreeJSCollection,
+-              affectedJSObjects,
+-            ),
+-          ) || [],
+-        ),
+-    );
+-
+-    const jsTranslatedDiffs = flatten(
+-      jsDifferences.map((diff) =>
+-        translateDiffEventToDataTreeDiffEvent(diff, unEvalTree),
+-      ),
+-    );
+-
+-    //save parsed functions in resolveJSFunctions, update current state of js collection
+-    const { jsUpdates } = profileFn(
+-      "SetupUpdateTree.parseJSActions",
+-      undefined,
+-      webworkerTelemetry,
+-      () =>
+-        // this.oldUnEvalTree is not mutated as getDataTreeContext declares this paremeter as Readonly<UnEvalTree>
+-        parseJSActions(this, unEvalTree, this.oldUnEvalTree, jsTranslatedDiffs),
+-    );
+-
+-    //update local data tree if js body has updated (remove/update/add js functions or variables)
+-    const updatedUnEvalTree = getUpdatedLocalUnEvalTreeAfterJSUpdates(
+-      jsUpdates,
+-      unEvalTree,
+-      configTree,
+-    );
+-
+-    const stringifiedOldUnEvalTreeJSCollections = convertJSFunctionsToString(
+-      oldUnEvalTreeJSCollections,
+-      this.oldConfigTree,
+-    );
+-    const stringifiedLocalUnEvalTreeJSCollection = convertJSFunctionsToString(
+-      localUnEvalTreeJSCollection,
+-      configTree,
+-    );
+-
+-    // this variable is not mutated and is used to drive a diff operation, So this.oldUnEvalTree is not affected by mutations.
+-    const oldUnEvalTreeWithStringifiedJSFunctions = Object.assign(
+-      {},
+-      this.oldUnEvalTree,
+-      stringifiedOldUnEvalTreeJSCollections,
+-    );
+-
+-    // this variable is not mutated, it is driving the allKeys generation and the value
+-    const unEvalTreeWithStringifiedJSFunctions = Object.assign(
+-      {},
+-      updatedUnEvalTree,
+-      stringifiedLocalUnEvalTreeJSCollection,
+-    );
+-
+-    return {
+-      oldUnEvalTreeWithStringifiedJSFunctions,
+-      unEvalTreeWithStringifiedJSFunctions,
+-      jsUpdates,
+-      updatedUnEvalTree,
+-    };
+-  }
+-
+-  /**
+-   * Method to create all data required for linting and
+-   * evaluation of the updated tree
+-   */
+-
+-  setupUpdateTree(
+-    unEvalTree: UnEvalTree,
+-    configTree: ConfigTree,
+-    webworkerTelemetry: Record<string, WebworkerSpanData | Attributes> = {},
+-    affectedJSObjects: AffectedJSObjects = { isAllAffected: false, ids: [] },
+-    actionDataPayloadConsolidated?: UpdateActionProps[],
+-  ): {
+-    unEvalUpdates: DataTreeDiff[];
+-    evalOrder: string[];
+-    jsUpdates: Record<string, JSUpdate>;
+-    removedPaths: Array<{ entityId: string; fullpath: string }>;
+-    isNewWidgetAdded: boolean;
+-  } {
+-    this.setConfigTree(configTree);
+-
+-    const updatedUnEvalTreeJSFunction = this.updateUnEvalTreeJSFunction(
+-      unEvalTree,
+-      configTree,
+-    );
+-
+-    const {
+-      jsUpdates,
+-      oldUnEvalTreeWithStringifiedJSFunctions,
+-      unEvalTreeWithStringifiedJSFunctions,
+-      updatedUnEvalTree: updatedUnEvalTreeJSObjects,
+-    } = this.generateJSObjectUpdates({
+-      unEvalTree: updatedUnEvalTreeJSFunction,
+-      configTree,
+-      webworkerTelemetry,
+-      affectedJSObjects,
+-    });
+-
+-    const differences = profileFn(
+-      "unEvalTreeWithStringifiedJSFunctionsDiff",
+-      undefined,
+-      webworkerTelemetry,
+-      () =>
+-        diff(
+-          oldUnEvalTreeWithStringifiedJSFunctions,
+-          unEvalTreeWithStringifiedJSFunctions,
+-        ) || [],
+-    );
+-
+-    // Since eval tree is listening to possible events that don't cause differences
+-    // We want to check if no diffs are present and bail out early
+-    if (differences.length === 0 && !actionDataPayloadConsolidated?.length) {
+-      return {
+-        removedPaths: [],
+-        unEvalUpdates: [],
+-        evalOrder: [],
+-        jsUpdates: {},
+-        isNewWidgetAdded: false,
+-      };
+-    }
+-
+-    DataStore.update(differences);
+-
+-    //find all differences which can lead to updating of dependency map
+-    const translatedDiffs = flatten(
+-      differences.map((diff) =>
+-        translateDiffEventToDataTreeDiffEvent(diff, updatedUnEvalTreeJSObjects),
+-      ),
+-    );
+-
+-    // TODO => Optimize using dataTree diff
+-
+-    this.allKeys = profileFn("getAllPaths", undefined, webworkerTelemetry, () =>
+-      getAllPathsBasedOnDiffPaths(
+-        unEvalTreeWithStringifiedJSFunctions,
+-        translatedDiffs,
+-        this.allKeys,
+-      ),
+-    );
+-    // Find all the paths that have changed as part of the difference and update the
+-    // global dependency map if an existing dynamic binding has now become legal
+-    const {
+-      dependencies,
+-      dependenciesOfRemovedPaths,
+-      inverseDependencies,
+-      removedPaths,
+-    } = profileFn("updateDependencyMap", undefined, webworkerTelemetry, () => {
+-      return updateDependencyMap({
+-        configTree,
+-        dataTreeEvalRef: this,
+-        translatedDiffs,
+-        unEvalDataTree: updatedUnEvalTreeJSObjects,
+-      });
+-    });
+-
+-    this.dependencies = dependencies;
+-    this.inverseDependencies = inverseDependencies;
+-
+-    const pathsChangedSet = new Set<string[]>(
+-      actionDataPayloadConsolidated?.map(({ dataPath, entityName }) => [
+-        entityName,
+-        dataPath,
+-      ]) || [],
+-    );
+-
+-    for (const diff of differences) {
+-      if (isArray(diff.path)) {
+-        pathsChangedSet.add(diff.path);
+-      }
+-    }
+-
+-    const updatedValuePaths = [...pathsChangedSet];
+-
+-    this.updateEvalTreeWithChanges({ differences });
+-    const setupUpdateTreeOutput = profileFn(
+-      "setupTree",
+-      undefined,
+-      webworkerTelemetry,
+-      () => {
+-        let pathsToSkipFromEval =
+-          actionDataPayloadConsolidated
+-            ?.map(({ dataPath, entityName }) => {
+-              return [entityName, dataPath];
+-            })
+-            .map((path: string[]) => path.join(".")) || [];
+-
+-        // Remove all .data paths
+-        pathsToSkipFromEval = pathsToSkipFromEval.filter((path) => {
+-          if (!path.endsWith(".data")) return true;
+-
+-          const { entityName } = getEntityNameAndPropertyPath(path);
+-          const entity = unEvalTree[entityName];
+-
+-          if (entity && isDataPath(entity, path)) {
+-            return false; // filter out
+-          }
+-
+-          return true; // keep for other entity types
+-        });
+-
+-        return this.setupTree(updatedUnEvalTreeJSObjects, updatedValuePaths, {
+-          dependenciesOfRemovedPaths,
+-          removedPaths,
+-          translatedDiffs,
+-          pathsToSkipFromEval,
+-        });
+-      },
+-    );
+-
+-    this.logs.push({
+-      differences,
+-      translatedDiffs,
+-    });
+-
+-    return {
+-      ...setupUpdateTreeOutput,
+-      jsUpdates,
+-    };
+-  }
+-
+-  getEvaluationOrderAndSetEvalTreeWithNewUnevalTreeValues({
+-    pathsToSkipFromEval,
+-    subTreeSortOrder,
+-    unEvalTree,
+-  }: {
+-    unEvalTree: DataTree;
+-    pathsToSkipFromEval: string[];
+-    subTreeSortOrder: string[];
+-  }) {
+-    // Remove anything from the sort order that is not a dynamic leaf since only those need evaluation
+-    const evaluationOrder: string[] = [];
+-
+-    for (const fullPath of subTreeSortOrder) {
+-      if (pathsToSkipFromEval.includes(fullPath)) continue;
+-
+-      if (!isDynamicLeaf(unEvalTree, fullPath, this.getConfigTree())) continue;
+-
+-      const evalPropValue = get(this.evalTree, fullPath);
+-
+-      evaluationOrder.push(fullPath);
+-
+-      if (isFunction(evalPropValue)) continue;
+-
+-      const unEvalPropValue = get(unEvalTree, fullPath);
+-
+-      // Set all values from unEvalTree to the evalTree to run evaluation for unevaluated values.
+-      set(this.evalTree, fullPath, klona(unEvalPropValue));
+-    }
+-
+-    return { evaluationOrder };
+-  }
+-
+-  // setupTree should treat updatedUnEvalTree as immutable
+-  setupTree(
+-    updatedUnEvalTree: UnEvalTree,
+-    updatedValuePaths: string[][],
+-    extraParams: {
+-      dependenciesOfRemovedPaths?: string[];
+-      removedPaths?: Array<{ entityId: string; fullpath: string }>;
+-      translatedDiffs?: DataTreeDiff[];
+-      pathsToSkipFromEval?: string[];
+-    },
+-  ) {
+-    const {
+-      dependenciesOfRemovedPaths = [],
+-      pathsToSkipFromEval = [],
+-      removedPaths = [],
+-      translatedDiffs = [],
+-    } = extraParams;
+-
+-    updateEvalTreeWithJSCollectionState(this.evalTree);
+-
+-    const calculateSortOrderStartTime = performance.now();
+-    const subTreeSortOrder = this.calculateSubTreeSortOrder(
+-      updatedValuePaths,
+-      dependenciesOfRemovedPaths,
+-      removedPaths,
+-      updatedUnEvalTree,
+-    );
+-    const calculateSortOrderEndTime = performance.now();
+-
+-    const { evaluationOrder } =
+-      this.getEvaluationOrderAndSetEvalTreeWithNewUnevalTreeValues({
+-        unEvalTree: updatedUnEvalTree,
+-        pathsToSkipFromEval,
+-        subTreeSortOrder,
+-      });
+-
+-    this.logs.push({
+-      sortedDependencies: this.sortedDependencies,
+-      inverseDependencies: this.inverseDependencies,
+-      updatedDependencies: this.dependencies,
+-      evaluationOrder: evaluationOrder,
+-    });
+-
+-    // Remove any deleted paths from the eval tree
+-    removedPaths.forEach((removedPath) => {
+-      unset(this.evalTree, removedPath.fullpath);
+-    });
+-
+-    const cloneStartTime = performance.now();
+-
+-    // We earlier had an issue where the oldUnEvalTree was getting mutated, it happened because of some properties of updatedUnevalTree were getting tied to it
+-    // To avoid this, we clone specific properties of updatedUnEvalTree and assign it to evalTree so now they are independent of each other.
+-
+-    this.setOldUnevalTree(updatedUnEvalTree);
+-    this.oldConfigTree = Object.assign({}, this.getConfigTree());
+-    const cloneEndTime = performance.now();
+-
+-    const timeTakenForSetupUpdateTree = {
+-      calculateSubTreeSortOrder: getFixedTimeDifference(
+-        calculateSortOrderEndTime,
+-        calculateSortOrderStartTime,
+-      ),
+-      clone: getFixedTimeDifference(cloneEndTime, cloneStartTime),
+-    };
+-
+-    this.logs.push({ timeTakenForSetupUpdateTree });
+-
+-    const isNewWidgetAdded = getIsNewWidgetAdded(
+-      translatedDiffs,
+-      updatedUnEvalTree,
+-    );
+-
+-    return {
+-      unEvalUpdates: translatedDiffs,
+-      evalOrder: evaluationOrder,
+-      removedPaths,
+-      isNewWidgetAdded,
+-    };
+-  }
+-
+-  setupUpdateTreeWithDifferences(
+-    updatedValuePaths: string[][],
+-    pathsToSkipFromEval: string[] = [],
+-  ): ReturnType<typeof DataTreeEvaluator.prototype.setupUpdateTree> {
+-    const updatedUnEvalTree = this.oldUnEvalTree;
+-
+-    // skipped update local unEvalTree
+-    if (updatedValuePaths.length === 0) {
+-      return {
+-        unEvalUpdates: [],
+-        evalOrder: [],
+-        jsUpdates: {},
+-        removedPaths: [],
+-        isNewWidgetAdded: false,
+-      };
+-    }
+-
+-    return {
+-      ...this.setupTree(updatedUnEvalTree, updatedValuePaths, {
+-        pathsToSkipFromEval,
+-      }),
+-      jsUpdates: {},
+-    };
+-  }
+-
+-  evalAndValidateSubTree(
+-    evaluationOrder: string[],
+-    configTree: ConfigTree,
+-    unevalUpdates: DataTreeDiff[],
+-    metaWidgetIds: string[] = [],
+-  ): {
+-    evalMetaUpdates: EvalMetaUpdates;
+-    staleMetaIds: string[];
+-    contextTree: DataTree;
+-    executeReactiveActions: string[];
+-  } {
+-    const evaluationStartTime = performance.now();
+-
+-    const {
+-      contextTree,
+-      evalMetaUpdates,
+-      evaluatedTree: newEvalTree,
+-      executeReactiveActions,
+-      staleMetaIds,
+-    } = this.evaluateTree(
+-      this.evalTree,
+-      evaluationOrder,
+-      {
+-        isFirstTree: false,
+-        unevalUpdates,
+-        metaWidgets: metaWidgetIds,
+-      },
+-      configTree,
+-    );
+-    const evaluationEndTime = performance.now();
+-
+-    this.setEvalTree(newEvalTree);
+-
+-    const timeTakenForEvalAndValidateSubTree = {
+-      evaluation: getFixedTimeDifference(
+-        evaluationEndTime,
+-        evaluationStartTime,
+-      ),
+-    };
+-
+-    this.logs.push({ timeTakenForEvalAndValidateSubTree });
+-
+-    return {
+-      evalMetaUpdates,
+-      staleMetaIds,
+-      contextTree,
+-      executeReactiveActions,
+-    };
+-  }
+-
+-  getCompleteSortOrder(
+-    changes: Array<string>,
+-    inverseMap: Record<string, string[]>,
+-  ): Array<string> {
+-    let computeSortOrder = true;
+-    // Initialize parents with the current sent of property paths that need to be evaluated
+-    let parents = changes;
+-    let subSortOrderArray: Array<string>;
+-    const visitedNodesSet = new Set<string>();
+-    // Remove duplicates from this list. Since we explicitly walk down the tree and implicitly (by fetching parents) walk
+-    // up the tree, there are bound to be many duplicates.
+-    const uniqueKeysInSortOrder = new Set<string>();
+-
+-    while (computeSortOrder) {
+-      // Get all the nodes that would be impacted by the evaluation of the nodes in parents array in sorted order
+-      subSortOrderArray = this.getEvaluationSortOrder(parents, inverseMap);
+-
+-      // Add all parents and subSortOrderArray nodes to their respective sets
+-      for (const node of parents) visitedNodesSet.add(node);
+-
+-      for (const node of subSortOrderArray) uniqueKeysInSortOrder.add(node);
+-
+-      parents = getImmediateParentsOfPropertyPaths(subSortOrderArray);
+-      // If we find parents of the property paths in the sorted array, we should continue finding all the nodes dependent
+-      // on the parents
+-      computeSortOrder = parents.some((parent) => !visitedNodesSet.has(parent));
+-    }
+-
+-    // if a property path evaluation gets triggered by diff top order changes
+-    // this could lead to incorrect sort order in spite of the bfs traversal
+-    const sortOrderPropertyPaths: string[] = [];
+-
+-    this.sortedDependencies.forEach((path) => {
+-      if (uniqueKeysInSortOrder.has(path)) {
+-        sortOrderPropertyPaths.push(path);
+-        // remove from the uniqueKeysInSortOrder
+-        uniqueKeysInSortOrder.delete(path);
+-      }
+-    });
+-    // Add any remaining paths in the uniqueKeysInSortOrder
+-    const completeSortOrder = [
+-      ...Array.from(uniqueKeysInSortOrder),
+-      ...sortOrderPropertyPaths,
+-    ];
+-
+-    //Trim this list to now remove the property paths which are simply entity names
+-    const finalSortOrderArray: Array<string> = [];
+-
+-    completeSortOrder.forEach((propertyPath) => {
+-      const lastIndexOfDot = propertyPath.lastIndexOf(".");
+-
+-      // Only do this for property paths and not the entity themselves
+-      if (lastIndexOfDot !== -1) {
+-        finalSortOrderArray.push(propertyPath);
+-      }
+-    });
+-
+-    return finalSortOrderArray;
+-  }
+-
+-  getEvaluationSortOrder(
+-    changes: Array<string>,
+-    inverseMap: Record<string, string[]>,
+-  ): Array<string> {
+-    const sortOrder: Array<string> = [...changes];
+-    let iterator = 0;
+-
+-    while (iterator < sortOrder.length) {
+-      // Find all the nodes who are to be evaluated when sortOrder[iterator] changes
+-      const newNodes = inverseMap[sortOrder[iterator]];
+-
+-      // If we find more nodes that would be impacted by the evaluation of the node being investigated
+-      // we add these to the sort order.
+-      if (newNodes) {
+-        newNodes.forEach((toBeEvaluatedNode) => {
+-          // Only add the nodes if they haven't been already added for evaluation in the list. Since we are doing
+-          // breadth first traversal, we should be safe in not changing the evaluation order and adding this now at this
+-          // point instead of the previous index found.
+-          if (!sortOrder.includes(toBeEvaluatedNode)) {
+-            sortOrder.push(toBeEvaluatedNode);
+-          }
+-        });
+-      }
+-
+-      iterator++;
+-    }
+-
+-    return sortOrder;
+-  }
+-
+-  getPrivateWidgets(dataTree: DataTree): PrivateWidgets {
+-    let privateWidgets: PrivateWidgets = {};
+-
+-    Object.keys(dataTree).forEach((entityName) => {
+-      const entity = dataTree[entityName];
+-
+-      if (isWidget(entity) && !isEmpty(entity.privateWidgets)) {
+-        privateWidgets = {
+-          ...privateWidgets,
+-          ...entity.privateWidgets,
+-        };
+-      }
+-    });
+-
+-    return privateWidgets;
+-  }
+-
+-  evaluateTree(
+-    unEvalTree: DataTree,
+-    evaluationOrder: string[],
+-    options: {
+-      isFirstTree: boolean;
+-      unevalUpdates: DataTreeDiff[];
+-      metaWidgets: string[];
+-    } = {
+-      isFirstTree: true,
+-      unevalUpdates: [],
+-      metaWidgets: [],
+-    },
+-    oldConfigTree: ConfigTree,
+-  ): {
+-    evaluatedTree: DataTree;
+-    evalMetaUpdates: EvalMetaUpdates;
+-    staleMetaIds: string[];
+-    contextTree: DataTree;
+-    executeReactiveActions: string[];
+-  } {
+-    resetWorkerGlobalScope();
+-
+-    const safeTree = klonaJSON(unEvalTree);
+-    const dataStore = DataStore.getDataStore();
+-    const dataStoreClone = klonaJSON(dataStore);
+-    const executeReactiveActions: string[] = [];
+-
+-    updateTreeWithData(safeTree, dataStoreClone);
+-    updateTreeWithData(unEvalTree, dataStore);
+-
+-    /**
+-     * contextTree is a mutable dataTree, it gets passed as a context for each evaluation
+-     * and gets updated both, with evaluated values and mutations.
+-     *
+-     * SafeTree is free of mutations because we make sure to only set evaluated values into it.
+-     */
+-    const contextTree = unEvalTree;
+-
+-    const valuechanged: Record<string, boolean> = {};
+-
+-    errorModifier.updateAsyncFunctions(
+-      contextTree,
+-      this.getConfigTree(),
+-      this.dependencyMap,
+-    );
+-
+-    const evalMetaUpdates: EvalMetaUpdates = [];
+-    const { isFirstTree, metaWidgets, unevalUpdates } = options;
+-    let staleMetaIds: string[] = [];
+-
+-    const allNewEntityDiffSet = new Set(
+-      unevalUpdates
+-        .filter((v) => v.event === DataTreeDiffEvent.NEW)
+-        .map((v) => v.payload.propertyPath),
+-    );
+-    let evalContextCache;
+-
+-    if (WorkerEnv.flags.release_evaluation_scope_cache) {
+-      evalContextCache = getDataTreeContext({
+-        dataTree: contextTree,
+-        configTree: oldConfigTree,
+-        isTriggerBased: false,
+-      });
+-    }
+-
+-    const dependencies = this.dependencyMap.dependencies;
+-    // Add a cache for specific appsmith theme properties
+-    const themePropertyCache = new Map<string, unknown>();
+-
+-    try {
+-      for (const fullPropertyPath of evaluationOrder) {
+-        const { entityName, propertyPath } =
+-          getEntityNameAndPropertyPath(fullPropertyPath);
+-        const entity = contextTree[entityName];
+-        const entityConfig = oldConfigTree[entityName];
+-
+-        if (!isWidgetActionOrJsObject(entity)) continue;
+-
+-        if (isDataPath(entity, fullPropertyPath)) {
+-          valuechanged[fullPropertyPath] = true;
+-          continue;
+-        }
+-
+-        // Skip evaluations for actions in JSObjects
+-        if (isPropertyAnEntityAction(entity, propertyPath, entityConfig)) {
+-          continue;
+-        }
+-
+-        // TODO: Fix this the next time the file is edited
+-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-        let unEvalPropertyValue = get(contextTree as any, fullPropertyPath);
+-
+-        const isADynamicBindingPath = isAPathDynamicBindingPath(
+-          entity,
+-          entityConfig,
+-          propertyPath,
+-        );
+-
+-        const isATriggerPath = isPathDynamicTrigger(entityConfig, propertyPath);
+-
+-        if (isATriggerPath && !isFirstTree) {
+-          if (isJSAction(entity)) {
+-            //check if any direct dependency is changed
+-            const dependenciesForPath = dependencies[fullPropertyPath];
+-
+-            if (dependenciesForPath) {
+-              // If this is a .data property and is a direct dependency, always push
+-              const hasEntityDirectDependencyChanged = Object.keys(
+-                valuechanged,
+-              ).some((path) => dependenciesForPath.includes(path));
+-
+-              if (hasEntityDirectDependencyChanged) {
+-                executeReactiveActions.push(fullPropertyPath);
+-              }
+-            }
+-            // executeReactiveActions.push(fullPropertyPath);
+-          } else {
+-            if (isAction(entity) || isJSModuleInstance(entity)) {
+-              const hasExternalDependencyChanged =
+-                getExternalChangedDependencies(
+-                  fullPropertyPath,
+-                  dependencies,
+-                  valuechanged,
+-                  entityName,
+-                );
+-
+-              if (hasExternalDependencyChanged) {
+-                executeReactiveActions.push(fullPropertyPath);
+-              }
+-            }
+-          }
+-        }
+-
+-        let evalPropertyValue;
+-        const requiresEval =
+-          isADynamicBindingPath &&
+-          !isATriggerPath &&
+-          (isDynamicValue(unEvalPropertyValue) || isJSAction(entity));
+-
+-        if (propertyPath) {
+-          set(this.evalProps, getEvalErrorPath(fullPropertyPath), []);
+-        }
+-
+-        if (requiresEval) {
+-          const evaluationSubstitutionType =
+-            entityConfig.reactivePaths[propertyPath] ||
+-            EvaluationSubstitutionType.TEMPLATE;
+-
+-          const contextData: EvaluateContext = {};
+-
+-          if (isAction(entity)) {
+-            // Add empty object for this.params to avoid undefined errors
+-            contextData.globalContext = {
+-              [THIS_DOT_PARAMS_KEY]: {},
+-            };
+-
+-            unEvalPropertyValue = replaceThisDotParams(unEvalPropertyValue);
+-          }
+-
+-          try {
+-            const themeEvaluatedValue =
+-              themePropertyCache.get(unEvalPropertyValue);
+-
+-            // use the cached value if it exists
+-            if (themeEvaluatedValue) {
+-              evalPropertyValue = themeEvaluatedValue;
+-            } else {
+-              evalPropertyValue = this.getDynamicValue(
+-                unEvalPropertyValue,
+-                contextTree,
+-                oldConfigTree,
+-                evaluationSubstitutionType,
+-                contextData,
+-                undefined,
+-                fullPropertyPath,
+-                evalContextCache,
+-              );
+-
+-              if (
+-                evalPropertyValue &&
+-                isThemeUnevaluatedValue(unEvalPropertyValue)
+-              ) {
+-                // we are caching theme properties because its a frequent unevaluated value roughly constitues 20% of all bindings
+-                themePropertyCache.set(unEvalPropertyValue, evalPropertyValue);
+-              }
+-            }
+-          } catch (error) {
+-            this.errors.push({
+-              type: EvalErrorTypes.EVAL_PROPERTY_ERROR,
+-              message: (error as Error).message,
+-              context: {
+-                propertyPath: fullPropertyPath,
+-              },
+-              stack: (error as Error).stack,
+-            });
+-            evalPropertyValue = undefined;
+-          }
+-        } else {
+-          evalPropertyValue = unEvalPropertyValue;
+-        }
+-
+-        this.updateUndefinedEvalValuesMap(
+-          this.undefinedEvalValuesMap,
+-          evalPropertyValue,
+-          fullPropertyPath,
+-        );
+-
+-        const entityType = entity.ENTITY_TYPE;
+-
+-        if (!propertyPath) continue;
+-
+-        // Get old value from oldEvalTree for comparison
+-        const oldValue = get(this.getPrevState(), fullPropertyPath);
+-
+-        switch (entityType) {
+-          case ENTITY_TYPE.WIDGET: {
+-            if (isATriggerPath) continue;
+-
+-            const isNewWidget =
+-              isFirstTree || isNewEntity(allNewEntityDiffSet, entityName);
+-
+-            const widgetEntity = entity as WidgetEntity;
+-
+-            let parsedValue = validateAndParseWidgetProperty({
+-              fullPropertyPath,
+-              widget: widgetEntity,
+-              configTree: oldConfigTree,
+-              evalPropertyValue,
+-              unEvalPropertyValue,
+-              evalProps: this.evalProps,
+-            });
+-
+-            parsedValue = this.getParsedValueForWidgetProperty({
+-              currentTree: contextTree,
+-              configTree: oldConfigTree,
+-              entity: widgetEntity,
+-              evalMetaUpdates,
+-              fullPropertyPath,
+-              parsedValue,
+-              propertyPath,
+-              isNewWidget,
+-              safeTree,
+-            });
+-
+-            // setting evalPropertyValue in unParsedEvalTree
+-            set(
+-              this.getUnParsedEvalTree(),
+-              fullPropertyPath,
+-              evalPropertyValue,
+-            );
+-
+-            set(contextTree, fullPropertyPath, parsedValue);
+-
+-            // Only set in safeTree if value has changed from both oldEvalTree and new evaluated value
+-            if (parsedValue !== oldValue) {
+-              valuechanged[fullPropertyPath] = true;
+-            }
+-
+-            set(safeTree, fullPropertyPath, klonaJSON(parsedValue));
+-
+-            if (
+-              WorkerEnv.flags.release_evaluation_scope_cache &&
+-              evalContextCache
+-            ) {
+-              set(evalContextCache, fullPropertyPath, klonaJSON(parsedValue));
+-            }
+-
+-            staleMetaIds = staleMetaIds.concat(
+-              getStaleMetaStateIds({
+-                entity: widgetEntity,
+-                entityConfig: entityConfig as WidgetEntityConfig,
+-                propertyPath,
+-                isNewWidget,
+-                metaWidgets,
+-              }),
+-            );
+-            break;
+-          }
+-          case ENTITY_TYPE.ACTION: {
+-            const actionEntity = entity as ActionEntity;
+-
+-            const configProperty = propertyPath.replace(
+-              "config",
+-              "actionConfiguration",
+-            );
+-            const validationConfig =
+-              this.allActionValidationConfig?.[actionEntity.actionId]?.[
+-                configProperty
+-              ];
+-
+-            this.validateActionProperty(
+-              fullPropertyPath,
+-              actionEntity,
+-              contextTree,
+-              evalPropertyValue,
+-              unEvalPropertyValue,
+-              oldConfigTree,
+-              validationConfig,
+-            );
+-
+-            if (!propertyPath) continue;
+-
+-            /**
+-             * Perf optimization very specific to handling actions
+-             * Fields like Api1.data doesn't get evaluated since it is not in dynamicBindingPathList
+-             * Action validation only captures validation error and doesn't transform the evaluated values.
+-             * This means that the values we are looking to set back in the 2 dataTrees are already there.
+-             */
+-            if (!requiresEval) continue;
+-
+-            set(contextTree, fullPropertyPath, evalPropertyValue);
+-
+-            // Only set in safeTree if value has changed from both oldEvalTree and new evaluated value
+-            if (evalPropertyValue !== oldValue) {
+-              valuechanged[fullPropertyPath] = true;
+-            }
+-
+-            set(safeTree, fullPropertyPath, klonaJSON(evalPropertyValue));
+-
+-            if (
+-              WorkerEnv.flags.release_evaluation_scope_cache &&
+-              evalContextCache
+-            ) {
+-              set(
+-                evalContextCache,
+-                fullPropertyPath,
+-                klonaJSON(evalPropertyValue),
+-              );
+-            }
+-
+-            break;
+-          }
+-          case ENTITY_TYPE.JSACTION: {
+-            const variableList =
+-              (entityConfig as JSActionEntityConfig).variables || [];
+-
+-            if (variableList.indexOf(propertyPath) === -1) break;
+-
+-            const prevEvaluatedValue = get(
+-              this.evalProps,
+-              getEvalValuePath(fullPropertyPath, {
+-                isPopulated: true,
+-                fullPath: true,
+-              }),
+-            );
+-
+-            const prevUnEvalValue = JSObjectCollection.getPrevUnEvalState({
+-              fullPath: fullPropertyPath,
+-            });
+-
+-            const hasUnEvalValueModified = !isEqual(
+-              prevUnEvalValue,
+-              unEvalPropertyValue,
+-            );
+-
+-            const skipVariableValueAssignment =
+-              !hasUnEvalValueModified && prevEvaluatedValue;
+-
+-            const evalValue = skipVariableValueAssignment
+-              ? prevEvaluatedValue
+-              : evalPropertyValue;
+-
+-            /** Variables defined in a JS object are not reactive.
+-             * Their evaluated values need to be reset only when the variable is modified by the user.
+-             * When uneval value of a js variable hasn't changed, it means that the previously evaluated values are in both trees already  */
+-            if (!skipVariableValueAssignment) {
+-              // Only set in safeTree if value has changed from both oldEvalTree and new evaluated value
+-              if (evalValue !== oldValue) {
+-                const valueForSafeTree = klonaJSON(evalValue);
+-
+-                valuechanged[fullPropertyPath] = true;
+-
+-                set(contextTree, fullPropertyPath, evalValue);
+-                set(safeTree, fullPropertyPath, valueForSafeTree);
+-
+-                if (
+-                  WorkerEnv.flags.release_evaluation_scope_cache &&
+-                  evalContextCache
+-                ) {
+-                  set(
+-                    evalContextCache,
+-                    fullPropertyPath,
+-                    klonaJSON(evalPropertyValue),
+-                  );
+-                }
+-
+-                JSObjectCollection.setVariableValue(
+-                  evalValue,
+-                  fullPropertyPath,
+-                );
+-                JSObjectCollection.setPrevUnEvalState({
+-                  fullPath: fullPropertyPath,
+-                  unEvalValue: unEvalPropertyValue,
+-                });
+-              }
+-            }
+-
+-            break;
+-          }
+-          default:
+-            set(contextTree, fullPropertyPath, evalPropertyValue);
+-
+-            // Only set in safeTree if value has changed from both oldEvalTree and new evaluated value
+-            if (evalPropertyValue !== oldValue) {
+-              valuechanged[fullPropertyPath] = true;
+-            }
+-
+-            set(safeTree, fullPropertyPath, klonaJSON(evalPropertyValue));
+-
+-            if (
+-              WorkerEnv.flags.release_evaluation_scope_cache &&
+-              evalContextCache
+-            ) {
+-              set(
+-                evalContextCache,
+-                fullPropertyPath,
+-                klonaJSON(evalPropertyValue),
+-              );
+-            }
+-        }
+-      }
+-    } catch (error) {
+-      staleMetaIds = [];
+-      this.errors.push({
+-        type: EvalErrorTypes.EVAL_TREE_ERROR,
+-        message: (error as Error).message,
+-        stack: (error as Error).stack,
+-      });
+-
+-      return {
+-        evaluatedTree: safeTree,
+-        contextTree: contextTree,
+-        evalMetaUpdates,
+-        staleMetaIds,
+-        executeReactiveActions,
+-      };
+-    } finally {
+-      // Restore the dataStore since it was a part of contextTree and prone to mutation.
+-      DataStore.replaceDataStore(dataStoreClone);
+-
+-      // The below statement restores the execution context for async tasks are probably queued.
+-      setEvalContext({
+-        dataTree: contextTree,
+-        configTree: oldConfigTree,
+-        isDataField: false,
+-        isTriggerBased: true,
+-      });
+-
+-      return {
+-        evaluatedTree: safeTree,
+-        contextTree: contextTree,
+-        evalMetaUpdates,
+-        staleMetaIds,
+-        executeReactiveActions,
+-      };
+-    }
+-  }
+-
+-  updateUndefinedEvalValuesMap(
+-    undefinedEvalValuesMap: Record<string, boolean>,
+-    evalPropertyValue: unknown,
+-    fullPropertyPath: string,
+-  ) {
+-    if (isUndefined(evalPropertyValue)) {
+-      undefinedEvalValuesMap[fullPropertyPath] = true;
+-    } else if (
+-      fullPropertyPath in undefinedEvalValuesMap &&
+-      !isUndefined(undefinedEvalValuesMap[fullPropertyPath])
+-    ) {
+-      delete undefinedEvalValuesMap[fullPropertyPath];
+-    }
+-  }
+-
+-  setAllActionValidationConfig(allActionValidationConfig: {
+-    [actionId: string]: ActionValidationConfigMap;
+-  }): void {
+-    this.allActionValidationConfig = allActionValidationConfig;
+-  }
+-
+-  sortDependencies(
+-    dependencyMap: DependencyMap,
+-    diffs?: DataTreeDiff[],
+-    configTree?: ConfigTree,
+-  ): Array<string> {
+-    const result = DependencyMapUtils.sortDependencies(
+-      dependencyMap,
+-      configTree,
+-    );
+-
+-    if (result.success) {
+-      return result.sortedDependencies;
+-    } else {
+-      const node = result.cyclicNode;
+-      let entityType = "UNKNOWN";
+-      const entityName = node.split(".")[0];
+-      const entity = get(this.oldUnEvalTree, entityName) as DataTreeEntity;
+-      const entityConfig = get(this.oldConfigTree, entityName);
+-
+-      if (entity && isWidget(entity)) {
+-        entityType = entity.type;
+-      } else if (entity && isAction(entity)) {
+-        const actionEntityConfig = entityConfig as ActionEntityConfig;
+-
+-        entityType = actionEntityConfig.pluginType;
+-      } else if (entity && isJSAction(entity)) {
+-        entityType = entity.ENTITY_TYPE;
+-      }
+-
+-      const dependencies = dependencyMap.dependencies;
+-
+-      // We are only interested in logging potential system-generated cyclic dependency errors to Sentry
+-      // If a cyclic dependency error occurs without a user editing a dynamic field, that is a potential system-generated cyclic dependency error
+-
+-      const logToSentry = !diffs
+-        ? false
+-        : !diffs.some((val) => val.event === DataTreeDiffEvent.EDIT);
+-
+-      this.errors.push({
+-        type: EvalErrorTypes.CYCLICAL_DEPENDENCY_ERROR,
+-        message: (result.error as Error).message
+-          ? (result.error as Error).message
+-          : "Cyclic dependency found while evaluating.",
+-        context: {
+-          node,
+-          entityType,
+-          dependencyMap: dependencies,
+-          diffs,
+-          logToSentry,
+-        },
+-      });
+-      logError("CYCLICAL DEPENDENCY MAP", dependencies);
+-      this.hasCyclicalDependency = true;
+-      throw new CrashingError((result.error as Error).message);
+-    }
+-  }
+-
+-  getDynamicValue(
+-    dynamicBinding: string,
+-    data: DataTree,
+-    configTree: ConfigTree,
+-    evaluationSubstitutionType: EvaluationSubstitutionType,
+-    contextData?: EvaluateContext,
+-    // TODO: Fix this the next time the file is edited
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    callBackData?: Array<any>,
+-    fullPropertyPath?: string,
+-    evalContextCache?: EvaluateContext,
+-  ) {
+-    // Get the {{binding}} bound values
+-    let entity: DataTreeEntity | undefined = undefined;
+-    let entityConfig: DataTreeEntityConfig | undefined = undefined;
+-    let propertyPath: string;
+-
+-    if (fullPropertyPath) {
+-      const entityName = fullPropertyPath.split(".")[0];
+-
+-      propertyPath = fullPropertyPath.split(".")[1];
+-      entity = data[entityName];
+-      entityConfig = configTree[entityName];
+-    }
+-
+-    // Get the {{binding}} bound values
+-    const { jsSnippets, stringSegments } = getDynamicBindings(
+-      dynamicBinding,
+-      entity,
+-    );
+-
+-    if (stringSegments.length) {
+-      // Get the Data Tree value of those "binding "paths
+-      const values = jsSnippets.map((jsSnippet, index) => {
+-        const toBeSentForEval =
+-          entity && isJSAction(entity) && propertyPath === "body"
+-            ? jsSnippet.replace(/export default/g, "")
+-            : jsSnippet;
+-
+-        if (!jsSnippet) return stringSegments[index];
+-
+-        if (entity && entityConfig && !propertyPath.includes("body")) {
+-          ExecutionMetaData.setExecutionMetaData({
+-            triggerMeta: {
+-              source: {
+-                id: getEntityId(entity) || "",
+-                entityType: entity.ENTITY_TYPE,
+-                name: getEntityName(entity, entityConfig) || "",
+-              },
+-              triggerPropertyName: fullPropertyPath?.split(".")[1] || "",
+-              onPageLoad: false,
+-            },
+-          });
+-        }
+-
+-        const { errors: evalErrors, result } = this.evaluateDynamicBoundValue(
+-          toBeSentForEval,
+-          data,
+-          !!entity && isAnyJSAction(entity),
+-          contextData,
+-          callBackData,
+-          evalContextCache,
+-        );
+-
+-        if (fullPropertyPath && evalErrors.length) {
+-          addErrorToEntityProperty({
+-            errors: errorModifier.addRootcauseToAsyncInvocationErrors(
+-              fullPropertyPath,
+-              configTree,
+-              evalErrors,
+-              this.dependencyMap,
+-            ),
+-            evalProps: this.evalProps,
+-            fullPropertyPath,
+-            configTree,
+-          });
+-        }
+-
+-        return result;
+-      });
+-
+-      // We don't need to substitute template of the result if only one binding exists
+-      // But it should not be of prepared statements since that does need a string
+-      if (
+-        stringSegments.length === 1 &&
+-        evaluationSubstitutionType !== EvaluationSubstitutionType.PARAMETER
+-      ) {
+-        return values[0];
+-      }
+-
+-      try {
+-        // else return a combined value according to the evaluation type
+-        return substituteDynamicBindingWithValues(
+-          dynamicBinding,
+-          stringSegments,
+-          values,
+-          evaluationSubstitutionType,
+-        );
+-      } catch (error) {
+-        if (fullPropertyPath) {
+-          addErrorToEntityProperty({
+-            errors: [
+-              {
+-                raw: dynamicBinding,
+-                errorType: PropertyEvaluationErrorType.PARSE,
+-                errorMessage: {
+-                  name: (error as Error).name,
+-                  message: (error as Error).message,
+-                },
+-                severity: Severity.ERROR,
+-              },
+-            ],
+-            evalProps: this.evalProps,
+-            fullPropertyPath,
+-            configTree,
+-          });
+-        }
+-      }
+-    }
+-  }
+-
+-  async evaluateTriggers(
+-    userScript: string,
+-    dataTree: DataTree,
+-    configTree: ConfigTree,
+-    callbackData: Array<unknown>,
+-    context?: EvaluateContext,
+-  ) {
+-    const isDynamic = isDynamicValue(userScript);
+-    const { jsSnippets } = getDynamicBindings(userScript);
+-
+-    return evaluateAsync(
+-      /**
+-       * jsSnippets[0] will be "" when a JS Object's function is run manually or when an empty action for a trigger field is configured.
+-       * Eg. Button1.onClick = "{{}}"
+-       * isDynamic will be false for JSObject's function run but will be true for action bindings.
+-       */
+-      isDynamic ? jsSnippets[0] : userScript,
+-      dataTree,
+-      configTree,
+-      context,
+-      callbackData,
+-    );
+-  }
+-
+-  // Paths are expected to have "{name}.{path}" signature
+-  // Also returns any action triggers found after evaluating value
+-  evaluateDynamicBoundValue(
+-    js: string,
+-    data: DataTree,
+-    isJSObject: boolean,
+-    contextData?: EvaluateContext,
+-    // TODO: Fix this the next time the file is edited
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    callbackData?: Array<any>,
+-    evalContextCache?: EvaluateContext,
+-  ): EvalResult {
+-    let evalResponse: EvalResult;
+-
+-    ExecutionMetaData.setExecutionMetaData({
+-      enableJSVarUpdateTracking: false,
+-      enableJSFnPostProcessors: false,
+-    });
+-    try {
+-      evalResponse = evaluateSync(
+-        js,
+-        data,
+-        isJSObject,
+-        contextData,
+-        callbackData,
+-        {},
+-        evalContextCache,
+-      );
+-    } catch (error) {
+-      evalResponse = {
+-        result: undefined,
+-        errors: [
+-          {
+-            errorType: PropertyEvaluationErrorType.PARSE,
+-            raw: js,
+-            severity: Severity.ERROR,
+-            errorMessage: {
+-              name: (error as Error).name,
+-              message: (error as Error).message,
+-            },
+-          },
+-        ],
+-      };
+-    }
+-    ExecutionMetaData.setExecutionMetaData({
+-      enableJSVarUpdateTracking: true,
+-      enableJSFnPostProcessors: true,
+-    });
+-
+-    return evalResponse;
+-  }
+-
+-  getParsedValueForWidgetProperty({
+-    configTree,
+-    currentTree,
+-    entity,
+-    evalMetaUpdates,
+-    fullPropertyPath,
+-    isNewWidget,
+-    parsedValue,
+-    propertyPath,
+-    safeTree,
+-  }: {
+-    currentTree: DataTree;
+-    configTree: ConfigTree;
+-    entity: WidgetEntity;
+-    evalMetaUpdates: EvalMetaUpdates;
+-    fullPropertyPath: string;
+-    isNewWidget: boolean;
+-    parsedValue: unknown;
+-    propertyPath: string;
+-    safeTree?: DataTree;
+-  }) {
+-    const overwriteObj = overrideWidgetProperties({
+-      entity,
+-      propertyPath,
+-      value: parsedValue,
+-      currentTree,
+-      configTree,
+-      evalMetaUpdates,
+-      fullPropertyPath,
+-      isNewWidget,
+-      safeTree,
+-    });
+-
+-    if (overwriteObj && overwriteObj.overwriteParsedValue) {
+-      parsedValue = overwriteObj.newValue;
+-    }
+-
+-    return parsedValue;
+-  }
+-
+-  // validates the user input saved as action property based on a validationConfig
+-  validateActionProperty(
+-    fullPropertyPath: string,
+-    action: ActionEntity,
+-    currentTree: DataTree,
+-    // TODO: Fix this the next time the file is edited
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    evalPropertyValue: any,
+-    unEvalPropertyValue: string,
+-    configTree: ConfigTree,
+-    validationConfig?: ValidationConfig,
+-  ) {
+-    if (!evalPropertyValue || isEmpty(validationConfig)) return;
+-
+-    // runs VALIDATOR function and returns errors
+-    const { isValid, messages } = validateActionProperty(
+-      validationConfig,
+-      evalPropertyValue,
+-    );
+-
+-    if (isValid) return;
+-
+-    resetValidationErrorsForEntityProperty({
+-      evalProps: this.evalProps,
+-      fullPropertyPath,
+-    });
+-    const evalErrors: EvaluationError[] =
+-      messages?.map((message) => {
+-        return {
+-          raw: unEvalPropertyValue,
+-          errorMessage: message || { name: "", text: "" },
+-          errorType: PropertyEvaluationErrorType.VALIDATION,
+-          severity: Severity.ERROR,
+-        };
+-      }) ?? [];
+-
+-    // saves error in dataTree at fullPropertyPath
+-    // Later errors can consumed by the forms and debugger
+-    addErrorToEntityProperty({
+-      errors: evalErrors,
+-      evalProps: this.evalProps,
+-      fullPropertyPath,
+-      configTree,
+-    });
+-  }
+-
+-  /**
+-   *
+-   * Apply the changes to the eval tree. After this, the evaltree will have unevaluated values for the paths that are getting evaluated. To skip this step, we need to pick unevaluated values during evaluation
+-   */
+-  updateEvalTreeWithChanges({
+-    differences,
+-  }: {
+-    // TODO: Fix this the next time the file is edited
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    differences: Diff<any, any>[];
+-  }) {
+-    for (const d of differences) {
+-      if (!Array.isArray(d.path) || d.path.length === 0) continue; // Null check for typescript
+-
+-      // Apply the changes into the evalTree so that it gets the latest changes
+-      applyChange(this.evalTree, undefined, d);
+-    }
+-  }
+-
+-  calculateSubTreeSortOrder(
+-    updatedValuePaths: string[][],
+-    dependenciesOfRemovedPaths: Array<string>,
+-    removedPaths: Array<{ entityId: string; fullpath: string }>,
+-    unEvalTree: DataTree,
+-  ): string[] {
+-    const changePaths: Set<string> = new Set(dependenciesOfRemovedPaths);
+-    const configTree = this.getConfigTree();
+-
+-    const updatedValuePathsLatencyStart = performance.now();
+-
+-    for (const pathArray of updatedValuePaths) {
+-      const fullPropertyPath = convertPathToString(pathArray);
+-
+-      changePaths.add(fullPropertyPath);
+-
+-      // If this is a property path change, simply add for evaluation and move on
+-      if (!isDynamicLeaf(unEvalTree, fullPropertyPath, configTree)) {
+-        // A parent level property has been added or deleted
+-        /**
+-         * We want to add all pre-existing dynamic and static bindings in dynamic paths of this entity to get evaluated and validated.
+-         * Example:
+-         * - Table1.tableData = {{Api1.data}}
+-         * - Api1 gets created.
+-         * - This function gets called with a diff {path:["Api1"]}
+-         * We want to add `Api.data` to changedPaths so that `Table1.tableData` can be discovered below.
+-         */
+-        const entityName = pathArray[0];
+-        const entityConfig = configTree[entityName];
+-        const entity = unEvalTree[entityName];
+-
+-        if (!entity || isNotEntity(entity)) {
+-          continue;
+-        }
+-
+-        const entityDynamicBindingPathsSet = new Set<string>();
+-
+-        if (isAction(entity)) {
+-          getEntityDynamicBindingPathList(entityConfig).forEach((path) => {
+-            entityDynamicBindingPathsSet.add(path.key);
+-          });
+-        }
+-
+-        Object.keys(entityConfig.reactivePaths).forEach((reactivePath) => {
+-          const childPropertyPath = `${entityName}.${reactivePath}`;
+-
+-          // Check if relative path has dynamic binding
+-          if (entityDynamicBindingPathsSet.has(reactivePath)) {
+-            changePaths.add(childPropertyPath);
+-          }
+-
+-          if (isChildPropertyPath(fullPropertyPath, childPropertyPath)) {
+-            changePaths.add(childPropertyPath);
+-          }
+-        });
+-      }
+-    }
+-
+-    const updatedValuePathsLatency =
+-      performance.now() - updatedValuePathsLatencyStart;
+-
+-    // If a nested property path has changed and someone (say x) is dependent on the parent of the said property,
+-    // x must also be evaluated. For example, the following relationship exists in dependency map:
+-    // <  "Input1.defaultText" : ["Table1.selectedRow.email"] >
+-    // If Table1.selectedRow has changed, then Input1.defaultText must also be evaluated because Table1.selectedRow.email
+-    // is a nested property of Table1.selectedRow
+-    const addDependantsOfNestedPropertyPathsLatencyStart = performance.now();
+-    const changePathsWithNestedDependants = addDependantsOfNestedPropertyPaths(
+-      Array.from(changePaths),
+-      this.inverseDependencies,
+-    );
+-    const addDependantsOfNestedPropertyPathsLatency =
+-      performance.now() - addDependantsOfNestedPropertyPathsLatencyStart;
+-    const trimDependantChangePathsLatencyStart = performance.now();
+-    const trimmedChangedPaths = trimDependantChangePaths(
+-      changePathsWithNestedDependants,
+-      this.dependencies,
+-    );
+-    const trimDependantChangePathsLatency =
+-      performance.now() - trimDependantChangePathsLatencyStart;
+-
+-    // Now that we have all the root nodes which have to be evaluated, recursively find all the other paths which
+-    // would get impacted because they are dependent on the said root nodes and add them in order
+-    const completeSortOrderLatencyStart = performance.now();
+-    const completeSortOrder = this.getCompleteSortOrder(
+-      trimmedChangedPaths,
+-      this.inverseDependencies,
+-    );
+-    const completeSortOrderLatency =
+-      performance.now() - completeSortOrderLatencyStart;
+-
+-    this.logs.push({
+-      updatedValuePathsLatency,
+-      addDependantsOfNestedPropertyPathsLatency,
+-      trimDependantChangePathsLatency,
+-      completeSortOrderLatency,
+-    });
+-
+-    // Remove any paths that do not exist in the data tree anymore
+-    return difference(
+-      completeSortOrder,
+-      removedPaths.map((removedPath) => removedPath.fullpath),
+-    );
+-  }
+-
+-  evaluateActionBindings(
+-    bindings: string[],
+-    executionParams?: Record<string, unknown> | string,
+-  ) {
+-    const dataTree = klonaJSON(this.evalTree);
+-    // We might get execution params as an object or as a string.
+-    // If the user has added a proper object (valid case) it will be an object
+-    // If they have not added any execution params or not an object
+-    // it would be a string (invalid case)
+-    // TODO: Fix this the next time the file is edited
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    let evaluatedExecutionParams: Record<string, any> = {};
+-    let overrideContext: Record<string, unknown>;
+-
+-    if (executionParams && isObject(executionParams)) {
+-      evaluatedExecutionParams = this.getDynamicValue(
+-        `{{${JSON.stringify(executionParams)}}}`,
+-        this.evalTree,
+-        this.oldConfigTree,
+-        EvaluationSubstitutionType.TEMPLATE,
+-      );
+-
+-      overrideContext = generateOverrideContext({
+-        bindings,
+-        executionParams,
+-        dataTree,
+-      });
+-    }
+-
+-    return bindings.map((binding) => {
+-      // Replace any reference of 'this.params' to 'executionParams' (backwards compatibility)
+-      // also helps with dealing with IIFE which are normal functions (not arrow)
+-      // because normal functions won't retain 'this' context (when executed elsewhere)
+-      const replacedBinding = binding.replace(
+-        EXECUTION_PARAM_REFERENCE_REGEX,
+-        EXECUTION_PARAM_KEY,
+-      );
+-
+-      return this.getDynamicValue(
+-        `{{${replacedBinding}}}`,
+-        dataTree,
+-        this.oldConfigTree,
+-        EvaluationSubstitutionType.TEMPLATE,
+-        // params can be accessed via "this.params" or "executionParams"
+-        {
+-          thisContext: {
+-            [THIS_DOT_PARAMS_KEY]: evaluatedExecutionParams,
+-          },
+-          globalContext: {
+-            [EXECUTION_PARAM_KEY]: evaluatedExecutionParams,
+-          },
+-          overrideContext,
+-        },
+-      );
+-    });
+-  }
+-
+-  clearErrors() {
+-    this.errors = [];
+-  }
+-  clearLogs() {
+-    this.logs = [];
+-  }
+-}
++          validationConfig,
+\ No newline at end of file

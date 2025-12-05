@@ -1,0 +1,440 @@
+diff --git a/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts b/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
+index bde5259b878..c6d2e3e52e4 100644
+--- a/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
++++ b/app/client/src/workers/Evaluation/__tests__/evaluation.test.ts
+@@ -634,7 +634,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+ 
+@@ -674,7 +673,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+ 
+     const dataTree = evaluator.evalTree;
+@@ -722,7 +720,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+ 
+@@ -787,7 +784,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+     const updatedDependencies = evaluator.dependencies;
+@@ -832,7 +828,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+     const updatedDependencies = evaluator.dependencies;
+@@ -898,7 +893,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+     const updatedDependencies = evaluator.dependencies;
+@@ -971,7 +965,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree1,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     expect(evaluator.dependencies["Api2.config.body"]).toStrictEqual([
+       "Api2.config.pluginSpecifiedTemplates[0].value",
+@@ -1007,7 +1000,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree2,
+       unEvalUpdates2,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+ 
+@@ -1050,7 +1042,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree3,
+       unEvalUpdates3,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree3 = evaluator.evalTree;
+ 
+@@ -1094,7 +1085,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     const dataTree = evaluator.evalTree;
+ 
+@@ -1135,7 +1125,6 @@ describe("DataTreeEvaluator", () => {
+       updatedConfigTree,
+       unEvalUpdates,
+       [],
+-      evaluator.evalTree,
+     );
+     // Hard check to not regress on the number of clone operations. Try to improve this number.
+     // Not a good assertion because in one piece of code im cloning multiple times, however the value im cloning is very small.
+diff --git a/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts b/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
+index 791e64071b2..ceff6ba2630 100644
+--- a/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
++++ b/app/client/src/workers/Evaluation/evalTreeWithChanges.test.ts
+@@ -130,7 +130,6 @@ describe("evaluateAndPushResponse", () => {
+       },
+       [],
+       [],
+-      {},
+     );
+     // check if push response has been called
+     expect(pushResponseToMainThreadMock).toHaveBeenCalled();
+@@ -226,7 +225,6 @@ describe("evaluateAndGenerateResponse", () => {
+       },
+       [],
+       [],
+-      {},
+     );
+     const parsedUpdates = getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+ 
+@@ -261,7 +259,6 @@ describe("evaluateAndGenerateResponse", () => {
+       },
+       [],
+       [],
+-      {},
+     );
+     const parsedUpdates = getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+ 
+@@ -301,7 +298,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
+-        {},
+       );
+ 
+       expect(webworkerResponse.workerResponse.dependencies).toEqual({
+@@ -342,7 +338,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
+-        {},
+       );
+       const parsedUpdates =
+         getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+@@ -376,7 +371,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
+-        {},
+       );
+ 
+       const parsedUpdates =
+@@ -420,7 +414,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         ["Text1.text"],
+-        {},
+       );
+       const parsedUpdates =
+         getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+@@ -466,7 +459,6 @@ describe("evaluateAndGenerateResponse", () => {
+           response,
+           metaUpdates,
+           [],
+-          {},
+         );
+ 
+       expect(workerResponse.evalMetaUpdates).toEqual(metaUpdates);
+@@ -497,7 +489,6 @@ describe("evaluateAndGenerateResponse", () => {
+           response,
+           metaUpdates,
+           [],
+-          {},
+         );
+ 
+       // the function properties should be stripped out
+@@ -529,7 +520,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
+-        {},
+       );
+ 
+       const parsedUpdates =
+@@ -568,7 +558,6 @@ describe("evaluateAndGenerateResponse", () => {
+         updateTreeResponse,
+         [],
+         [],
+-        {},
+       );
+       const parsedUpdates =
+         getParsedUpdatesFromWebWorkerResp(webworkerResponse);
+diff --git a/app/client/src/workers/Evaluation/evalTreeWithChanges.ts b/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
+index f0a0a562612..e3feaebe177 100644
+--- a/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
++++ b/app/client/src/workers/Evaluation/evalTreeWithChanges.ts
+@@ -21,7 +21,6 @@ import {
+ import type DataTreeEvaluator from "workers/common/DataTreeEvaluator";
+ import type { Diff } from "deep-diff";
+ import type { DataTree } from "entities/DataTree/dataTreeTypes";
+-import { klona as klonaJson } from "klona/json";
+ 
+ const getDefaultEvalResponse = (): EvalTreeResponseData => ({
+   updates: "[]",
+@@ -71,10 +70,8 @@ export function evalTreeWithChanges(
+   );
+ 
+   let setupUpdateTreeResponse = {} as UpdateTreeResponse;
+-  let oldEvalTree: DataTree = {};
+ 
+   if (dataTreeEvaluator) {
+-    oldEvalTree = klonaJson(dataTreeEvaluator.getEvalTree());
+     setupUpdateTreeResponse = dataTreeEvaluator.setupUpdateTreeWithDifferences(
+       updatedValuePaths,
+       pathsToSkipFromEval,
+@@ -86,7 +83,6 @@ export function evalTreeWithChanges(
+     setupUpdateTreeResponse,
+     metaUpdates,
+     pathsToSkipFromEval,
+-    oldEvalTree,
+   );
+ }
+ 
+@@ -107,14 +103,12 @@ export const evaluateAndPushResponse = (
+   setupUpdateTreeResponse: UpdateTreeResponse,
+   metaUpdates: EvalMetaUpdates,
+   additionalPathsAddedAsUpdates: string[],
+-  oldEvalTree: DataTree,
+ ) => {
+   const response = evaluateAndGenerateResponse(
+     dataTreeEvaluator,
+     setupUpdateTreeResponse,
+     metaUpdates,
+     additionalPathsAddedAsUpdates,
+-    oldEvalTree,
+   );
+ 
+   return pushResponseToMainThread(response);
+@@ -125,7 +119,6 @@ export const evaluateAndGenerateResponse = (
+   setupUpdateTreeResponse: UpdateTreeResponse,
+   metaUpdates: EvalMetaUpdates,
+   additionalPathsAddedAsUpdates: string[],
+-  oldEvalTree: DataTree,
+ ): UpdateDataTreeMessageData => {
+   // generate default response first and later add updates to it
+   const defaultResponse = getDefaultEvalResponse();
+@@ -158,7 +151,6 @@ export const evaluateAndGenerateResponse = (
+     dataTreeEvaluator.oldConfigTree,
+     unEvalUpdates,
+     [],
+-    oldEvalTree,
+   );
+ 
+   const dataTree = updateEvalProps(dataTreeEvaluator) || {};
+diff --git a/app/client/src/workers/Evaluation/handlers/evalTree.ts b/app/client/src/workers/Evaluation/handlers/evalTree.ts
+index 1d12dde5887..a26c7c50be4 100644
+--- a/app/client/src/workers/Evaluation/handlers/evalTree.ts
++++ b/app/client/src/workers/Evaluation/handlers/evalTree.ts
+@@ -33,7 +33,6 @@ import type { CanvasWidgetsReduxState } from "ee/reducers/entityReducers/canvasW
+ import type { MetaWidgetsReduxState } from "reducers/entityReducers/metaWidgetsReducer";
+ import type { Attributes } from "instrumentation/types";
+ import { updateActionsToEvalTree } from "./updateActionData";
+-import { klona as klonaJSON } from "klona/json";
+ 
+ // TODO: Fix this the next time the file is edited
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+@@ -194,7 +193,6 @@ export async function evalTree(
+       isNewTree = true;
+     } else {
+       const tree = dataTreeEvaluator.getEvalTree();
+-      const oldDataTree = klonaJSON(tree);
+ 
+       // during update cycles update actions to the dataTree directly
+       // this is useful in cases where we have debounced updateActionData and a regular evaluation
+@@ -243,7 +241,6 @@ export async function evalTree(
+             configTree,
+             unEvalUpdates,
+             Object.keys(metaWidgets),
+-            oldDataTree,
+           ),
+       );
+ 
+diff --git a/app/client/src/workers/Evaluation/handlers/evalTrigger.ts b/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
+index 4da86703b39..992730da7b5 100644
+--- a/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
++++ b/app/client/src/workers/Evaluation/handlers/evalTrigger.ts
+@@ -2,7 +2,6 @@ import { dataTreeEvaluator } from "./evalTree";
+ import type { EvalWorkerASyncRequest } from "../types";
+ import ExecutionMetaData from "../fns/utils/ExecutionMetaData";
+ import { evaluateAndPushResponse } from "../evalTreeWithChanges";
+-import { klona as klonaJson } from "klona/json";
+ 
+ export default async function (request: EvalWorkerASyncRequest) {
+   const { data } = request;
+@@ -21,8 +20,6 @@ export default async function (request: EvalWorkerASyncRequest) {
+ 
+   ExecutionMetaData.setExecutionMetaData({ triggerMeta, eventType });
+ 
+-  const oldEvalTree = klonaJson(dataTreeEvaluator.getEvalTree());
+-
+   if (!triggerMeta.onPageLoad) {
+     const { evalOrder, unEvalUpdates } = dataTreeEvaluator.setupUpdateTree(
+       unEvalTree.unEvalTree,
+@@ -37,7 +34,6 @@ export default async function (request: EvalWorkerASyncRequest) {
+       { evalOrder, unEvalUpdates, jsUpdates: {} },
+       [],
+       [],
+-      oldEvalTree,
+     );
+   }
+ 
+diff --git a/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts b/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
+index e0ad57986d3..f370792e0d1 100644
+--- a/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
++++ b/app/client/src/workers/common/DataTreeEvaluator/dataTreeEvaluator.test.ts
+@@ -305,7 +305,6 @@ describe("DataTreeEvaluator", () => {
+         configTree as unknown as ConfigTree,
+         unEvalUpdates,
+         [],
+-        dataTreeEvaluator.evalTree,
+       );
+ 
+       expect(dataTreeEvaluator.dependencies).toStrictEqual({
+@@ -478,7 +477,6 @@ describe("DataTreeEvaluator", () => {
+             arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+             unEvalUpdates,
+             [],
+-            dataTreeEvaluator.evalTree,
+           );
+           expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+             undefined,
+@@ -503,7 +501,6 @@ describe("DataTreeEvaluator", () => {
+             arrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+             unEvalUpdates2,
+             [],
+-            dataTreeEvaluator.evalTree,
+           );
+ 
+           expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+@@ -533,7 +530,6 @@ describe("DataTreeEvaluator", () => {
+           arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+           unEvalUpdates,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+ 
+         // success: response -> [{...}, {...}]
+@@ -548,7 +544,6 @@ describe("DataTreeEvaluator", () => {
+           arrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+           unEvalUpdates2,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+ 
+         expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+@@ -577,7 +572,6 @@ describe("DataTreeEvaluator", () => {
+             nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+             unEvalUpdates,
+             [],
+-            dataTreeEvaluator.evalTree,
+           );
+           expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+             undefined,
+@@ -605,7 +599,6 @@ describe("DataTreeEvaluator", () => {
+             nestedArrayAccessorCyclicDependencyConfig.apiFailureConfigTree,
+             unEvalUpdates2,
+             [],
+-            dataTreeEvaluator.evalTree,
+           );
+           expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(
+             undefined,
+@@ -637,7 +630,6 @@ describe("DataTreeEvaluator", () => {
+           nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+           unEvalUpdates,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+ 
+         // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}] ]
+@@ -652,7 +644,6 @@ describe("DataTreeEvaluator", () => {
+           nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree2,
+           unEvalUpdates2,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+ 
+         expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+@@ -680,7 +671,6 @@ describe("DataTreeEvaluator", () => {
+           nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree,
+           unEvalUpdates,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+ 
+         // success: response -> [ [{...}, {...}, {...}], [{...}, {...}, {...}], [] ]
+@@ -695,7 +685,6 @@ describe("DataTreeEvaluator", () => {
+           nestedArrayAccessorCyclicDependencyConfig.apiSuccessConfigTree3,
+           unEvalUpdates2,
+           [],
+-          dataTreeEvaluator.evalTree,
+         );
+         expect(dataTreeEvaluator.dependencies["Api1"]).toStrictEqual(undefined);
+         expect(dataTreeEvaluator.dependencies["Api1.data"]).toStrictEqual([]);
+diff --git a/app/client/src/workers/common/DataTreeEvaluator/index.ts b/app/client/src/workers/common/DataTreeEvaluator/index.ts
+index 1df173ef3ad..4ea4f13b4bf 100644
+--- a/app/client/src/workers/common/DataTreeEvaluator/index.ts
++++ b/app/client/src/workers/common/DataTreeEvaluator/index.ts
+@@ -490,7 +490,6 @@ export default class DataTreeEvaluator {
+       evaluationOrder,
+       undefined,
+       this.oldConfigTree,
+-      {},
+     );
+ 
+     /**
+@@ -960,7 +959,6 @@ export default class DataTreeEvaluator {
+     configTree: ConfigTree,
+     unevalUpdates: DataTreeDiff[],
+     metaWidgetIds: string[] = [],
+-    oldEvalTree: DataTree,
+   ): {
+     evalMetaUpdates: EvalMetaUpdates;
+     staleMetaIds: string[];
+@@ -984,7 +982,6 @@ export default class DataTreeEvaluator {
+         metaWidgets: metaWidgetIds,
+       },
+       configTree,
+-      oldEvalTree,
+     );
+     const evaluationEndTime = performance.now();
+ 
+@@ -1127,7 +1124,6 @@ export default class DataTreeEvaluator {
+       metaWidgets: [],
+     },
+     oldConfigTree: ConfigTree,
+-    oldEvalTree: DataTree,
+   ): {
+     evaluatedTree: DataTree;
+     evalMetaUpdates: EvalMetaUpdates;
+@@ -1323,7 +1319,7 @@ export default class DataTreeEvaluator {
+         if (!propertyPath) continue;
+ 
+         // Get old value from oldEvalTree for comparison
+-        const oldValue = get(oldEvalTree, fullPropertyPath);
++        const oldValue = get(this.getPrevState(), fullPropertyPath);
+ 
+         switch (entityType) {
+           case ENTITY_TYPE.WIDGET: {

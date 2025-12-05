@@ -1,0 +1,26 @@
+{
+    "recover_status": "success",
+    "cost": 0,
+    "rewrites": {},
+    "direct_patch": true,
+    "instance_ref": {
+        "instance_id": "PostHog__posthog.main.42640",
+        "repo": "PostHog/posthog",
+        "base_commit": "e1ac9f97469f120f9b0c2b28a86a1c286189486e",
+        "head_commit": "a7ca24872b56bf4a6fa5d957e0a57c49143d1ff2",
+        "title": "fix(replay): account for css stylesheets",
+        "merged_at": "2025-12-04T17:52:50Z",
+        "html_url": "https://github.com/PostHog/posthog/pull/42640",
+        "test_files": [
+            "frontend/src/scenes/session-recordings/player/rrweb/index.test.ts"
+        ],
+        "code_files": [
+            "frontend/src/scenes/session-recordings/player/rrweb/index.ts"
+        ],
+        "total_changes": 34,
+        "num_files": 2,
+        "pull_number": 42640,
+        "patch": "diff --git a/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts b/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts\nindex c71605038780d..d24ed895f3be4 100644\n--- a/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts\n+++ b/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts\n@@ -33,6 +33,30 @@ describe('CorsPlugin', () => {\n         CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })\n         expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/my-image.js`)\n     })\n+\n+    it('can replace a stylesheet css link', () => {\n+        const el = document.createElement('link')\n+        el.setAttribute('rel', 'stylesheet')\n+        el.href = 'https://app.posthog.com/assets/styles.css'\n+        CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })\n+        expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/assets/styles.css`)\n+    })\n+\n+    it('can replace a stylesheet css link with query parameters', () => {\n+        const el = document.createElement('link')\n+        el.setAttribute('rel', 'stylesheet')\n+        el.href = 'https://app.posthog.com/assets/styles.css?v=123'\n+        CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })\n+        expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/assets/styles.css?v=123`)\n+    })\n+\n+    it.each([\n+        'https://app.posthog.com/styles.css',\n+        'https://app.posthog.com/styles.css?v=123',\n+        'https://app.posthog.com/assets/main.css?t=1234567890',\n+    ])('should replace CSS urls', (cssUrl) => {\n+        expect(CorsPlugin._replaceCSSUrl(cssUrl)).toEqual(`https://replay.ph-proxy.com/proxy?url=${cssUrl}`)\n+    })\n })\n \n describe('WindowTitlePlugin', () => {\ndiff --git a/frontend/src/scenes/session-recordings/player/rrweb/index.ts b/frontend/src/scenes/session-recordings/player/rrweb/index.ts\nindex ee36a8be2ea11..8dd021ca88428 100644\n--- a/frontend/src/scenes/session-recordings/player/rrweb/index.ts\n+++ b/frontend/src/scenes/session-recordings/player/rrweb/index.ts\n@@ -12,6 +12,7 @@ export const CorsPlugin: ReplayPlugin & {\n     _replaceFontCssUrls: (value: string | null) => string | null\n     _replaceFontUrl: (value: string) => string\n     _replaceJSUrl: (value: string) => string\n+    _replaceCSSUrl: (value: string) => string\n } = {\n     _replaceFontCssUrls: (value: string | null): string | null => {\n         return (\n@@ -30,6 +31,10 @@ export const CorsPlugin: ReplayPlugin & {\n         return value.replace(/^(https:\\/\\/\\S*(?:\\.js)\\S*)$/i, `${PROXY_URL}/proxy?url=$1`)\n     },\n \n+    _replaceCSSUrl: (value: string): string => {\n+        return value.replace(/^(https:\\/\\/\\S*(?:\\.css)\\S*)$/i, `${PROXY_URL}/proxy?url=$1`)\n+    },\n+\n     onBuild: (node) => {\n         if (node.nodeName === 'STYLE') {\n             const styleElement = node as HTMLStyleElement\n@@ -55,8 +60,11 @@ export const CorsPlugin: ReplayPlugin & {\n             if (!href) {\n                 return\n             }\n-            if (linkElement.getAttribute('rel') == 'modulepreload') {\n+            const rel = linkElement.getAttribute('rel')\n+            if (rel === 'modulepreload') {\n                 linkElement.href = CorsPlugin._replaceJSUrl(href)\n+            } else if (rel === 'stylesheet') {\n+                linkElement.href = CorsPlugin._replaceCSSUrl(href)\n             } else {\n                 linkElement.href = CorsPlugin._replaceFontUrl(href)\n             }\n",
+        "pr_mirror": "PostHog__posthog.main"
+    }
+}

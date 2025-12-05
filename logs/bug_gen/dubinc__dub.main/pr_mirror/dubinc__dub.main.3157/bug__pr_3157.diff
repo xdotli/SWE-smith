@@ -1,0 +1,386 @@
+diff --git a/apps/web/app/(ee)/api/customers/[id]/route.ts b/apps/web/app/(ee)/api/customers/[id]/route.ts
+index 6e15be6..ebad020 100644
+--- a/apps/web/app/(ee)/api/customers/[id]/route.ts
++++ b/apps/web/app/(ee)/api/customers/[id]/route.ts
+@@ -96,30 +96,21 @@ export const PATCH = withWorkspace(
+ 
+       if (avatar && !isStored(avatar) && finalCustomerAvatar) {
+         waitUntil(
+-          storage
+-            .upload({
++          Promise.allSettled([
++            storage.upload({
+               key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+               body: avatar,
+               opts: {
+                 width: 128,
+                 height: 128,
+               },
+-            })
+-            .then(() => {
+-              if (oldCustomerAvatar && isStored(oldCustomerAvatar)) {
+-                storage.delete({
+-                  key: oldCustomerAvatar.replace(`${R2_URL}/`, ""),
+-                });
+-              }
+-            })
+-            .catch(async (error) => {
+-              console.error("Error persisting customer avatar to R2", error);
+-              // if the avatar fails to upload to R2, set the avatar to null in the database
+-              await prisma.customer.update({
+-                where: { id: customer.id },
+-                data: { avatar: null },
+-              });
+             }),
++            oldCustomerAvatar &&
++              isStored(oldCustomerAvatar) &&
++              storage.delete({
++                key: oldCustomerAvatar.replace(`${R2_URL}/`, ""),
++              }),
++          ]),
+         );
+       }
+ 
+@@ -195,4 +186,4 @@ export const DELETE = withWorkspace(
+       "enterprise",
+     ],
+   },
+-);
++);
+\ No newline at end of file
+diff --git a/apps/web/app/(ee)/api/customers/route.ts b/apps/web/app/(ee)/api/customers/route.ts
+index ecdeb52..6ef3dad 100644
+--- a/apps/web/app/(ee)/api/customers/route.ts
++++ b/apps/web/app/(ee)/api/customers/route.ts
+@@ -165,27 +165,14 @@ export const POST = withWorkspace(
+ 
+       if (avatar && !isStored(avatar) && finalCustomerAvatar) {
+         waitUntil(
+-          storage
+-            .upload({
+-              key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-              body: avatar,
+-              opts: {
+-                width: 128,
+-                height: 128,
+-              },
+-            })
+-            .catch(async (error) => {
+-              console.error("Error persisting customer avatar to R2", error);
+-              // if the avatar fails to upload to R2, set the avatar to null in the database
+-              await prisma.customer.update({
+-                where: {
+-                  id: customer.id,
+-                },
+-                data: {
+-                  avatar: null,
+-                },
+-              });
+-            }),
++          storage.upload({
++            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++            body: avatar,
++            opts: {
++              width: 128,
++              height: 128,
++            },
++          }),
+         );
+       }
+ 
+@@ -219,4 +206,4 @@ export const POST = withWorkspace(
+       "enterprise",
+     ],
+   },
+-);
++);
+\ No newline at end of file
+diff --git a/apps/web/lib/api/conversions/track-lead.ts b/apps/web/lib/api/conversions/track-lead.ts
+index 1a6f2ad..1bfb398 100644
+--- a/apps/web/lib/api/conversions/track-lead.ts
++++ b/apps/web/lib/api/conversions/track-lead.ts
+@@ -238,25 +238,14 @@ export const trackLead = async ({
+           finalCustomerAvatar
+         ) {
+           // persist customer avatar to R2
+-          await storage
+-            .upload({
+-              key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-              body: customerAvatar,
+-              opts: {
+-                width: 128,
+-                height: 128,
+-              },
+-            })
+-            .catch(async (error) => {
+-              console.error("Error persisting customer avatar to R2", error);
+-              // if the avatar fails to upload to R2, set the avatar to null in the database
+-              if (customer) {
+-                await prisma.customer.update({
+-                  where: { id: customer.id },
+-                  data: { avatar: null },
+-                });
+-              }
+-            });
++          await storage.upload({
++            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++            body: customerAvatar,
++            opts: {
++              width: 128,
++              height: 128,
++            },
++          });
+         }
+ 
+         // if not deferred mode, process the following right away:
+@@ -374,4 +363,4 @@ export const trackLead = async ({
+       externalId: customerExternalId,
+     },
+   });
+-};
++};
+\ No newline at end of file
+diff --git a/apps/web/lib/api/conversions/track-sale.ts b/apps/web/lib/api/conversions/track-sale.ts
+index dabf756..f0e0ec0 100644
+--- a/apps/web/lib/api/conversions/track-sale.ts
++++ b/apps/web/lib/api/conversions/track-sale.ts
+@@ -214,25 +214,14 @@ export const trackSale = async ({
+     if (customerAvatar && !isStored(customerAvatar) && finalCustomerAvatar) {
+       // persist customer avatar to R2 if it's not already stored
+       waitUntil(
+-        storage
+-          .upload({
+-            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-            body: customerAvatar,
+-            opts: {
+-              width: 128,
+-              height: 128,
+-            },
+-          })
+-          .catch(async (error) => {
+-            console.error("Error persisting customer avatar to R2", error);
+-            // if the avatar fails to upload to R2, set the avatar to null in the database
+-            if (newCustomer) {
+-              await prisma.customer.update({
+-                where: { id: newCustomer.id },
+-                data: { avatar: null },
+-              });
+-            }
+-          }),
++        storage.upload({
++          key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++          body: customerAvatar,
++          opts: {
++            width: 128,
++            height: 128,
++          },
++        }),
+       );
+     }
+ 
+@@ -523,127 +512,4 @@ const _trackSale = async ({
+         // Update customer sales count
+         prisma.customer.update({
+           where: {
+-            id: customer.id,
+-          },
+-          data: {
+-            sales: {
+-              increment: 1,
+-            },
+-            saleAmount: {
+-              increment: amount,
+-            },
+-          },
+-        }),
+-
+-        // Log conversion event
+-        logConversionEvent({
+-          workspace_id: workspace.id,
+-          link_id: saleData.link_id,
+-          path: "/track/sale",
+-          body: JSON.stringify(rawBody),
+-        }),
+-      ]);
+-
+-      let webhookPartner: WebhookPartner | undefined;
+-      // Create partner commission and execute workflows
+-      if (link.programId && link.partnerId) {
+-        const createdCommission = await createPartnerCommission({
+-          event: "sale",
+-          programId: link.programId,
+-          partnerId: link.partnerId,
+-          linkId: link.id,
+-          customerId: customer.id,
+-          eventId: saleData.event_id,
+-          amount: saleData.amount,
+-          quantity: 1,
+-          invoiceId,
+-          currency,
+-          context: {
+-            customer: {
+-              country: customer.country,
+-            },
+-            sale: {
+-              productId: metadata?.productId as string,
+-              amount: saleData.amount,
+-            },
+-          },
+-        });
+-
+-        webhookPartner = createdCommission?.webhookPartner;
+-
+-        await Promise.allSettled([
+-          executeWorkflows({
+-            trigger: WorkflowTrigger.saleRecorded,
+-            context: {
+-              programId: link.programId,
+-              partnerId: link.partnerId,
+-              current: {
+-                saleAmount: saleData.amount,
+-                conversions: firstConversionFlag ? 1 : 0,
+-              },
+-            },
+-          }),
+-
+-          syncPartnerLinksStats({
+-            partnerId: link.partnerId,
+-            programId: link.programId,
+-            eventType: "sale",
+-          }),
+-
+-          webhookPartner &&
+-            detectAndRecordFraudEvent({
+-              program: { id: link.programId },
+-              partner: pick(webhookPartner, ["id", "email", "name"]),
+-              customer: pick(customer, ["id", "email", "name"]),
+-              commission: { id: createdCommission.commission?.id },
+-              link: pick(link, ["id"]),
+-              click: pick(saleData, ["url", "referer"]),
+-              event: { id: saleData.event_id },
+-            }),
+-        ]);
+-      }
+-
+-      // Send workspace webhook
+-      const webhookPayload = transformSaleEventData({
+-        ...saleData,
+-        clickedAt: customer.clickedAt || customer.createdAt,
+-        link,
+-        customer,
+-        partner: webhookPartner,
+-        metadata,
+-      });
+-
+-      await sendWorkspaceWebhook({
+-        trigger: "sale.created",
+-        data: webhookPayload,
+-        workspace,
+-      });
+-    })(),
+-  );
+-
+-  const trackSaleResponse = trackSaleResponseSchema.parse({
+-    eventName,
+-    customer,
+-    sale: {
+-      amount,
+-      currency,
+-      invoiceId,
+-      paymentProcessor,
+-      metadata,
+-    },
+-  });
+-
+-  if (invoiceId) {
+-    waitUntil(
+-      redis.set(
+-        `trackSale:${workspace.id}:invoiceId:${invoiceId}`,
+-        trackSaleResponse,
+-        {
+-          ex: 60 * 60 * 24 * 7, // cache for 1 week
+-        },
+-      ),
+-    );
+-  }
+-
+-  return trackSaleResponse;
+-};
++            id: customer.
+\ No newline at end of file
+diff --git a/apps/web/lib/openapi/customers/create-customer.ts b/apps/web/lib/openapi/customers/create-customer.ts
+new file mode 100644
+index 0000000..d80e6f7
+--- /dev/null
++++ b/apps/web/lib/openapi/customers/create-customer.ts
+@@ -0,0 +1,35 @@
++import { openApiErrorResponses } from "@/lib/openapi/responses";
++import { ZodOpenApiOperationObject } from "zod-openapi";
++import {
++  createCustomerBodySchema,
++  CustomerEnrichedSchema,
++} from "../../zod/schemas/customers";
++
++export const createCustomer: ZodOpenApiOperationObject = {
++  operationId: "createCustomer",
++  "x-speakeasy-name-override": "create",
++  summary: "Create a customer",
++  description:
++    "[Deprecated]: Customer creation can only be done via tracking a lead event. Use the /track/lead endpoint instead.",
++  deprecated: true,
++  requestBody: {
++    content: {
++      "application/json": {
++        schema: createCustomerBodySchema,
++      },
++    },
++  },
++  responses: {
++    "201": {
++      description: "The customer was created.",
++      content: {
++        "application/json": {
++          schema: CustomerEnrichedSchema,
++        },
++      },
++    },
++    ...openApiErrorResponses,
++  },
++  tags: ["Customers"],
++  security: [{ token: [] }],
++};
+diff --git a/apps/web/lib/openapi/customers/index.ts b/apps/web/lib/openapi/customers/index.ts
+index dd5015a..9b72385 100644
+--- a/apps/web/lib/openapi/customers/index.ts
++++ b/apps/web/lib/openapi/customers/index.ts
+@@ -1,4 +1,5 @@
+ import { ZodOpenApiPathsObject } from "zod-openapi";
++import { createCustomer } from "./create-customer";
+ import { deleteCustomer } from "./delete-customer";
+ import { getCustomer } from "./get-customer";
+ import { getCustomers } from "./get-customers";
+@@ -7,10 +8,11 @@ import { updateCustomer } from "./update-customer";
+ export const customersPaths: ZodOpenApiPathsObject = {
+   "/customers": {
+     get: getCustomers,
++    post: createCustomer,
+   },
+   "/customers/{id}": {
+     get: getCustomer,
+     patch: updateCustomer,
+     delete: deleteCustomer,
+   },
+-};
++};
+\ No newline at end of file
+diff --git a/apps/web/tests/fraud/index.test.ts b/apps/web/tests/fraud/index.test.ts
+index d784a54..d30e418 100644
+--- a/apps/web/tests/fraud/index.test.ts
++++ b/apps/web/tests/fraud/index.test.ts
+@@ -254,4 +254,4 @@ async function waitForFraudEvent({
+     },
+     { retries: 10, interval: 600 },
+   );
+-}
++}
+\ No newline at end of file

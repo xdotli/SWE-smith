@@ -1,0 +1,231 @@
+diff --git a/apps/web/app/(ee)/api/customers/[id]/route.ts b/apps/web/app/(ee)/api/customers/[id]/route.ts
+index c071e34e861..6e15be6f9c6 100644
+--- a/apps/web/app/(ee)/api/customers/[id]/route.ts
++++ b/apps/web/app/(ee)/api/customers/[id]/route.ts
+@@ -96,21 +96,30 @@ export const PATCH = withWorkspace(
+ 
+       if (avatar && !isStored(avatar) && finalCustomerAvatar) {
+         waitUntil(
+-          Promise.allSettled([
+-            storage.upload({
++          storage
++            .upload({
+               key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+               body: avatar,
+               opts: {
+                 width: 128,
+                 height: 128,
+               },
++            })
++            .then(() => {
++              if (oldCustomerAvatar && isStored(oldCustomerAvatar)) {
++                storage.delete({
++                  key: oldCustomerAvatar.replace(`${R2_URL}/`, ""),
++                });
++              }
++            })
++            .catch(async (error) => {
++              console.error("Error persisting customer avatar to R2", error);
++              // if the avatar fails to upload to R2, set the avatar to null in the database
++              await prisma.customer.update({
++                where: { id: customer.id },
++                data: { avatar: null },
++              });
+             }),
+-            oldCustomerAvatar &&
+-              isStored(oldCustomerAvatar) &&
+-              storage.delete({
+-                key: oldCustomerAvatar.replace(`${R2_URL}/`, ""),
+-              }),
+-          ]),
+         );
+       }
+ 
+diff --git a/apps/web/app/(ee)/api/customers/route.ts b/apps/web/app/(ee)/api/customers/route.ts
+index e8583bd759a..ecdeb52892c 100644
+--- a/apps/web/app/(ee)/api/customers/route.ts
++++ b/apps/web/app/(ee)/api/customers/route.ts
+@@ -165,14 +165,27 @@ export const POST = withWorkspace(
+ 
+       if (avatar && !isStored(avatar) && finalCustomerAvatar) {
+         waitUntil(
+-          storage.upload({
+-            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-            body: avatar,
+-            opts: {
+-              width: 128,
+-              height: 128,
+-            },
+-          }),
++          storage
++            .upload({
++              key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++              body: avatar,
++              opts: {
++                width: 128,
++                height: 128,
++              },
++            })
++            .catch(async (error) => {
++              console.error("Error persisting customer avatar to R2", error);
++              // if the avatar fails to upload to R2, set the avatar to null in the database
++              await prisma.customer.update({
++                where: {
++                  id: customer.id,
++                },
++                data: {
++                  avatar: null,
++                },
++              });
++            }),
+         );
+       }
+ 
+diff --git a/apps/web/lib/api/conversions/track-lead.ts b/apps/web/lib/api/conversions/track-lead.ts
+index efe241234de..f940dafe4e4 100644
+--- a/apps/web/lib/api/conversions/track-lead.ts
++++ b/apps/web/lib/api/conversions/track-lead.ts
+@@ -238,14 +238,25 @@ export const trackLead = async ({
+           finalCustomerAvatar
+         ) {
+           // persist customer avatar to R2
+-          await storage.upload({
+-            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-            body: customerAvatar,
+-            opts: {
+-              width: 128,
+-              height: 128,
+-            },
+-          });
++          await storage
++            .upload({
++              key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++              body: customerAvatar,
++              opts: {
++                width: 128,
++                height: 128,
++              },
++            })
++            .catch(async (error) => {
++              console.error("Error persisting customer avatar to R2", error);
++              // if the avatar fails to upload to R2, set the avatar to null in the database
++              if (customer) {
++                await prisma.customer.update({
++                  where: { id: customer.id },
++                  data: { avatar: null },
++                });
++              }
++            });
+         }
+ 
+         // if not deferred mode, process the following right away:
+diff --git a/apps/web/lib/api/conversions/track-sale.ts b/apps/web/lib/api/conversions/track-sale.ts
+index 87bc7613326..a6edaa83b05 100644
+--- a/apps/web/lib/api/conversions/track-sale.ts
++++ b/apps/web/lib/api/conversions/track-sale.ts
+@@ -214,14 +214,25 @@ export const trackSale = async ({
+     if (customerAvatar && !isStored(customerAvatar) && finalCustomerAvatar) {
+       // persist customer avatar to R2 if it's not already stored
+       waitUntil(
+-        storage.upload({
+-          key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
+-          body: customerAvatar,
+-          opts: {
+-            width: 128,
+-            height: 128,
+-          },
+-        }),
++        storage
++          .upload({
++            key: finalCustomerAvatar.replace(`${R2_URL}/`, ""),
++            body: customerAvatar,
++            opts: {
++              width: 128,
++              height: 128,
++            },
++          })
++          .catch(async (error) => {
++            console.error("Error persisting customer avatar to R2", error);
++            // if the avatar fails to upload to R2, set the avatar to null in the database
++            if (newCustomer) {
++              await prisma.customer.update({
++                where: { id: newCustomer.id },
++                data: { avatar: null },
++              });
++            }
++          }),
+       );
+     }
+ 
+diff --git a/apps/web/lib/openapi/customers/create-customer.ts b/apps/web/lib/openapi/customers/create-customer.ts
+deleted file mode 100644
+index d80e6f70abf..00000000000
+--- a/apps/web/lib/openapi/customers/create-customer.ts
++++ /dev/null
+@@ -1,35 +0,0 @@
+-import { openApiErrorResponses } from "@/lib/openapi/responses";
+-import { ZodOpenApiOperationObject } from "zod-openapi";
+-import {
+-  createCustomerBodySchema,
+-  CustomerEnrichedSchema,
+-} from "../../zod/schemas/customers";
+-
+-export const createCustomer: ZodOpenApiOperationObject = {
+-  operationId: "createCustomer",
+-  "x-speakeasy-name-override": "create",
+-  summary: "Create a customer",
+-  description:
+-    "[Deprecated]: Customer creation can only be done via tracking a lead event. Use the /track/lead endpoint instead.",
+-  deprecated: true,
+-  requestBody: {
+-    content: {
+-      "application/json": {
+-        schema: createCustomerBodySchema,
+-      },
+-    },
+-  },
+-  responses: {
+-    "201": {
+-      description: "The customer was created.",
+-      content: {
+-        "application/json": {
+-          schema: CustomerEnrichedSchema,
+-        },
+-      },
+-    },
+-    ...openApiErrorResponses,
+-  },
+-  tags: ["Customers"],
+-  security: [{ token: [] }],
+-};
+diff --git a/apps/web/lib/openapi/customers/index.ts b/apps/web/lib/openapi/customers/index.ts
+index 0cc5eb085f0..dd5015a8c3f 100644
+--- a/apps/web/lib/openapi/customers/index.ts
++++ b/apps/web/lib/openapi/customers/index.ts
+@@ -1,5 +1,4 @@
+ import { ZodOpenApiPathsObject } from "zod-openapi";
+-import { createCustomer } from "./create-customer";
+ import { deleteCustomer } from "./delete-customer";
+ import { getCustomer } from "./get-customer";
+ import { getCustomers } from "./get-customers";
+@@ -8,7 +7,6 @@ import { updateCustomer } from "./update-customer";
+ export const customersPaths: ZodOpenApiPathsObject = {
+   "/customers": {
+     get: getCustomers,
+-    post: createCustomer,
+   },
+   "/customers/{id}": {
+     get: getCustomer,
+diff --git a/apps/web/tests/fraud/index.test.ts b/apps/web/tests/fraud/index.test.ts
+index 5ec68ae360c..cc2c5c50afc 100644
+--- a/apps/web/tests/fraud/index.test.ts
++++ b/apps/web/tests/fraud/index.test.ts
+@@ -11,7 +11,7 @@ import {
+ import { describe, expect, test } from "vitest";
+ import { IntegrationHarness } from "../utils/integration";
+ 
+-describe.concurrent("/fraud/**", async () => {
++describe.skip.concurrent("/fraud/**", async () => {
+   const h = new IntegrationHarness();
+   const { http } = await h.init();
+ 

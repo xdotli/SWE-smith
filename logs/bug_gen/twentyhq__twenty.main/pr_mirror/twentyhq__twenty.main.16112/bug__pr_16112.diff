@@ -1,0 +1,97 @@
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
+index 56982063..fdff41b4 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
+@@ -1,7 +1,5 @@
+ import { Injectable, Logger } from '@nestjs/common';
+ 
+-import { isDefined } from 'twenty-shared/utils';
+-
+ import {
+   MessageImportDriverException,
+   MessageImportDriverExceptionCode,
+@@ -25,13 +23,7 @@ export class GmailMessagesImportErrorHandler {
+     }
+ 
+     if (isGmailApiBatchError(error)) {
+-      const exception = parseGmailApiBatchError(error, messageExternalId);
+-
+-      if (!isDefined(exception)) {
+-        return;
+-      }
+-
+-      throw exception;
++      throw parseGmailApiBatchError(error, messageExternalId);
+     }
+ 
+     throw new MessageImportDriverException(
+@@ -39,4 +31,4 @@ export class GmailMessagesImportErrorHandler {
+       MessageImportDriverExceptionCode.UNKNOWN,
+     );
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
+index bd1c4445..ef65e551 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
+@@ -111,14 +111,26 @@ describe('parseGmailApiBatchError', () => {
+     const error = gmailBatchApiErrorMocks.getError(404);
+     const exception = parseGmailApiBatchError(error, messageExternalId);
+ 
+-    expect(exception).toBeUndefined();
++    expect(exception).toBeInstanceOf(MessageImportDriverException);
++    expect(exception?.code).toBe(
++      MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
++    );
++    expect(exception?.message).toBe(
++      `${error.errors[0].message} for message with externalId: ${messageExternalId}`,
++    );
+   });
+ 
+   it('should handle 410 Gone', () => {
+     const error = gmailBatchApiErrorMocks.getError(410);
+     const exception = parseGmailApiBatchError(error, messageExternalId);
+ 
+-    expect(exception).toBeUndefined();
++    expect(exception).toBeInstanceOf(MessageImportDriverException);
++    expect(exception?.code).toBe(
++      MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
++    );
++    expect(exception?.message).toBe(
++      `${error.errors[0].message} for message with externalId: ${messageExternalId}`,
++    );
+   });
+ 
+   it('should handle 429 Too Many Requests', () => {
+@@ -146,4 +158,4 @@ describe('parseGmailApiBatchError', () => {
+       `${error.errors[0].message} for message with externalId: ${messageExternalId}`,
+     );
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
+index f2d9755b..6e0b49a1 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
+@@ -43,7 +43,10 @@ export const parseGmailApiBatchError = (
+ 
+     case 404:
+     case 410:
+-      return undefined;
++      return new MessageImportDriverException(
++        message,
++        MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
++      );
+ 
+     case 429:
+       return new MessageImportDriverException(
+@@ -109,4 +112,4 @@ export const parseGmailApiBatchError = (
+     message,
+     MessageImportDriverExceptionCode.UNKNOWN,
+   );
+-};
++};
+\ No newline at end of file

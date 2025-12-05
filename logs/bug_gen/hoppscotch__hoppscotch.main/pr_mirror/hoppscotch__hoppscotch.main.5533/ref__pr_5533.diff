@@ -1,0 +1,425 @@
+diff --git a/packages/hoppscotch-common/src/services/__tests__/workspace.service.spec.ts b/packages/hoppscotch-common/src/services/__tests__/workspace.service.spec.ts
+index 6720df179e..7d049a39f2 100644
+--- a/packages/hoppscotch-common/src/services/__tests__/workspace.service.spec.ts
++++ b/packages/hoppscotch-common/src/services/__tests__/workspace.service.spec.ts
+@@ -25,6 +25,18 @@ vi.mock("~/helpers/teams/TeamListAdapter", () => ({
+   },
+ }))
+ 
++// Mock TeamCollectionsService to prevent i18n dependency issues
++vi.mock("../team-collection.service", () => ({
++  TeamCollectionsService: class MockTeamCollectionsService {
++    static readonly ID = "TEAM_COLLECTIONS_SERVICE"
++
++    changeTeamID = vi.fn()
++    clearCollections = vi.fn()
++
++    onServiceInit = vi.fn()
++  },
++}))
++
+ describe("WorkspaceService", () => {
+   const platformMock = {
+     auth: {
+@@ -239,4 +251,226 @@ describe("WorkspaceService", () => {
+       expect(listAdapterMock.fetchList).not.toHaveBeenCalled()
+     })
+   })
++
++  describe("Team Collection Service Synchronization", () => {
++    it("should call changeTeamID when workspace changes to a team workspace", async () => {
++      const container = new TestContainer()
++      const service = container.bind(WorkspaceService)
++
++      // Access the team collection service mock
++      const teamCollectionServiceMock = (service as any).teamCollectionService
++
++      // Change to team workspace
++      service.changeWorkspace({
++        type: "team",
++        teamID: "team-123",
++        teamName: "Test Team",
++        role: null,
++      })
++
++      await nextTick()
++
++      expect(teamCollectionServiceMock.changeTeamID).toHaveBeenCalledWith(
++        "team-123"
++      )
++    })
++
++    it("should call clearCollections when workspace changes to personal workspace", async () => {
++      const container = new TestContainer()
++      const service = container.bind(WorkspaceService)
++
++      // Start with a team workspace
++      service.changeWorkspace({
++        type: "team",
++        teamID: "team-123",
++        teamName: "Test Team",
++        role: null,
++      })
++
++      await nextTick()
++
++      const teamCollectionServiceMock = (service as any).teamCollectionService
++      teamCollectionServiceMock.clearCollections.mockClear()
++
++      // Change to personal workspace
++      service.changeWorkspace({
++        type: "personal",
++      })
++
++      await nextTick()
++
++      expect(teamCollectionServiceMock.clearCollections).toHaveBeenCalled()
++    })
++
++    it("should call clearCollections when workspace changes to team workspace without teamID", async () => {
++      const container = new TestContainer()
++      const service = container.bind(WorkspaceService)
++
++      const teamCollectionServiceMock = (service as any).teamCollectionService
++
++      // Change to team workspace without teamID
++      service.changeWorkspace({
++        type: "team",
++        teamID: "",
++        teamName: "Test Team",
++        role: null,
++      })
++
++      await nextTick()
++
++      expect(teamCollectionServiceMock.clearCollections).toHaveBeenCalled()
++    })
++
++    it("should not sync when workspaces are effectively the same", async () => {
++      const container = new TestContainer()
++      const service = container.bind(WorkspaceService)
++
++      // Start with a team workspace
++      service.changeWorkspace({
++        type: "team",
++        teamID: "team-123",
++        teamName: "Test Team",
++        role: null,
++      })
++
++      await nextTick()
++
++      const teamCollectionServiceMock = (service as any).teamCollectionService
++      teamCollectionServiceMock.changeTeamID.mockClear()
++
++      // Change to same team workspace (different name, same ID)
++      service.changeWorkspace({
++        type: "team",
++        teamID: "team-123",
++        teamName: "Updated Team Name",
++        role: null,
++      })
++
++      await nextTick()
++
++      // Should not call changeTeamID again since it's the same team
++      expect(teamCollectionServiceMock.changeTeamID).not.toHaveBeenCalled()
++    })
++
++    it("should handle errors during team collection service sync gracefully", async () => {
++      const container = new TestContainer()
++      const service = container.bind(WorkspaceService)
++
++      const teamCollectionServiceMock = (service as any).teamCollectionService
++      teamCollectionServiceMock.changeTeamID.mockImplementation(() => {
++        throw new Error("Sync failed")
++      })
++
++      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
++
++      // Change to team workspace (should not throw)
++      expect(() => {
++        service.changeWorkspace({
++          type: "team",
++          teamID: "team-123",
++          teamName: "Test Team",
++          role: null,
++        })
++      }).not.toThrow()
++
++      await nextTick()
++
++      expect(consoleSpy).toHaveBeenCalledWith(
++        "Failed to sync team collections:",
++        expect.any(Error)
++      )
++
++      consoleSpy.mockRestore()
++    })
++  })
++
++  describe("areWorkspacesEqual", () => {
++    let service: WorkspaceService
++
++    beforeEach(() => {
++      const container = new TestContainer()
++      service = container.bind(WorkspaceService)
++    })
++
++    it("should return false when newWorkspace is undefined", () => {
++      const result = (service as any).areWorkspacesEqual(undefined, {
++        type: "personal",
++      })
++      expect(result).toBe(false)
++    })
++
++    it("should return false when oldWorkspace is undefined", () => {
++      const result = (service as any).areWorkspacesEqual(
++        { type: "personal" },
++        undefined
++      )
++      expect(result).toBe(false)
++    })
++
++    it("should return true when both workspaces are personal", () => {
++      const result = (service as any).areWorkspacesEqual(
++        { type: "personal" },
++        { type: "personal" }
++      )
++      expect(result).toBe(true)
++    })
++
++    it("should return true when both workspaces are team workspaces with same teamID", () => {
++      const workspace1 = {
++        type: "team",
++        teamID: "team-123",
++        teamName: "Team A",
++        role: null,
++      }
++      const workspace2 = {
++        type: "team",
++        teamID: "team-123",
++        teamName: "Team A Updated",
++        role: null,
++      }
++
++      const result = (service as any).areWorkspacesEqual(workspace1, workspace2)
++      expect(result).toBe(true)
++    })
++
++    it("should return false when team workspaces have different teamIDs", () => {
++      const workspace1 = {
++        type: "team",
++        teamID: "team-123",
++        teamName: "Team A",
++        role: null,
++      }
++      const workspace2 = {
++        type: "team",
++        teamID: "team-456",
++        teamName: "Team B",
++        role: null,
++      }
++
++      const result = (service as any).areWorkspacesEqual(workspace1, workspace2)
++      expect(result).toBe(false)
++    })
++
++    it("should return false when one is personal and other is team workspace", () => {
++      const personalWorkspace = { type: "personal" }
++      const teamWorkspace = {
++        type: "team",
++        teamID: "team-123",
++        teamName: "Team A",
++        role: null,
++      }
++
++      const result1 = (service as any).areWorkspacesEqual(
++        personalWorkspace,
++        teamWorkspace
++      )
++      const result2 = (service as any).areWorkspacesEqual(
++        teamWorkspace,
++        personalWorkspace
++      )
++
++      expect(result1).toBe(false)
++      expect(result2).toBe(false)
++    })
++  })
+ })
+diff --git a/packages/hoppscotch-common/src/services/team-collection.service.ts b/packages/hoppscotch-common/src/services/team-collection.service.ts
+index 0fcca76f5e..3ead4e43ec 100644
+--- a/packages/hoppscotch-common/src/services/team-collection.service.ts
++++ b/packages/hoppscotch-common/src/services/team-collection.service.ts
+@@ -31,7 +31,6 @@ import { TeamCollection } from "~/helpers/teams/TeamCollection"
+ import { TeamRequest } from "~/helpers/teams/TeamRequest"
+ import { runGQLQuery, runGQLSubscription } from "~/helpers/backend/GQLClient"
+ import { HoppInheritedProperty } from "~/helpers/types/HoppInheritedProperties"
+-import { WorkspaceService } from "./workspace.service"
+ import { ref, watch } from "vue"
+ import { Service } from "dioc"
+ import { updateInheritedPropertiesForAffectedRequests } from "~/helpers/collection/collection"
+@@ -139,8 +138,6 @@ export class TeamCollectionsService extends Service<void> {
+   private secretEnvironmentService = this.bind(SecretEnvironmentService)
+   private currentEnvironmentValueService = this.bind(CurrentValueService)
+ 
+-  private workspaceService = this.bind(WorkspaceService)
+-
+   private teamID: string | null = null
+ 
+   public collections = ref<TeamCollection[]>([])
+@@ -176,20 +173,13 @@ export class TeamCollectionsService extends Service<void> {
+   private teamChildCollectionSortedSub: WSubscription | null = null
+ 
+   override onServiceInit() {
+-    // Watch for team change and update the collections accordingly
+-    watch(
+-      () => this.workspaceService.currentWorkspace,
+-      (workspace) => {
+-        if (workspace.value.type === "team" && workspace.value.teamID) {
+-          this.changeTeamID(workspace.value.teamID)
+-        } else {
+-          this.clearCollections()
+-        }
+-      },
+-      { immediate: true, deep: true }
+-    )
++    this.collectionLoadingWatcher()
++  }
+ 
+-    // Watch for completion of loading (when all loading flags are cleared) to update inherited properties once
++  /**
++   * Watches for loading collections and updates inherited properties once loading is done
++   */
++  private collectionLoadingWatcher() {
+     watch(
+       () => this.loadingCollections.value.length,
+       (loadingCount) => {
+@@ -208,7 +198,11 @@ export class TeamCollectionsService extends Service<void> {
+     )
+   }
+ 
+-  changeTeamID(newTeamID: string | null) {
++  /**
++   * Change the current team ID and resets the collections
++   * @param newTeamID The new team ID to switch to
++   */
++  public changeTeamID(newTeamID: string | null) {
+     this.teamID = newTeamID
+     this.collections.value = []
+     this.entityIDs.clear()
+@@ -220,6 +214,17 @@ export class TeamCollectionsService extends Service<void> {
+     if (this.teamID) this.initialize()
+   }
+ 
++  /**
++   * Clears all collections and resets the service state
++   */
++  public clearCollections() {
++    this.collections.value = []
++    this.entityIDs.clear()
++    this.loadingCollections.value = []
++    this.unsubscribeSubscriptions()
++    this.teamID = null
++  }
++
+   /**
+    * Unsubscribes from the subscriptions
+    * NOTE: Once this is called, no new updates to the tree will be detected
+@@ -292,14 +297,6 @@ export class TeamCollectionsService extends Service<void> {
+     this.collections.value = tree
+   }
+ 
+-  private clearCollections() {
+-    this.collections.value = []
+-    this.entityIDs.clear()
+-    this.loadingCollections.value = []
+-    this.unsubscribeSubscriptions()
+-    this.teamID = null
+-  }
+-
+   /**
+    * Loads the root collections of the current team
+    * @param replace Whether to replace the existing collections or append to them
+diff --git a/packages/hoppscotch-common/src/services/workspace.service.ts b/packages/hoppscotch-common/src/services/workspace.service.ts
+index bcf67c14a8..7bd3dbcb85 100644
+--- a/packages/hoppscotch-common/src/services/workspace.service.ts
++++ b/packages/hoppscotch-common/src/services/workspace.service.ts
+@@ -6,6 +6,7 @@ import TeamListAdapter from "~/helpers/teams/TeamListAdapter"
+ import { platform } from "~/platform"
+ import { min } from "lodash-es"
+ import { TeamAccessRole } from "~/helpers/backend/graphql"
++import { TeamCollectionsService } from "./team-collection.service"
+ 
+ /**
+  * Defines a workspace and its information
+@@ -45,6 +46,8 @@ export class WorkspaceService extends Service<WorkspaceServiceEvent> {
+   private teamListAdapterLockTicker = 0 // Used to generate unique lock IDs
+   private managedTeamListAdapter = new TeamListAdapter(true, false)
+ 
++  private teamCollectionService = this.bind(TeamCollectionsService)
++
+   private currentUser = useStreamStatic(
+     platform.auth.getCurrentUserStream(),
+     platform.auth.getCurrentUser(),
+@@ -101,6 +104,59 @@ export class WorkspaceService extends Service<WorkspaceServiceEvent> {
+       },
+       { immediate: true }
+     )
++
++    // Watch for workspace changes and update team collection service accordingly
++    this.setupTeamCollectionServiceSync()
++  }
++
++  /**
++   * Sets up synchronization with team collection service
++   * This ensures team collections are updated when workspace changes
++   */
++  private setupTeamCollectionServiceSync() {
++    watch(
++      this._currentWorkspace,
++      (newWorkspace, oldWorkspace) => {
++        // Skip update if workspaces are effectively the same
++        if (this.areWorkspacesEqual(newWorkspace, oldWorkspace)) return
++
++        try {
++          if (newWorkspace.type === "team" && newWorkspace.teamID) {
++            this.teamCollectionService.changeTeamID(newWorkspace.teamID)
++          } else {
++            this.teamCollectionService.clearCollections()
++          }
++        } catch (error) {
++          console.error("Failed to sync team collections:", error)
++        }
++      },
++      { immediate: true }
++    )
++  }
++
++  /**
++   * Checks if two workspaces are effectively equal to avoid unnecessary updates
++   *
++   * Note: Vue's watch API provides `undefined` as `oldValue` on the first callback
++   * invocation when using `{ immediate: true }`, since there is no previous value yet.
++   * This is why `oldWorkspace` has an optional type, while `newWorkspace` is always defined.
++   */
++  private areWorkspacesEqual(
++    newWorkspace: Workspace,
++    oldWorkspace?: Workspace
++  ): boolean {
++    if (!newWorkspace || !oldWorkspace) return false
++
++    // Both are personal workspaces
++    if (newWorkspace.type === "personal" && oldWorkspace.type === "personal")
++      return true
++
++    // Team workspaces are equal only if they share the same team ID
++    return (
++      newWorkspace.type === "team" &&
++      oldWorkspace.type === "team" &&
++      newWorkspace.teamID === oldWorkspace.teamID
++    )
+   }
+ 
+   // TODO: Update this function, its existence is pretty weird

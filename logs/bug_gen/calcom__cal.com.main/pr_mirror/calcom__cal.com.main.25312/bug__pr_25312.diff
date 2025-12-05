@@ -1,0 +1,749 @@
+diff --git a/packages/features/ee/billing/credit-service.ts b/packages/features/ee/billing/credit-service.ts
+index 40c8760..3bc21e2 100644
+--- a/packages/features/ee/billing/credit-service.ts
++++ b/packages/features/ee/billing/credit-service.ts
+@@ -470,402 +470,4 @@ export class CreditService {
+     userId?: number | null;
+     remainingCredits: number;
+     creditFor?: CreditUsageType;
+-    tx: PrismaTransaction;
+-  }): Promise<LowCreditBalanceResult> {
+-    let warningLimit = 0;
+-    if (teamId) {
+-      const { totalMonthlyCredits } = await this._getAllCreditsForTeam({ teamId, tx });
+-      warningLimit = totalMonthlyCredits * 0.2;
+-    } else if (userId) {
+-      const billingService = getBillingProviderService();
+-      const teamMonthlyPrice = await billingService.getPrice(process.env.STRIPE_TEAM_MONTHLY_PRICE_ID || "");
+-      const pricePerSeat = teamMonthlyPrice.unit_amount ?? 0;
+-      warningLimit = (pricePerSeat / 2) * 0.2;
+-    }
+-
+-    if (remainingCredits < warningLimit) {
+-      const creditBalance = await CreditsRepository.findCreditBalanceWithTeamOrUser({ teamId, userId }, tx);
+-
+-      if (
+-        creditBalance?.limitReachedAt &&
+-        (!teamId || dayjs(creditBalance?.limitReachedAt).isAfter(dayjs().startOf("month")))
+-      ) {
+-        log.info("User or team has limit already reached this month", {
+-          teamId,
+-          userId,
+-          creditBalance,
+-        });
+-        return null; // user has limit already reached or team has already reached limit this month
+-      }
+-
+-      const { getTranslation } = await import("@calcom/lib/server/i18n");
+-
+-      const teamWithAdmins = creditBalance?.team
+-        ? {
+-            ...creditBalance.team,
+-            adminAndOwners: await Promise.all(
+-              creditBalance.team.members.map(async (member) => ({
+-                id: member.user.id,
+-                name: member.user.name,
+-                email: member.user.email,
+-                t: await getTranslation(member.user.locale ?? "en", "common"),
+-              }))
+-            ),
+-          }
+-        : undefined;
+-
+-      const user = creditBalance?.user
+-        ? {
+-            ...creditBalance.user,
+-            t: await getTranslation(creditBalance.user.locale ?? "en", "common"),
+-          }
+-        : undefined;
+-
+-      if ((!teamWithAdmins || !teamWithAdmins.adminAndOwners?.length) && !user) {
+-        log.error("Team or user not found to send warning email");
+-        return null;
+-      }
+-
+-      if (remainingCredits <= 0) {
+-        await CreditsRepository.updateCreditBalance(
+-          {
+-            teamId,
+-            userId,
+-            data: {
+-              limitReachedAt: new Date(),
+-              warningSentAt: null,
+-            },
+-          },
+-          tx
+-        );
+-
+-        return {
+-          type: "LIMIT_REACHED" as const,
+-          team: teamWithAdmins,
+-          user,
+-          teamId,
+-          userId,
+-          creditFor,
+-        };
+-      }
+-
+-      if (
+-        creditBalance?.warningSentAt &&
+-        (!teamId || dayjs(creditBalance?.warningSentAt).isAfter(dayjs().startOf("month")))
+-      ) {
+-        return null; // user has already received a warning or team has already sent warning email this month
+-      }
+-
+-      await CreditsRepository.updateCreditBalance(
+-        {
+-          teamId,
+-          userId,
+-          data: {
+-            warningSentAt: new Date(),
+-          },
+-        },
+-        tx
+-      );
+-
+-      return {
+-        type: "WARNING" as const,
+-        balance: remainingCredits,
+-        team: teamWithAdmins,
+-        user,
+-        creditFor,
+-      };
+-    }
+-
+-    await CreditsRepository.updateCreditBalance(
+-      {
+-        teamId,
+-        userId,
+-        data: {
+-          warningSentAt: null,
+-          limitReachedAt: null,
+-        },
+-      },
+-      tx
+-    );
+-
+-    return null;
+-  }
+-
+-  private async _handleLowCreditBalanceResult(result: LowCreditBalanceResult) {
+-    if (!result) return;
+-
+-    try {
+-      if (result.type === "LIMIT_REACHED") {
+-        const { sendCreditBalanceLimitReachedEmails } = await import("@calcom/emails/billing-email-service");
+-
+-        const promises: Promise<unknown>[] = [
+-          sendCreditBalanceLimitReachedEmails({
+-            team: result.team,
+-            user: result.user,
+-            creditFor: result.creditFor,
+-          }).catch((error) => {
+-            log.error("Failed to send credit limit reached email", error, { result });
+-          }),
+-        ];
+-
+-        if (!result.creditFor || result.creditFor === CreditUsageType.SMS) {
+-          const { cancelScheduledMessagesAndScheduleEmails } = await import(
+-            "@calcom/features/ee/workflows/lib/reminders/reminderScheduler"
+-          );
+-          promises.push(
+-            cancelScheduledMessagesAndScheduleEmails({
+-              teamId: result.teamId,
+-              userIdsWithNoCredits: await this._getUserIdsWithoutCredits({
+-                teamId: result.teamId ?? null,
+-                userId: result.userId ?? null,
+-              }),
+-            }).catch((error) => {
+-              log.error("Failed to cancel scheduled messages", error, { result });
+-            })
+-          );
+-        }
+-
+-        await Promise.all(promises);
+-      } else if (result.type === "WARNING") {
+-        const { sendCreditBalanceLowWarningEmails } = await import("@calcom/emails/billing-email-service");
+-        await sendCreditBalanceLowWarningEmails({
+-          balance: result.balance,
+-          team: result.team,
+-          user: result.user,
+-          creditFor: result.creditFor,
+-        }).catch((error) => {
+-          log.error("Failed to send credit warning email", error, { result });
+-        });
+-      }
+-    } catch (error) {
+-      // Catch any other unexpected errors
+-      log.error("Unexpected error handling low credit balance result", error, { result });
+-    }
+-  }
+-
+-  async handleLowCreditBalance({
+-    teamId,
+-    userId,
+-    remainingCredits,
+-  }: {
+-    teamId?: number | null;
+-    userId?: number | null;
+-    remainingCredits: number;
+-  }) {
+-    return prisma
+-      .$transaction(async (tx) => {
+-        const result = await this._handleLowCreditBalance({ teamId, userId, remainingCredits, tx });
+-        return result;
+-      })
+-      .then(async (result) => {
+-        await this._handleLowCreditBalanceResult(result);
+-      });
+-  }
+-
+-  async getMonthlyCredits(teamId: number) {
+-    const teamRepo = new TeamRepository(prisma);
+-    const team = await teamRepo.findTeamWithMembers(teamId);
+-
+-    if (!team) return 0;
+-
+-    const teamBillingServiceFactory = getTeamBillingServiceFactory();
+-    const teamBillingService = teamBillingServiceFactory.init(team);
+-    const subscriptionStatus = await teamBillingService.getSubscriptionStatus();
+-
+-    if (
+-      subscriptionStatus !== SubscriptionStatus.ACTIVE &&
+-      subscriptionStatus !== SubscriptionStatus.PAST_DUE
+-    ) {
+-      return 0;
+-    }
+-
+-    const activeMembers = team.members.filter((member) => member.accepted).length;
+-
+-    if (team.isOrganization) {
+-      const orgMonthlyCredits = process.env.ORG_MONTHLY_CREDITS;
+-      const creditsPerSeat = orgMonthlyCredits ? parseInt(orgMonthlyCredits) : 1000;
+-      return activeMembers * creditsPerSeat;
+-    }
+-
+-    const billingService = getBillingProviderService();
+-    const priceId = process.env.STRIPE_TEAM_MONTHLY_PRICE_ID;
+-
+-    if (!priceId) {
+-      log.warn("Monthly price ID not configured", { teamId });
+-      return 0;
+-    }
+-
+-    const monthlyPrice = await billingService.getPrice(priceId);
+-    if (!monthlyPrice) {
+-      log.warn("Failed to retrieve monthly price", { teamId, priceId });
+-      return 0;
+-    }
+-    const pricePerSeat = monthlyPrice.unit_amount ?? 0;
+-    const creditsPerSeat = pricePerSeat * 0.5;
+-
+-    return activeMembers * creditsPerSeat;
+-  }
+-
+-  calculateCreditsFromPrice(price: number) {
+-    const twilioPrice = price;
+-    const priceWithMarkUp = twilioPrice * 1.8;
+-    const credits = Math.ceil(priceWithMarkUp * 100);
+-    return credits || null;
+-  }
+-
+-  async getAllCredits({ userId, teamId }: { userId?: number | null; teamId?: number | null }) {
+-    return prisma.$transaction(async (tx) => {
+-      return this._getAllCredits({ userId, teamId, tx });
+-    });
+-  }
+-
+-  protected async _getAllCredits({
+-    userId,
+-    teamId,
+-    tx,
+-  }: {
+-    userId?: number | null;
+-    teamId?: number | null;
+-    tx: PrismaTransaction;
+-  }) {
+-    if (teamId) {
+-      return this._getAllCreditsForTeam({ teamId, tx });
+-    }
+-
+-    if (userId) {
+-      const creditBalance = await CreditsRepository.findCreditBalance({ userId }, tx);
+-
+-      return {
+-        totalMonthlyCredits: 0,
+-        totalRemainingMonthlyCredits: 0,
+-        additionalCredits: creditBalance?.additionalCredits ?? 0,
+-        totalCreditsUsedThisMonth: 0,
+-      };
+-    }
+-
+-    return {
+-      totalMonthlyCredits: 0,
+-      totalRemainingMonthlyCredits: 0,
+-      additionalCredits: 0,
+-      totalCreditsUsedThisMonth: 0,
+-    };
+-  }
+-
+-  async getAllCreditsForTeam(teamId: number) {
+-    return prisma.$transaction(async (tx) => {
+-      return this._getAllCreditsForTeam({ teamId, tx });
+-    });
+-  }
+-
+-  protected async _getAllCreditsForTeam({ teamId, tx }: { teamId: number; tx: PrismaTransaction }) {
+-    const creditBalance = await CreditsRepository.findCreditBalanceWithExpenseLogs(
+-      { teamId, creditType: CreditType.MONTHLY },
+-      tx
+-    );
+-
+-    const totalMonthlyCredits = await this.getMonthlyCredits(teamId);
+-    const totalMonthlyCreditsUsed =
+-      creditBalance?.expenseLogs.reduce((sum, log) => sum + (log?.credits ?? 0), 0) || 0;
+-
+-    const additionalCredits = creditBalance?.additionalCredits ?? 0;
+-    const totalCreditsUsedThisMonth = totalMonthlyCreditsUsed;
+-
+-    return {
+-      totalMonthlyCredits,
+-      totalRemainingMonthlyCredits: Math.max(totalMonthlyCredits - totalMonthlyCreditsUsed, 0),
+-      additionalCredits,
+-      totalCreditsUsedThisMonth,
+-    };
+-  }
+-
+-  async moveCreditsFromTeamToOrg({ teamId, orgId }: { teamId: number; orgId: number }) {
+-    return await prisma.$transaction(async (tx) => {
+-      // Get team's credit balance
+-      const teamCreditBalance = await CreditsRepository.findCreditBalance({ teamId }, tx);
+-
+-      if (!teamCreditBalance || teamCreditBalance.additionalCredits <= 0) {
+-        log.info("No credits to transfer from team to org", { teamId, orgId });
+-        return;
+-      }
+-
+-      // Get or create org's credit balance
+-      let orgCreditBalance = await CreditsRepository.findCreditBalance({ teamId: orgId }, tx);
+-
+-      if (!orgCreditBalance) {
+-        orgCreditBalance = await CreditsRepository.createCreditBalance(
+-          {
+-            teamId: orgId,
+-          },
+-          tx
+-        );
+-      }
+-
+-      const creditsToTransfer = teamCreditBalance.additionalCredits;
+-
+-      // Transfer credits from team to org
+-      await CreditsRepository.updateCreditBalance(
+-        {
+-          teamId,
+-          data: {
+-            additionalCredits: 0,
+-          },
+-        },
+-        tx
+-      );
+-
+-      await CreditsRepository.updateCreditBalance(
+-        {
+-          teamId: orgId,
+-          data: {
+-            additionalCredits: {
+-              increment: creditsToTransfer,
+-            },
+-          },
+-        },
+-        tx
+-      );
+-
+-      log.info("Successfully transferred credits from team to org", {
+-        teamId,
+-        orgId,
+-        creditsTransferred: creditsToTransfer,
+-      });
+-
+-      return {
+-        creditsTransferred: creditsToTransfer,
+-        teamId,
+-        orgId,
+-      };
+-    });
+-  }
+-
+-  private async _getUserIdsWithoutCredits({
+-    teamId,
+-    userId,
+-  }: {
+-    teamId: number | null;
+-    userId: number | null;
+-  }) {
+-    let userIdsWithNoCredits: number[] = userId ? [userId] : [];
+-    if (teamId) {
+-      const teamMembers = await prisma.membership.findMany({
+-        where: {
+-          teamId,
+-          accepted: true,
+-        },
+-      });
+-
+-      userIdsWithNoCredits = (
+-        await Promise.all(
+-          teamMembers.map(async (member) => {
+-            const hasCredits = await this.hasAvailableCredits({ userId: member.userId });
+-            return { userId: member.userId, hasCredits };
+-          })
+-        )
+-      )
+-        .filter(({ hasCredits }) => !hasCredits)
+-        .map(({ userId }) => userId);
+-    }
+-    return userIdsWithNoCredits;
+-  }
+-}
++    tx: PrismaTransaction
+\ No newline at end of file
+diff --git a/packages/features/ee/workflows/lib/reminders/reminderScheduler.test.ts b/packages/features/ee/workflows/lib/reminders/reminderScheduler.test.ts
+index fbd3c98..b452acf 100644
+--- a/packages/features/ee/workflows/lib/reminders/reminderScheduler.test.ts
++++ b/packages/features/ee/workflows/lib/reminders/reminderScheduler.test.ts
+@@ -34,6 +34,8 @@ describe("reminderScheduler", () => {
+ 
+   describe("cancelScheduledMessagesAndScheduleEmails", () => {
+     it("should cancel SMS messages and schedule emails for team", async () => {
++      prismaMock.membership.findMany.mockResolvedValue([]);
++
+       const mockScheduledMessages = [
+         {
+           id: 1,
+@@ -61,7 +63,7 @@ describe("reminderScheduler", () => {
+ 
+       prismaMock.workflowReminder.updateMany.mockResolvedValue({ count: 1 });
+ 
+-      await cancelScheduledMessagesAndScheduleEmails({ teamId: 10, userIdsWithNoCredits: [1, 2, 3] });
++      await cancelScheduledMessagesAndScheduleEmails({ teamId: 10 });
+ 
+       expect(twilioProvider.cancelSMS).toHaveBeenCalledWith("sms-123");
+ 
+@@ -74,13 +76,12 @@ describe("reminderScheduler", () => {
+       );
+ 
+       const callArgs = prismaMock.workflowReminder.findMany.mock.calls[0][0];
+-      expect(callArgs.where.workflowStep.workflow.OR).toEqual([
+-        { userId: { in: [1, 2, 3] } },
+-        { teamId: 10 },
+-      ]);
++      expect(callArgs.where.workflowStep.workflow.OR).toEqual([{ userId: { in: [] } }, { teamId: 10 }]);
+     });
+ 
+     it("should cancel SMS messages and schedule emails for user", async () => {
++      prismaMock.membership.findMany.mockResolvedValue([]);
++
+       const mockScheduledMessages = [
+         {
+           id: 1,
+@@ -108,7 +109,7 @@ describe("reminderScheduler", () => {
+ 
+       prismaMock.workflowReminder.updateMany.mockResolvedValue({ count: 1 });
+ 
+-      await cancelScheduledMessagesAndScheduleEmails({ userIdsWithNoCredits: [11] });
++      await cancelScheduledMessagesAndScheduleEmails({ userId: 11 });
+ 
+       const callArgs = prismaMock.workflowReminder.findMany.mock.calls[0][0];
+       expect(callArgs.where.workflowStep.workflow.OR).toEqual([{ userId: { in: [11] } }]);
+@@ -136,4 +137,4 @@ describe("reminderScheduler", () => {
+       });
+     });
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/features/ee/workflows/lib/reminders/reminderScheduler.ts b/packages/features/ee/workflows/lib/reminders/reminderScheduler.ts
+index eb6ed7c..7b777a1 100644
+--- a/packages/features/ee/workflows/lib/reminders/reminderScheduler.ts
++++ b/packages/features/ee/workflows/lib/reminders/reminderScheduler.ts
+@@ -10,17 +10,21 @@ import {
+ import { isEmailAction } from "@calcom/features/ee/workflows/lib/actionHelperFunctions";
+ import { EmailWorkflowService } from "@calcom/features/ee/workflows/lib/service/EmailWorkflowService";
+ import { WorkflowService } from "@calcom/features/ee/workflows/lib/service/WorkflowService";
++import * as twilio from "@calcom/features/ee/workflows/lib/reminders/providers/twilioProvider";
+ import type { Workflow, WorkflowStep } from "@calcom/features/ee/workflows/lib/types";
+-import { WorkflowReminderRepository } from "@calcom/features/ee/workflows/repositories/WorkflowReminderRepository";
++import { getSubmitterEmail } from "@calcom/features/tasker/tasks/triggerFormSubmittedNoEvent/formSubmissionValidation";
++import { UserRepository } from "@calcom/features/users/repositories/UserRepository";
++import { SENDER_NAME } from "@calcom/lib/constants";
+ import { formatCalEventExtended } from "@calcom/lib/formatCalendarEvent";
+ import { withReporting } from "@calcom/lib/sentryWrapper";
+ import { getTranslation } from "@calcom/lib/server/i18n";
+ import { checkSMSRateLimit } from "@calcom/lib/smsLockState";
+-import { prisma } from "@calcom/prisma";
++import prisma from "@calcom/prisma";
+ import { SchedulingType } from "@calcom/prisma/enums";
+-import { WorkflowActions, WorkflowTriggerEvents } from "@calcom/prisma/enums";
++import { WorkflowActions, WorkflowMethods, WorkflowTriggerEvents } from "@calcom/prisma/enums";
+ import type { CalendarEvent } from "@calcom/types/Calendar";
+ 
++import { scheduleAIPhoneCall } from "./aiPhoneCallManager";
+ import type { FormSubmissionData } from "../types";
+ import type { BookingInfo } from "../types";
+ import type { ScheduleTextReminderAction } from "./smsReminderManager";
+@@ -288,25 +292,87 @@ const _sendCancelledReminders = async (args: SendCancelledRemindersArgs) => {
+ 
+ const _cancelScheduledMessagesAndScheduleEmails = async ({
+   teamId,
+-  userIdsWithNoCredits,
++  userId,
+ }: {
+   teamId?: number | null;
+-  userIdsWithNoCredits: number[];
++  userId?: number | null;
+ }) => {
+-  const { WorkflowReminderRepository } = await import(
+-    "@calcom/features/ee/workflows/repositories/WorkflowReminderRepository"
+-  );
++  const { CreditService } = await import("@calcom/features/ee/billing/credit-service");
+ 
+-  const workflowReminderRepository = new WorkflowReminderRepository(prisma);
+-  const scheduledMessages = await workflowReminderRepository.findScheduledMessagesToCancel({
+-    teamId,
+-    userIdsWithNoCredits,
+-  });
++  let userIdsWithNoCredits: number[] = userId ? [userId] : [];
++
++  if (teamId) {
++    const teamMembers = await prisma.membership.findMany({
++      where: {
++        teamId,
++        accepted: true,
++      },
++    });
+ 
+-  const [twilio, { sendOrScheduleWorkflowEmails }] = await Promise.all([
+-    import("./providers/twilioProvider"),
+-    import("./providers/emailProvider"),
+-  ]);
++    const creditService = new CreditService();
++
++    userIdsWithNoCredits = (
++      await Promise.all(
++        teamMembers.map(async (member) => {
++          const hasCredits = await creditService.hasAvailableCredits({ userId: member.userId });
++          return { userId: member.userId, hasCredits };
++        })
++      )
++    )
++      .filter(({ hasCredits }) => !hasCredits)
++      .map(({ userId }) => userId);
++  }
++
++  const scheduledMessages = await prisma.workflowReminder.findMany({
++    where: {
++      workflowStep: {
++        workflow: {
++          OR: [
++            {
++              userId: {
++                in: userIdsWithNoCredits,
++              },
++            },
++            ...(teamId ? [{ teamId }] : []),
++          ],
++        },
++      },
++      scheduled: true,
++      OR: [{ cancelled: false }, { cancelled: null }],
++      referenceId: {
++        not: null,
++      },
++      method: {
++        in: [WorkflowMethods.SMS, WorkflowMethods.WHATSAPP],
++      },
++    },
++    select: {
++      referenceId: true,
++      workflowStep: {
++        select: {
++          action: true,
++        },
++      },
++      scheduledDate: true,
++      uuid: true,
++      id: true,
++      booking: {
++        select: {
++          attendees: {
++            select: {
++              email: true,
++              locale: true,
++            },
++          },
++          user: {
++            select: {
++              email: true,
++            },
++          },
++        },
++      },
++    },
++  });
+ 
+   await Promise.allSettled(scheduledMessages.map((msg) => twilio.cancelSMS(msg.referenceId ?? "")));
+ 
+@@ -331,8 +397,16 @@ const _cancelScheduledMessagesAndScheduleEmails = async ({
+     })
+   );
+ 
+-  await workflowReminderRepository.updateRemindersToEmail({
+-    reminderIds: scheduledMessages.map((msg) => msg.id),
++  await prisma.workflowReminder.updateMany({
++    where: {
++      id: {
++        in: scheduledMessages.map((msg) => msg.id),
++      },
++    },
++    data: {
++      method: WorkflowMethods.EMAIL,
++      referenceId: null,
++    },
+   });
+ };
+ // Export functions wrapped with withReporting
+@@ -344,4 +418,4 @@ export const sendCancelledReminders = withReporting(_sendCancelledReminders, "se
+ export const cancelScheduledMessagesAndScheduleEmails = withReporting(
+   _cancelScheduledMessagesAndScheduleEmails,
+   "cancelScheduledMessagesAndScheduleEmails"
+-);
++);
+\ No newline at end of file
+diff --git a/packages/features/ee/workflows/repositories/WorkflowReminderRepository.ts b/packages/features/ee/workflows/repositories/WorkflowReminderRepository.ts
+deleted file mode 100644
+index c69a058..0000000
+--- a/packages/features/ee/workflows/repositories/WorkflowReminderRepository.ts
++++ /dev/null
+@@ -1,122 +0,0 @@
+-// import { prisma as this.prismaClient } from "@calcom/prisma";
+-import type { PrismaClient } from "@calcom/prisma";
+-import { WorkflowMethods } from "@calcom/prisma/enums";
+-
+-export class WorkflowReminderRepository {
+-  constructor(private prismaClient: PrismaClient) {}
+-
+-  async findScheduledMessagesToCancel({
+-    teamId,
+-    userIdsWithNoCredits,
+-  }: {
+-    teamId?: number | null;
+-    userIdsWithNoCredits: number[];
+-  }) {
+-    return this.prismaClient.workflowReminder.findMany({
+-      where: {
+-        workflowStep: {
+-          workflow: {
+-            OR: [
+-              {
+-                userId: {
+-                  in: userIdsWithNoCredits,
+-                },
+-              },
+-              ...(teamId ? [{ teamId }] : []),
+-            ],
+-          },
+-        },
+-        scheduled: true,
+-        OR: [{ cancelled: false }, { cancelled: null }],
+-        referenceId: {
+-          not: null,
+-        },
+-        method: {
+-          in: [WorkflowMethods.SMS, WorkflowMethods.WHATSAPP],
+-        },
+-      },
+-      select: {
+-        referenceId: true,
+-        workflowStep: {
+-          select: {
+-            action: true,
+-          },
+-        },
+-        scheduledDate: true,
+-        uuid: true,
+-        id: true,
+-        booking: {
+-          select: {
+-            attendees: {
+-              select: {
+-                email: true,
+-                locale: true,
+-              },
+-            },
+-            user: {
+-              select: {
+-                email: true,
+-              },
+-            },
+-          },
+-        },
+-      },
+-    });
+-  }
+-
+-  async updateRemindersToEmail({ reminderIds }: { reminderIds: number[] }) {
+-    return this.prismaClient.workflowReminder.updateMany({
+-      where: {
+-        id: {
+-          in: reminderIds,
+-        },
+-      },
+-      data: {
+-        method: WorkflowMethods.EMAIL,
+-        referenceId: null,
+-      },
+-    });
+-  }
+-
+-  async create({
+-    bookingUid,
+-    workflowStepId,
+-    method,
+-    scheduledDate,
+-    scheduled,
+-    seatReferenceUid,
+-  }: {
+-    bookingUid: string;
+-    workflowStepId: number;
+-    method: WorkflowMethods;
+-    scheduledDate: Date;
+-    scheduled: boolean;
+-    seatReferenceUid?: string;
+-  }) {
+-    return this.prismaClient.workflowReminder.create({
+-      data: {
+-        bookingUid,
+-        workflowStepId,
+-        method,
+-        scheduledDate,
+-        scheduled,
+-        ...(seatReferenceUid && { seatReferenceUid }),
+-      },
+-    });
+-  }
+-
+-  findByIdIncludeStepAndWorkflow(id: number) {
+-    return this.prismaClient.workflowReminder.findUnique({
+-      where: {
+-        id,
+-      },
+-      include: {
+-        workflowStep: {
+-          include: {
+-            workflow: true,
+-          },
+-        },
+-      },
+-    });
+-  }
+-}

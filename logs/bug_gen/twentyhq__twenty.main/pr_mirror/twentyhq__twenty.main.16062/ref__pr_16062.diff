@@ -1,0 +1,438 @@
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/commands/messaging-process-folder-actions.cron.command.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/commands/messaging-process-folder-actions.cron.command.ts
+deleted file mode 100644
+index 84f97a2433970..0000000000000
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/commands/messaging-process-folder-actions.cron.command.ts
++++ /dev/null
+@@ -1,35 +0,0 @@
+-import { Command, CommandRunner } from 'nest-commander';
+-
+-import { InjectMessageQueue } from 'src/engine/core-modules/message-queue/decorators/message-queue.decorator';
+-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+-import { MessageQueueService } from 'src/engine/core-modules/message-queue/services/message-queue.service';
+-import {
+-  MESSAGING_PROCESS_FOLDER_ACTIONS_CRON_PATTERN,
+-  MessagingProcessFolderActionsCronJob,
+-} from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-process-folder-actions.cron.job';
+-
+-@Command({
+-  name: 'cron:messaging:process-folder-actions',
+-  description:
+-    'Starts a cron job to process pending folder actions (deletion) for message channels',
+-})
+-export class MessagingProcessFolderActionsCronCommand extends CommandRunner {
+-  constructor(
+-    @InjectMessageQueue(MessageQueue.cronQueue)
+-    private readonly messageQueueService: MessageQueueService,
+-  ) {
+-    super();
+-  }
+-
+-  async run(): Promise<void> {
+-    await this.messageQueueService.addCron<undefined>({
+-      jobName: MessagingProcessFolderActionsCronJob.name,
+-      data: undefined,
+-      options: {
+-        repeat: {
+-          pattern: MESSAGING_PROCESS_FOLDER_ACTIONS_CRON_PATTERN,
+-        },
+-      },
+-    });
+-  }
+-}
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-process-folder-actions.cron.job.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-process-folder-actions.cron.job.ts
+deleted file mode 100644
+index 95298dc3bd224..0000000000000
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-process-folder-actions.cron.job.ts
++++ /dev/null
+@@ -1,76 +0,0 @@
+-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+-
+-import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
+-import { DataSource, Repository } from 'typeorm';
+-
+-import { SentryCronMonitor } from 'src/engine/core-modules/cron/sentry-cron-monitor.decorator';
+-import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
+-import { InjectMessageQueue } from 'src/engine/core-modules/message-queue/decorators/message-queue.decorator';
+-import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
+-import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
+-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+-import { MessageQueueService } from 'src/engine/core-modules/message-queue/services/message-queue.service';
+-import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+-import { getWorkspaceSchemaName } from 'src/engine/workspace-datasource/utils/get-workspace-schema-name.util';
+-import { MessageFolderPendingSyncAction } from 'src/modules/messaging/common/standard-objects/message-folder.workspace-entity';
+-import {
+-  MessagingProcessFolderActionsJob,
+-  type MessagingProcessFolderActionsJobData,
+-} from 'src/modules/messaging/message-import-manager/jobs/messaging-process-folder-actions.job';
+-
+-export const MESSAGING_PROCESS_FOLDER_ACTIONS_CRON_PATTERN = '*/15 * * * *';
+-
+-@Processor(MessageQueue.cronQueue)
+-export class MessagingProcessFolderActionsCronJob {
+-  constructor(
+-    @InjectRepository(WorkspaceEntity)
+-    private readonly workspaceRepository: Repository<WorkspaceEntity>,
+-    @InjectMessageQueue(MessageQueue.messagingQueue)
+-    private readonly messageQueueService: MessageQueueService,
+-    @InjectDataSource()
+-    private readonly coreDataSource: DataSource,
+-    private readonly exceptionHandlerService: ExceptionHandlerService,
+-  ) {}
+-
+-  @Process(MessagingProcessFolderActionsCronJob.name)
+-  @SentryCronMonitor(
+-    MessagingProcessFolderActionsCronJob.name,
+-    MESSAGING_PROCESS_FOLDER_ACTIONS_CRON_PATTERN,
+-  )
+-  async handle(): Promise<void> {
+-    const activeWorkspaces = await this.workspaceRepository.find({
+-      where: {
+-        activationStatus: WorkspaceActivationStatus.ACTIVE,
+-      },
+-    });
+-
+-    for (const activeWorkspace of activeWorkspaces) {
+-      try {
+-        const schemaName = getWorkspaceSchemaName(activeWorkspace.id);
+-
+-        const messageChannels = await this.coreDataSource.query(
+-          `SELECT DISTINCT mc.id
+-           FROM ${schemaName}."messageChannel" mc
+-           INNER JOIN ${schemaName}."messageFolder" mf ON mf."messageChannelId" = mc.id
+-           WHERE mf."pendingSyncAction" = '${MessageFolderPendingSyncAction.FOLDER_DELETION}'`,
+-        );
+-
+-        for (const messageChannel of messageChannels) {
+-          await this.messageQueueService.add<MessagingProcessFolderActionsJobData>(
+-            MessagingProcessFolderActionsJob.name,
+-            {
+-              workspaceId: activeWorkspace.id,
+-              messageChannelId: messageChannel.id,
+-            },
+-          );
+-        }
+-      } catch (error) {
+-        this.exceptionHandlerService.captureExceptions([error], {
+-          workspace: {
+-            id: activeWorkspace.id,
+-          },
+-        });
+-      }
+-    }
+-  }
+-}
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/jobs/messaging-process-folder-actions.job.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/jobs/messaging-process-folder-actions.job.ts
+deleted file mode 100644
+index 1fe47a92e2d88..0000000000000
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/jobs/messaging-process-folder-actions.job.ts
++++ /dev/null
+@@ -1,92 +0,0 @@
+-import { Logger, Scope } from '@nestjs/common';
+-
+-import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
+-import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
+-import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+-import { TwentyORMManager } from 'src/engine/twenty-orm/twenty-orm.manager';
+-import { type MessageChannelWorkspaceEntity } from 'src/modules/messaging/common/standard-objects/message-channel.workspace-entity';
+-import {
+-  MessageFolderPendingSyncAction,
+-  type MessageFolderWorkspaceEntity,
+-} from 'src/modules/messaging/common/standard-objects/message-folder.workspace-entity';
+-import { MessagingProcessFolderActionsService } from 'src/modules/messaging/message-import-manager/services/messaging-process-folder-actions.service';
+-
+-export type MessagingProcessFolderActionsJobData = {
+-  workspaceId: string;
+-  messageChannelId: string;
+-};
+-
+-@Processor({
+-  queueName: MessageQueue.messagingQueue,
+-  scope: Scope.REQUEST,
+-})
+-export class MessagingProcessFolderActionsJob {
+-  private readonly logger = new Logger(MessagingProcessFolderActionsJob.name);
+-
+-  constructor(
+-    private readonly twentyORMManager: TwentyORMManager,
+-    private readonly messagingProcessFolderActionsService: MessagingProcessFolderActionsService,
+-  ) {}
+-
+-  @Process(MessagingProcessFolderActionsJob.name)
+-  async handle(data: MessagingProcessFolderActionsJobData): Promise<void> {
+-    const { workspaceId, messageChannelId } = data;
+-
+-    this.logger.log(
+-      `Processing pending folder actions for message channel ${messageChannelId} in workspace ${workspaceId}`,
+-    );
+-
+-    const messageChannelRepository =
+-      await this.twentyORMManager.getRepository<MessageChannelWorkspaceEntity>(
+-        'messageChannel',
+-      );
+-
+-    const messageChannel = await messageChannelRepository.findOne({
+-      where: {
+-        id: messageChannelId,
+-      },
+-    });
+-
+-    if (!messageChannel) {
+-      this.logger.warn(
+-        `Message channel ${messageChannelId} not found in workspace ${workspaceId}`,
+-      );
+-
+-      return;
+-    }
+-
+-    const messageFolderRepository =
+-      await this.twentyORMManager.getRepository<MessageFolderWorkspaceEntity>(
+-        'messageFolder',
+-      );
+-
+-    const messageFolders = await messageFolderRepository.find({
+-      where: {
+-        messageChannelId: messageChannel.id,
+-        pendingSyncAction: MessageFolderPendingSyncAction.FOLDER_DELETION,
+-      },
+-    });
+-
+-    if (messageFolders.length === 0) {
+-      this.logger.log(
+-        `Message channel ${messageChannelId} has no folders with pending deletion actions, skipping`,
+-      );
+-
+-      return;
+-    }
+-
+-    try {
+-      await this.messagingProcessFolderActionsService.processFolderActions(
+-        messageChannel,
+-        messageFolders,
+-        workspaceId,
+-      );
+-    } catch (error) {
+-      this.logger.error(
+-        `Error processing folder actions for message channel ${messageChannelId} in workspace ${workspaceId}: ${error.message}`,
+-        error.stack,
+-      );
+-      throw error;
+-    }
+-  }
+-}
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/messaging-import-manager.module.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/messaging-import-manager.module.ts
+index aec2e14b86005..623ebaceb2951 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/messaging-import-manager.module.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/messaging-import-manager.module.ts
+@@ -18,12 +18,10 @@ import { MessagingSingleMessageImportCommand } from 'src/modules/messaging/messa
+ import { MessagingMessageListFetchCronCommand } from 'src/modules/messaging/message-import-manager/crons/commands/messaging-message-list-fetch.cron.command';
+ import { MessagingMessagesImportCronCommand } from 'src/modules/messaging/message-import-manager/crons/commands/messaging-messages-import.cron.command';
+ import { MessagingOngoingStaleCronCommand } from 'src/modules/messaging/message-import-manager/crons/commands/messaging-ongoing-stale.cron.command';
+-import { MessagingProcessFolderActionsCronCommand } from 'src/modules/messaging/message-import-manager/crons/commands/messaging-process-folder-actions.cron.command';
+ import { MessagingRelaunchFailedMessageChannelsCronCommand } from 'src/modules/messaging/message-import-manager/crons/commands/messaging-relaunch-failed-message-channels.cron.command';
+ import { MessagingMessageListFetchCronJob } from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-message-list-fetch.cron.job';
+ import { MessagingMessagesImportCronJob } from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-messages-import.cron.job';
+ import { MessagingOngoingStaleCronJob } from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-ongoing-stale.cron.job';
+-import { MessagingProcessFolderActionsCronJob } from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-process-folder-actions.cron.job';
+ import { MessagingRelaunchFailedMessageChannelsCronJob } from 'src/modules/messaging/message-import-manager/crons/jobs/messaging-relaunch-failed-message-channels.cron.job';
+ import { MessagingGmailDriverModule } from 'src/modules/messaging/message-import-manager/drivers/gmail/messaging-gmail-driver.module';
+ import { MessagingIMAPDriverModule } from 'src/modules/messaging/message-import-manager/drivers/imap/messaging-imap-driver.module';
+@@ -34,7 +32,6 @@ import { MessagingCleanCacheJob } from 'src/modules/messaging/message-import-man
+ import { MessagingMessageListFetchJob } from 'src/modules/messaging/message-import-manager/jobs/messaging-message-list-fetch.job';
+ import { MessagingMessagesImportJob } from 'src/modules/messaging/message-import-manager/jobs/messaging-messages-import.job';
+ import { MessagingOngoingStaleJob } from 'src/modules/messaging/message-import-manager/jobs/messaging-ongoing-stale.job';
+-import { MessagingProcessFolderActionsJob } from 'src/modules/messaging/message-import-manager/jobs/messaging-process-folder-actions.job';
+ import { MessagingRelaunchFailedMessageChannelJob } from 'src/modules/messaging/message-import-manager/jobs/messaging-relaunch-failed-message-channel.job';
+ import { MessagingMessageImportManagerMessageChannelListener } from 'src/modules/messaging/message-import-manager/listeners/messaging-import-manager-message-channel.listener';
+ import { MessagingAccountAuthenticationService } from 'src/modules/messaging/message-import-manager/services/messaging-account-authentication.service';
+@@ -83,18 +80,15 @@ import { MessagingMonitoringModule } from 'src/modules/messaging/monitoring/mess
+     MessagingMessageListFetchCronCommand,
+     MessagingMessagesImportCronCommand,
+     MessagingOngoingStaleCronCommand,
+-    MessagingProcessFolderActionsCronCommand,
+     MessagingRelaunchFailedMessageChannelsCronCommand,
+     MessagingSingleMessageImportCommand,
+     MessagingMessageListFetchJob,
+     MessagingMessagesImportJob,
+     MessagingOngoingStaleJob,
+-    MessagingProcessFolderActionsJob,
+     MessagingRelaunchFailedMessageChannelJob,
+     MessagingMessageListFetchCronJob,
+     MessagingMessagesImportCronJob,
+     MessagingOngoingStaleCronJob,
+-    MessagingProcessFolderActionsCronJob,
+     MessagingRelaunchFailedMessageChannelsCronJob,
+     MessagingAddSingleMessageToCacheForImportJob,
+     MessagingMessageImportManagerMessageChannelListener,
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.spec.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.spec.ts
+index 6c6c14a77f4c3..1f24fbd578465 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.spec.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.spec.ts
+@@ -16,6 +16,7 @@ import { MessagingGetMessageListService } from 'src/modules/messaging/message-im
+ import { MessageImportExceptionHandlerService } from 'src/modules/messaging/message-import-manager/services/messaging-import-exception-handler.service';
+ import { MessagingMessageListFetchService } from 'src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service';
+ import { MessagingMessagesImportService } from 'src/modules/messaging/message-import-manager/services/messaging-messages-import.service';
++import { MessagingProcessFolderActionsService } from 'src/modules/messaging/message-import-manager/services/messaging-process-folder-actions.service';
+ import { MessagingProcessGroupEmailActionsService } from 'src/modules/messaging/message-import-manager/services/messaging-process-group-email-actions.service';
+ 
+ describe('MessagingMessageListFetchService', () => {
+@@ -78,15 +79,21 @@ describe('MessagingMessageListFetchService', () => {
+     };
+ 
+     const mockMessageFolderRepository = {
+-      find: jest.fn().mockResolvedValue([
+-        {
+-          id: 'inbox-folder-id',
+-          name: 'inbox',
+-          syncCursor: 'inbox-sync-cursor',
+-          messageChannelId: 'microsoft-message-channel-id',
+-          isSynced: true,
+-        },
+-      ]),
++      find: jest.fn().mockImplementation(({ where }) => {
++        if (where?.pendingSyncAction === 'FOLDER_DELETION') {
++          return [];
++        }
++
++        return [
++          {
++            id: 'inbox-folder-id',
++            name: 'inbox',
++            syncCursor: 'inbox-sync-cursor',
++            messageChannelId: 'microsoft-message-channel-id',
++            isSynced: true,
++          },
++        ];
++      }),
+     };
+ 
+     const module: TestingModule = await Test.createTestingModule({
+@@ -238,6 +245,12 @@ describe('MessagingMessageListFetchService', () => {
+             processGroupEmailActions: jest.fn().mockResolvedValue(undefined),
+           },
+         },
++        {
++          provide: MessagingProcessFolderActionsService,
++          useValue: {
++            processFolderActions: jest.fn().mockResolvedValue(undefined),
++          },
++        },
+       ],
+     }).compile();
+ 
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.ts
+index 067742bfe16b3..bdff77fb58bd0 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-message-list-fetch.service.ts
+@@ -30,6 +30,7 @@ import {
+   MessageImportSyncStep,
+ } from 'src/modules/messaging/message-import-manager/services/messaging-import-exception-handler.service';
+ import { MessagingMessagesImportService } from 'src/modules/messaging/message-import-manager/services/messaging-messages-import.service';
++import { MessagingProcessFolderActionsService } from 'src/modules/messaging/message-import-manager/services/messaging-process-folder-actions.service';
+ import { MessagingProcessGroupEmailActionsService } from 'src/modules/messaging/message-import-manager/services/messaging-process-group-email-actions.service';
+ 
+ const ONE_WEEK_IN_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+@@ -50,6 +51,7 @@ export class MessagingMessageListFetchService {
+     private readonly messagingAccountAuthenticationService: MessagingAccountAuthenticationService,
+     private readonly syncMessageFoldersService: SyncMessageFoldersService,
+     private readonly messagingProcessGroupEmailActionsService: MessagingProcessGroupEmailActionsService,
++    private readonly messagingProcessFolderActionsService: MessagingProcessFolderActionsService,
+   ) {}
+ 
+   public async processMessageListFetch(
+@@ -57,21 +59,17 @@ export class MessagingMessageListFetchService {
+     workspaceId: string,
+   ) {
+     try {
+-      if (
+-        messageChannel.pendingGroupEmailsAction ===
+-          MessageChannelPendingGroupEmailsAction.GROUP_EMAILS_DELETION ||
+-        messageChannel.pendingGroupEmailsAction ===
+-          MessageChannelPendingGroupEmailsAction.GROUP_EMAILS_IMPORT
+-      ) {
+-        this.logger.log(
+-          `messageChannelId: ${messageChannel.id} Processing pending group emails action before message list fetch: ${messageChannel.pendingGroupEmailsAction}`,
+-        );
++      const pendingGroupEmailActionsProcessed =
++        await this.processPendingGroupEmailActions(messageChannel, workspaceId);
+ 
+-        await this.messagingProcessGroupEmailActionsService.processGroupEmailActions(
+-          messageChannel,
+-          workspaceId,
+-        );
++      if (pendingGroupEmailActionsProcessed) {
++        return;
++      }
++
++      const pendingFolderActionsProcessed =
++        await this.processPendingFolderActions(messageChannel, workspaceId);
+ 
++      if (pendingFolderActionsProcessed) {
+         return;
+       }
+ 
+@@ -288,6 +286,65 @@ export class MessagingMessageListFetchService {
+     }
+   }
+ 
++  private async processPendingGroupEmailActions(
++    messageChannel: MessageChannelWorkspaceEntity,
++    workspaceId: string,
++  ): Promise<boolean> {
++    const hasPendingGroupEmailAction =
++      messageChannel.pendingGroupEmailsAction ===
++        MessageChannelPendingGroupEmailsAction.GROUP_EMAILS_DELETION ||
++      messageChannel.pendingGroupEmailsAction ===
++        MessageChannelPendingGroupEmailsAction.GROUP_EMAILS_IMPORT;
++
++    if (!hasPendingGroupEmailAction) {
++      return false;
++    }
++
++    this.logger.log(
++      `messageChannelId: ${messageChannel.id} Processing pending group emails action before message list fetch: ${messageChannel.pendingGroupEmailsAction}`,
++    );
++
++    await this.messagingProcessGroupEmailActionsService.processGroupEmailActions(
++      messageChannel,
++      workspaceId,
++    );
++
++    return true;
++  }
++
++  private async processPendingFolderActions(
++    messageChannel: MessageChannelWorkspaceEntity,
++    workspaceId: string,
++  ): Promise<boolean> {
++    const messageFolderRepository =
++      await this.twentyORMManager.getRepository<MessageFolderWorkspaceEntity>(
++        'messageFolder',
++      );
++
++    const foldersWithPendingActions = await messageFolderRepository.find({
++      where: {
++        messageChannelId: messageChannel.id,
++        pendingSyncAction: MessageFolderPendingSyncAction.FOLDER_DELETION,
++      },
++    });
++
++    if (foldersWithPendingActions.length === 0) {
++      return false;
++    }
++
++    this.logger.log(
++      `messageChannelId: ${messageChannel.id} Processing pending folder actions before message list fetch`,
++    );
++
++    await this.messagingProcessFolderActionsService.processFolderActions(
++      messageChannel,
++      foldersWithPendingActions,
++      workspaceId,
++    );
++
++    return true;
++  }
++
+   private async computeFullSyncMessageChannelMessageAssociationsToDelete(
+     messageChannel: Pick<MessageChannelWorkspaceEntity, 'id'>,
+     messageExternalIds: string[],

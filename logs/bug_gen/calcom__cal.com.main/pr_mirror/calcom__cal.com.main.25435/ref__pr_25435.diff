@@ -1,0 +1,58 @@
+diff --git a/packages/features/auth/lib/next-auth-options.ts b/packages/features/auth/lib/next-auth-options.ts
+index bab3b102745350..fedc3e958a3b9a 100644
+--- a/packages/features/auth/lib/next-auth-options.ts
++++ b/packages/features/auth/lib/next-auth-options.ts
+@@ -15,8 +15,8 @@ import { LicenseKeySingleton } from "@calcom/ee/common/server/LicenseKeyService"
+ import { CredentialRepository } from "@calcom/features/credentials/repositories/CredentialRepository";
+ import createUsersAndConnectToOrg from "@calcom/features/ee/dsync/lib/users/createUsersAndConnectToOrg";
+ import ImpersonationProvider from "@calcom/features/ee/impersonation/lib/ImpersonationProvider";
+-import { getOrgFullOrigin, subdomainSuffix } from "@calcom/features/ee/organizations/lib/orgDomains";
+ import { getOrganizationRepository } from "@calcom/features/ee/organizations/di/OrganizationRepository.container";
++import { getOrgFullOrigin, subdomainSuffix } from "@calcom/features/ee/organizations/lib/orgDomains";
+ import { clientSecretVerifier, hostedCal, isSAMLLoginEnabled } from "@calcom/features/ee/sso/lib/saml";
+ import { ProfileRepository } from "@calcom/features/profile/repositories/ProfileRepository";
+ import { UserRepository } from "@calcom/features/users/repositories/UserRepository";
+@@ -962,7 +962,7 @@ export const getOptions = ({
+                 email: user.email,
+                 // Slugify the incoming name and append a few random characters to
+                 // prevent conflicts for users with the same name.
+-                username: getOrgUsernameFromEmail(user.name, getDomainFromEmail(user.email)),
++                username: getOrgUsernameFromEmail(user.email, getDomainFromEmail(user.email)),
+                 emailVerified: new Date(Date.now()),
+                 name: user.name,
+                 identityProvider: idP,
+diff --git a/packages/features/auth/signup/utils/getOrgUsernameFromEmail.test.ts b/packages/features/auth/signup/utils/getOrgUsernameFromEmail.test.ts
+index 62aa8aed79b13b..d5d1cdb1af5088 100644
+--- a/packages/features/auth/signup/utils/getOrgUsernameFromEmail.test.ts
++++ b/packages/features/auth/signup/utils/getOrgUsernameFromEmail.test.ts
+@@ -16,6 +16,30 @@ describe("getOrgUsernameFromEmail", () => {
+     const result = getOrgUsernameFromEmail(email, autoAcceptEmailDomain);
+     expect(result).toBe("john.doe-example");
+   });
++
++  it("should generate unique usernames for different emails even with same name", () => {
++    const email1 = "alice@acme.com";
++    const email2 = "alice+work@corp.com";
++
++    const username1 = getOrgUsernameFromEmail(email1, null);
++    const username2 = getOrgUsernameFromEmail(email2, null);
++
++    expect(username1).toBe("alice-acme");
++    expect(username2).toBe("alice-work-corp");
++    expect(username1).not.toBe(username2);
++  });
++
++  it("should handle email with plus sign correctly", () => {
++    const email = "bob+test@example.com";
++    const result = getOrgUsernameFromEmail(email, "example.com");
++    expect(result).toBe("bob-test");
++  });
++
++  it("should handle null autoAcceptEmailDomain", () => {
++    const email = "user@company.com";
++    const result = getOrgUsernameFromEmail(email, null);
++    expect(result).toBe("user-company");
++  });
+ });
+ 
+ describe("deriveNameFromOrgUsername", () => {

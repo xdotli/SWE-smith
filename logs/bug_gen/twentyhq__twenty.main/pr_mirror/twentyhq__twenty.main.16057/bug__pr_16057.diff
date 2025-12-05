@@ -1,0 +1,805 @@
+diff --git a/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts b/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
+index b0c2b5d2..d4a4b662 100644
+--- a/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
++++ b/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
+@@ -64,5 +64,5 @@ export const useSignInUpForm = () => {
+       form.setValue('password', 'tim@apple.dev');
+     }
+   }, [form, isDeveloperDefaultSignInPrefilled, prefilledEmail]);
+-  return { form };
+-};
++  return { form: form };
++};
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts b/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
+index b532f787..a98e2629 100644
+--- a/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
+@@ -106,25 +106,13 @@ describe('CreatedByFromAuthContextService', () => {
+       const authContext = {
+         workspaceMemberId: '20202020-0b5c-4178-bed7-d371f6411eaa',
+         user: {
+-          firstName: '',
+-          lastName: '',
++          firstName: 'John',
++          lastName: 'Doe',
+           id: '20202020-9aae-49a8-bafc-ac44bae62d6d',
+         },
+         workspace: { id: '20202020-bdec-497f-847a-1bb334fefe58' },
+       } as const satisfies TestingAuthContext;
+ 
+-      const mockedWorkspaceMember = {
+-        id: '20202020-0b5c-4178-bed7-d371f6411eaa',
+-        name: {
+-          firstName: 'John',
+-          lastName: 'Doe',
+-        },
+-      } as const satisfies Partial<WorkspaceMemberWorkspaceEntity>;
+-
+-      mockWorkspaceMemberRepository.findOneOrFail.mockResolvedValueOnce(
+-        mockedWorkspaceMember,
+-      );
+-
+       const result = await service.injectCreatedBy(
+         [{}],
+         'person',
+@@ -135,7 +123,7 @@ describe('CreatedByFromAuthContextService', () => {
+         {
+           createdBy: {
+             context: {},
+-            name: fromFullNameMetadataToName(mockedWorkspaceMember.name),
++            name: fromFullNameMetadataToName(authContext.user),
+             workspaceMemberId: authContext.workspaceMemberId,
+             source: FieldActorSource.MANUAL,
+           },
+@@ -222,4 +210,4 @@ describe('CreatedByFromAuthContextService', () => {
+       );
+     });
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts b/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
+index fd7b6603..a17ab7f5 100644
+--- a/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
+@@ -104,11 +104,24 @@ export class CreatedByFromAuthContextService {
+   private async buildCreatedBy(
+     authContext: AuthContext,
+   ): Promise<ActorMetadata> {
+-    const { workspace, user, apiKey } = authContext;
++    const { workspace, workspaceMemberId, user, apiKey } = authContext;
+ 
+     assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
+ 
++    // TODO: remove that code once we have the workspace member id in all tokens
++    if (isDefined(workspaceMemberId) && isDefined(user)) {
++      return buildCreatedByFromFullNameMetadata({
++        fullNameMetadata: {
++          firstName: user.firstName,
++          lastName: user.lastName,
++        },
++        workspaceMemberId,
++      });
++    }
++
+     if (isDefined(user)) {
++      this.logger.warn("User doesn't have a workspace member id in the token");
++
+       const workspaceMemberRepository =
+         await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkspaceMemberWorkspaceEntity>(
+           workspace.id,
+@@ -138,4 +151,4 @@ export class CreatedByFromAuthContextService {
+       'Unable to build createdBy metadata - no valid actor information found in auth context',
+     );
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
+index 9229bd58..4c069622 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
+@@ -9,7 +9,6 @@ import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
+ import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
+ import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
+ import { FileModule } from 'src/engine/core-modules/file/file.module';
+-import { OnboardingModule } from 'src/engine/core-modules/onboarding/onboarding.module';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceResolver } from 'src/engine/core-modules/user-workspace/user-workspace.resolver';
+ import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
+@@ -47,7 +46,6 @@ import { WorkspaceDataSourceModule } from 'src/engine/workspace-datasource/works
+         FileModule,
+         TokenModule,
+         PermissionsModule,
+-        OnboardingModule,
+       ],
+       services: [UserWorkspaceService],
+     }),
+@@ -55,4 +53,4 @@ import { WorkspaceDataSourceModule } from 'src/engine/workspace-datasource/works
+   exports: [UserWorkspaceService],
+   providers: [UserWorkspaceService, UserWorkspaceResolver],
+ })
+-export class UserWorkspaceModule {}
++export class UserWorkspaceModule {}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
+index 517f1643..750104b1 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
+@@ -16,7 +16,6 @@ import {
+   type SignedFilesResult,
+ } from 'src/engine/core-modules/file/file-upload/services/file-upload.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
+-import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+@@ -39,7 +38,6 @@ describe('UserWorkspaceService', () => {
+   let userRoleService: UserRoleService;
+   let fileService: FileService;
+   let fileUploadService: FileUploadService;
+-  let onboardingService: OnboardingService;
+ 
+   beforeEach(async () => {
+     const module: TestingModule = await Test.createTestingModule({
+@@ -135,12 +133,6 @@ describe('UserWorkspaceService', () => {
+             copyFileFromWorkspaceToWorkspace: jest.fn(),
+           },
+         },
+-        {
+-          provide: OnboardingService,
+-          useValue: {
+-            setOnboardingCreateProfilePending: jest.fn(),
+-          },
+-        },
+       ],
+     }).compile();
+ 
+@@ -161,7 +153,6 @@ describe('UserWorkspaceService', () => {
+     );
+     userRoleService = module.get<UserRoleService>(UserRoleService);
+     fileUploadService = module.get<FileUploadService>(FileUploadService);
+-    onboardingService = module.get<OnboardingService>(OnboardingService);
+   });
+ 
+   it('should be defined', () => {
+@@ -408,535 +399,4 @@ describe('UserWorkspaceService', () => {
+         defaultRoleId: 'default-role-id',
+       } as WorkspaceEntity;
+       const userWorkspace = {
+-        id: 'user-workspace-id',
+-        userId: user.id,
+-        workspaceId: workspace.id,
+-      } as UserWorkspaceEntity;
+-
+-      jest.spyOn(service, 'checkUserWorkspaceExists').mockResolvedValue(null);
+-      jest.spyOn(service, 'create').mockResolvedValue(userWorkspace);
+-      jest.spyOn(service, 'createWorkspaceMember').mockResolvedValue(undefined);
+-      jest
+-        .spyOn(userRoleService, 'assignRoleToManyUserWorkspace')
+-        .mockResolvedValue(undefined);
+-      jest
+-        .spyOn(workspaceInvitationService, 'invalidateWorkspaceInvitation')
+-        .mockResolvedValue(undefined);
+-
+-      await service.addUserToWorkspaceIfUserNotInWorkspace(user, workspace);
+-
+-      expect(service.checkUserWorkspaceExists).toHaveBeenCalledWith(
+-        user.id,
+-        workspace.id,
+-      );
+-      expect(service.create).toHaveBeenCalled();
+-      expect(service.create).toHaveBeenCalledWith({
+-        workspaceId: workspace.id,
+-        userId: user.id,
+-        isExistingUser: true,
+-      });
+-      expect(service.createWorkspaceMember).toHaveBeenCalledWith(
+-        workspace.id,
+-        user,
+-      );
+-      expect(
+-        userRoleService.assignRoleToManyUserWorkspace,
+-      ).toHaveBeenCalledWith({
+-        workspaceId: workspace.id,
+-        userWorkspaceIds: [userWorkspace.id],
+-        roleId: workspace.defaultRoleId,
+-      });
+-      expect(
+-        workspaceInvitationService.invalidateWorkspaceInvitation,
+-      ).toHaveBeenCalledWith(workspace.id, user.email);
+-
+-      expect(
+-        onboardingService.setOnboardingCreateProfilePending,
+-      ).toHaveBeenCalledWith({
+-        userId: user.id,
+-        workspaceId: workspace.id,
+-        value: true,
+-      });
+-    });
+-
+-    it('should not add user to workspace if already in workspace', async () => {
+-      const user = {
+-        id: 'user-id',
+-        email: 'test@example.com',
+-      } as UserEntity;
+-      const workspace = {
+-        id: 'workspace-id',
+-        defaultRoleId: 'default-role-id',
+-      } as WorkspaceEntity;
+-      const userWorkspace = {
+-        id: 'user-workspace-id',
+-        userId: user.id,
+-        workspaceId: workspace.id,
+-      } as UserWorkspaceEntity;
+-
+-      jest
+-        .spyOn(service, 'checkUserWorkspaceExists')
+-        .mockResolvedValue(userWorkspace);
+-      jest.spyOn(service, 'create').mockResolvedValue(userWorkspace);
+-      jest.spyOn(service, 'createWorkspaceMember').mockResolvedValue(undefined);
+-
+-      await service.addUserToWorkspaceIfUserNotInWorkspace(user, workspace);
+-
+-      expect(service.checkUserWorkspaceExists).toHaveBeenCalledWith(
+-        user.id,
+-        workspace.id,
+-      );
+-      expect(service.create).not.toHaveBeenCalled();
+-      expect(service.createWorkspaceMember).not.toHaveBeenCalled();
+-    });
+-
+-    it('should throw an exception if workspace has no default role', async () => {
+-      const user = {
+-        id: 'user-id',
+-        email: 'test@example.com',
+-      } as UserEntity;
+-      const workspace = {
+-        id: 'workspace-id',
+-        defaultRoleId: undefined,
+-      } as unknown as WorkspaceEntity;
+-
+-      jest.spyOn(service, 'checkUserWorkspaceExists').mockResolvedValue(null);
+-      jest
+-        .spyOn(service, 'create')
+-        .mockResolvedValue({} as UserWorkspaceEntity);
+-      jest.spyOn(service, 'createWorkspaceMember').mockResolvedValue(undefined);
+-
+-      await expect(
+-        service.addUserToWorkspaceIfUserNotInWorkspace(user, workspace),
+-      ).rejects.toThrow(PermissionsException);
+-    });
+-  });
+-
+-  describe('getUserCount', () => {
+-    it('should return the count of users in a workspace', async () => {
+-      const workspaceId = 'workspace-id';
+-      const count = 5;
+-
+-      jest.spyOn(userWorkspaceRepository, 'countBy').mockResolvedValue(count);
+-
+-      const result = await service.getUserCount(workspaceId);
+-
+-      expect(userWorkspaceRepository.countBy).toHaveBeenCalledWith({
+-        workspaceId,
+-      });
+-      expect(result).toEqual(count);
+-    });
+-  });
+-
+-  describe('checkUserWorkspaceExists', () => {
+-    it('should check if a user workspace exists', async () => {
+-      const userId = 'user-id';
+-      const workspaceId = 'workspace-id';
+-      const userWorkspace = {
+-        userId,
+-        workspaceId,
+-      } as unknown as UserWorkspaceEntity;
+-
+-      jest
+-        .spyOn(userWorkspaceRepository, 'findOneBy')
+-        .mockResolvedValue(userWorkspace);
+-
+-      const result = await service.checkUserWorkspaceExists(
+-        userId,
+-        workspaceId,
+-      );
+-
+-      expect(userWorkspaceRepository.findOneBy).toHaveBeenCalledWith({
+-        userId,
+-        workspaceId,
+-      });
+-      expect(result).toEqual(userWorkspace);
+-    });
+-
+-    it('should return null if user workspace does not exist', async () => {
+-      const userId = 'user-id';
+-      const workspaceId = 'workspace-id';
+-
+-      jest.spyOn(userWorkspaceRepository, 'findOneBy').mockResolvedValue(null);
+-
+-      const result = await service.checkUserWorkspaceExists(
+-        userId,
+-        workspaceId,
+-      );
+-
+-      expect(userWorkspaceRepository.findOneBy).toHaveBeenCalledWith({
+-        userId,
+-        workspaceId,
+-      });
+-      expect(result).toBeNull();
+-    });
+-  });
+-
+-  describe('checkUserWorkspaceExistsByEmail', () => {
+-    it('should check if a user workspace exists by email', async () => {
+-      const email = 'test@example.com';
+-      const workspaceId = 'workspace-id';
+-
+-      jest.spyOn(userWorkspaceRepository, 'exists').mockResolvedValue(true);
+-
+-      const result = await service.checkUserWorkspaceExistsByEmail(
+-        email,
+-        workspaceId,
+-      );
+-
+-      expect(userWorkspaceRepository.exists).toHaveBeenCalledWith({
+-        where: {
+-          workspaceId,
+-          user: {
+-            email,
+-          },
+-        },
+-        relations: {
+-          user: true,
+-        },
+-      });
+-      expect(result).toBe(true);
+-    });
+-  });
+-
+-  describe('findAvailableWorkspacesByEmail', () => {
+-    it('should find available workspaces for an email', async () => {
+-      const email = 'test@example.com';
+-      const workspace1 = {
+-        id: 'workspace-id-1',
+-        displayName: 'Workspace 1',
+-        logo: 'logo1.png',
+-        workspaceSSOIdentityProviders: [
+-          {
+-            id: 'sso-id-1',
+-            name: 'SSO Provider 1',
+-            issuer: 'issuer1',
+-            type: 'type1',
+-            status: 'Active',
+-          },
+-          {
+-            id: 'sso-id-2',
+-            name: 'SSO Provider 2',
+-            issuer: 'issuer2',
+-            type: 'type2',
+-            status: 'Inactive',
+-          },
+-        ],
+-      } as unknown as WorkspaceEntity;
+-      const workspace2 = {
+-        id: 'workspace-id-2',
+-        displayName: 'Workspace 2',
+-        logo: 'logo2.png',
+-        workspaceSSOIdentityProviders: [],
+-      } as unknown as WorkspaceEntity;
+-      const user = {
+-        email,
+-        userWorkspaces: [
+-          {
+-            workspaceId: workspace1.id,
+-            workspace: workspace1,
+-          },
+-          {
+-            workspaceId: workspace2.id,
+-            workspace: workspace2,
+-          },
+-        ],
+-      } as UserEntity;
+-
+-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+-      jest
+-        .spyOn(
+-          approvedAccessDomainService,
+-          'findValidatedApprovedAccessDomainWithWorkspacesAndSSOIdentityProvidersDomain',
+-        )
+-        .mockResolvedValue([]);
+-
+-      jest
+-        .spyOn(workspaceInvitationService, 'findInvitationsByEmail')
+-        .mockResolvedValue([]);
+-
+-      const result = await service.findAvailableWorkspacesByEmail(email);
+-
+-      expect(userRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          email,
+-        },
+-        relations: {
+-          userWorkspaces: {
+-            workspace: {
+-              workspaceSSOIdentityProviders: true,
+-              approvedAccessDomains: true,
+-            },
+-          },
+-        },
+-      });
+-
+-      expect(result).toEqual({
+-        availableWorkspacesForSignIn: [
+-          { workspace: workspace1 },
+-          { workspace: workspace2 },
+-        ],
+-        availableWorkspacesForSignUp: [],
+-      });
+-    });
+-
+-    it('should find available workspaces including approved domain workspace for an email', async () => {
+-      const email = 'test@example.com';
+-      const workspace1 = {
+-        id: 'workspace-id-1',
+-        displayName: 'Workspace 1',
+-        logo: 'logo1.png',
+-        workspaceSSOIdentityProviders: [
+-          {
+-            id: 'sso-id-1',
+-            name: 'SSO Provider 1',
+-            issuer: 'issuer1',
+-            type: 'type1',
+-            status: 'Active',
+-          },
+-          {
+-            id: 'sso-id-2',
+-            name: 'SSO Provider 2',
+-            issuer: 'issuer2',
+-            type: 'type2',
+-            status: 'Inactive',
+-          },
+-        ],
+-      } as unknown as WorkspaceEntity;
+-      const workspace2 = {
+-        id: 'workspace-id-2',
+-        displayName: 'Workspace 2',
+-        logo: 'logo2.png',
+-        workspaceSSOIdentityProviders: [],
+-      } as unknown as WorkspaceEntity;
+-
+-      const user = {
+-        email,
+-        userWorkspaces: [
+-          {
+-            workspaceId: workspace1.id,
+-            workspace: workspace1,
+-          },
+-        ],
+-      } as UserEntity;
+-
+-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+-      jest
+-        .spyOn(
+-          approvedAccessDomainService,
+-          'findValidatedApprovedAccessDomainWithWorkspacesAndSSOIdentityProvidersDomain',
+-        )
+-        .mockResolvedValueOnce([
+-          {
+-            id: 'domain-id-2',
+-            workspaceId: workspace2.id,
+-            workspace: workspace2,
+-            isValidated: true,
+-          } as unknown as ApprovedAccessDomainEntity,
+-        ]);
+-
+-      jest
+-        .spyOn(workspaceInvitationService, 'findInvitationsByEmail')
+-        .mockResolvedValue([]);
+-
+-      const result = await service.findAvailableWorkspacesByEmail(email);
+-
+-      expect(userRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          email,
+-        },
+-        relations: {
+-          userWorkspaces: {
+-            workspace: {
+-              workspaceSSOIdentityProviders: true,
+-              approvedAccessDomains: true,
+-            },
+-          },
+-        },
+-      });
+-
+-      expect(result).toEqual({
+-        availableWorkspacesForSignIn: [{ workspace: workspace1 }],
+-        availableWorkspacesForSignUp: [{ workspace: workspace2 }],
+-      });
+-    });
+-
+-    it('should return workspace with approved access domain if user is not found', async () => {
+-      const email = 'nonexistent@example.com';
+-      const workspace1 = {
+-        id: 'workspace-id-1',
+-        displayName: 'Workspace 1',
+-        logo: 'logo1.png',
+-        workspaceSSOIdentityProviders: [],
+-      } as unknown as WorkspaceEntity;
+-
+-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+-
+-      jest
+-        .spyOn(
+-          approvedAccessDomainService,
+-          'findValidatedApprovedAccessDomainWithWorkspacesAndSSOIdentityProvidersDomain',
+-        )
+-        .mockResolvedValueOnce([
+-          {
+-            id: 'domain-id-1',
+-            workspaceId: workspace1.id,
+-            workspace: workspace1,
+-            isValidated: true,
+-          } as unknown as ApprovedAccessDomainEntity,
+-        ]);
+-
+-      jest
+-        .spyOn(workspaceInvitationService, 'findInvitationsByEmail')
+-        .mockResolvedValue([]);
+-
+-      const result = await service.findAvailableWorkspacesByEmail(email);
+-
+-      expect(result).toEqual({
+-        availableWorkspacesForSignIn: [],
+-        availableWorkspacesForSignUp: [{ workspace: workspace1 }],
+-      });
+-    });
+-  });
+-
+-  describe('findFirstWorkspaceByUserId', () => {
+-    it('should find the first workspace for a user', async () => {
+-      const userId = 'user-id';
+-      const workspace1 = {
+-        id: 'workspace-id',
+-        createdAt: '2025-01-02T00:00:00.000Z',
+-      } as unknown as WorkspaceEntity;
+-      const workspace2 = {
+-        id: 'workspace-id-2',
+-        createdAt: '2025-01-01T00:00:00.000Z',
+-      } as unknown as WorkspaceEntity;
+-      const user = {
+-        id: userId,
+-        userWorkspaces: [{ workspace: workspace1 }, { workspace: workspace2 }],
+-      } as unknown as UserEntity;
+-
+-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+-
+-      const result = await service.findFirstWorkspaceByUserId(userId);
+-
+-      expect(userRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          id: userId,
+-        },
+-        relations: { userWorkspaces: { workspace: true } },
+-        order: {
+-          userWorkspaces: {
+-            workspace: {
+-              createdAt: 'ASC',
+-            },
+-          },
+-        },
+-      });
+-      expect(result).toEqual(workspace1);
+-    });
+-
+-    it('should throw an exception if no workspace is found', async () => {
+-      const userId = 'user-id';
+-      const user = {
+-        id: userId,
+-        workspaces: [],
+-      } as unknown as UserEntity;
+-
+-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+-
+-      await expect(service.findFirstWorkspaceByUserId(userId)).rejects.toThrow(
+-        AuthException,
+-      );
+-    });
+-  });
+-
+-  describe('getUserWorkspaceForUserOrThrow', () => {
+-    it('should get a user workspace or throw', async () => {
+-      const userId = 'user-id';
+-      const workspaceId = 'workspace-id';
+-      const userWorkspace = {
+-        userId,
+-        workspaceId,
+-      } as unknown as UserWorkspaceEntity;
+-
+-      jest
+-        .spyOn(userWorkspaceRepository, 'findOne')
+-        .mockResolvedValue(userWorkspace);
+-
+-      const result = await service.getUserWorkspaceForUserOrThrow({
+-        userId,
+-        workspaceId,
+-      });
+-
+-      expect(userWorkspaceRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          userId,
+-          workspaceId,
+-        },
+-        relations: ['twoFactorAuthenticationMethods'],
+-      });
+-      expect(result).toEqual(userWorkspace);
+-    });
+-
+-    it('should throw an exception if user workspace is not found', async () => {
+-      const userId = 'user-id';
+-      const workspaceId = 'workspace-id';
+-
+-      jest.spyOn(userWorkspaceRepository, 'findOne').mockResolvedValue(null);
+-
+-      await expect(
+-        service.getUserWorkspaceForUserOrThrow({ userId, workspaceId }),
+-      ).rejects.toThrow('User workspace not found');
+-    });
+-  });
+-
+-  describe('getWorkspaceMemberOrThrow', () => {
+-    it('should get a workspace member or throw', async () => {
+-      const workspaceMemberId = 'workspace-member-id';
+-      const workspaceId = 'workspace-id';
+-      const workspaceMember = {
+-        id: workspaceMemberId,
+-      } as WorkspaceEntity;
+-      const workspaceMemberRepository = {
+-        findOne: jest.fn().mockResolvedValue(workspaceMember),
+-      };
+-
+-      jest
+-        .spyOn(twentyORMGlobalManager, 'getRepositoryForWorkspace')
+-        .mockResolvedValue(workspaceMemberRepository as any);
+-
+-      const result = await service.getWorkspaceMemberOrThrow({
+-        workspaceMemberId,
+-        workspaceId,
+-      });
+-
+-      expect(
+-        twentyORMGlobalManager.getRepositoryForWorkspace,
+-      ).toHaveBeenCalledWith(workspaceId, 'workspaceMember', {
+-        shouldBypassPermissionChecks: true,
+-      });
+-      expect(workspaceMemberRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          id: workspaceMemberId,
+-        },
+-      });
+-      expect(result).toEqual(workspaceMember);
+-    });
+-
+-    it('should throw an exception if workspace member is not found', async () => {
+-      const workspaceMemberId = 'workspace-member-id';
+-      const workspaceId = 'workspace-id';
+-      const workspaceMemberRepository = {
+-        findOne: jest.fn().mockResolvedValue(null),
+-      };
+-
+-      jest
+-        .spyOn(twentyORMGlobalManager, 'getRepositoryForWorkspace')
+-        .mockResolvedValue(workspaceMemberRepository as any);
+-
+-      await expect(
+-        service.getWorkspaceMemberOrThrow({ workspaceMemberId, workspaceId }),
+-      ).rejects.toThrow('Workspace member not found');
+-    });
+-  });
+-});
++        id: '
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
+index 5a407ec5..86a5273d 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
+@@ -19,7 +19,6 @@ import { LoginTokenService } from 'src/engine/core-modules/auth/token/services/l
+ import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
+ import { FileUploadService } from 'src/engine/core-modules/file/file-upload/services/file-upload.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
+-import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+ import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
+@@ -54,7 +53,6 @@ export class UserWorkspaceService extends TypeOrmQueryService<UserWorkspaceEntit
+     private readonly userRoleService: UserRoleService,
+     private readonly fileUploadService: FileUploadService,
+     private readonly fileService: FileService,
+-    private readonly onboardingService: OnboardingService,
+   ) {
+     super(userWorkspaceRepository);
+   }
+@@ -441,56 +439,4 @@ export class UserWorkspaceService extends TypeOrmQueryService<UserWorkspaceEntit
+                     },
+                   ],
+             ),
+-          [] as AvailableWorkspace['sso'],
+-        ) ?? [],
+-    };
+-  }
+-
+-  async setLoginTokenToAvailableWorkspacesWhenAuthProviderMatch(
+-    availableWorkspaces: {
+-      availableWorkspacesForSignUp: Array<{
+-        workspace: WorkspaceEntity;
+-        appToken?: AppTokenEntity;
+-      }>;
+-      availableWorkspacesForSignIn: Array<{
+-        workspace: WorkspaceEntity;
+-        appToken?: AppTokenEntity;
+-      }>;
+-    },
+-    user: UserEntity,
+-    authProvider: AuthProviderEnum,
+-  ) {
+-    return {
+-      availableWorkspacesForSignUp:
+-        availableWorkspaces.availableWorkspacesForSignUp.map(
+-          ({ workspace, appToken }) => {
+-            return {
+-              ...this.castWorkspaceToAvailableWorkspace(workspace),
+-              ...(appToken ? { personalInviteToken: appToken.value } : {}),
+-            };
+-          },
+-        ),
+-      availableWorkspacesForSignIn: await Promise.all(
+-        availableWorkspaces.availableWorkspacesForSignIn.map(
+-          async ({ workspace }) => {
+-            return {
+-              ...this.castWorkspaceToAvailableWorkspace(workspace),
+-              loginToken: workspaceValidator.isAuthEnabled(
+-                authProvider,
+-                workspace,
+-              )
+-                ? (
+-                    await this.loginTokenService.generateLoginToken(
+-                      user.email,
+-                      workspace.id,
+-                      AuthProviderEnum.Password,
+-                    )
+-                  ).token
+-                : undefined,
+-            };
+-          },
+-        ),
+-      ),
+-    };
+-  }
+-}
++          [] as Available
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts b/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
+index 97260aed..bfb0b912 100644
+--- a/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
++++ b/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
+@@ -4,7 +4,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
+ import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
+-import { UserModule } from 'src/engine/core-modules/user/user.module';
+ import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
+ import { WorkspaceMemberCreateManyPreQueryHook } from 'src/modules/workspace-member/query-hooks/workspace-member-create-many.pre-query.hook';
+ import { WorkspaceMemberCreateOnePreQueryHook } from 'src/modules/workspace-member/query-hooks/workspace-member-create-one.pre-query.hook';
+@@ -39,7 +38,6 @@ import { WorkspaceMemberUpdateOnePreQueryHook } from 'src/modules/workspace-memb
+     PermissionsModule,
+     UserWorkspaceModule,
+     TypeOrmModule.forFeature([UserWorkspaceEntity]),
+-    UserModule,
+   ],
+ })
+-export class WorkspaceMemberQueryHookModule {}
++export class WorkspaceMemberQueryHookModule {}
+\ No newline at end of file

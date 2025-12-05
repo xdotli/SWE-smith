@@ -1,0 +1,188 @@
+diff --git a/apps/web/lib/middleware/utils/get-identity-hash.ts b/apps/web/lib/middleware/utils/get-identity-hash.ts
+index 4609fff..e40203a 100644
+--- a/apps/web/lib/middleware/utils/get-identity-hash.ts
++++ b/apps/web/lib/middleware/utils/get-identity-hash.ts
+@@ -1,12 +1,25 @@
+ import { LOCALHOST_IP, hashStringSHA256 } from "@dub/utils";
+ import { ipAddress } from "@vercel/functions";
+ import { userAgent } from "next/server";
++import { DUB_TEST_IDENTITY_HEADER } from "tests/utils/resource";
+ 
+ /**
+  * Combine IP + UA to create a unique identifier for the user (for deduplication)
+  */
+ export async function getIdentityHash(req: Request) {
++  // If provided, use this identity directly (for E2E)
++  if (
++    process.env.NODE_ENV === "development" ||
++    process.env.VERCEL_ENV === "preview"
++  ) {
++    const testOverride = req.headers.get(DUB_TEST_IDENTITY_HEADER);
++
++    if (testOverride) {
++      return await hashStringSHA256(testOverride);
++    }
++  }
++
+   const ip = ipAddress(req) || LOCALHOST_IP;
+   const ua = userAgent(req);
+   return await hashStringSHA256(`${ip}-${ua.ua}`);
+-}
++}
+\ No newline at end of file
+diff --git a/apps/web/tests/fraud/index.test.ts b/apps/web/tests/fraud/index.test.ts
+index d784a54..ef1277e 100644
+--- a/apps/web/tests/fraud/index.test.ts
++++ b/apps/web/tests/fraud/index.test.ts
+@@ -1,15 +1,14 @@
+-import { Customer, TrackLeadResponse } from "@/lib/types";
+-import { fraudEventSchemas } from "@/lib/zod/schemas/fraud";
++import { Customer, fraudEventGroupProps, TrackLeadResponse } from "@/lib/types";
+ import { FraudRuleType } from "@prisma/client";
+-import { randomCustomer, retry } from "tests/utils/helpers";
++import { randomCustomer, randomId, retry } from "tests/utils/helpers";
+ import { HttpClient } from "tests/utils/http";
+ import {
++  DUB_TEST_IDENTITY_HEADER,
+   E2E_FRAUD_PARTNER,
+   E2E_FRAUD_REFERRAL_SOURCE_BANNED_DOMAIN,
+   E2E_TRACK_CLICK_HEADERS,
+ } from "tests/utils/resource";
+ import { describe, expect, test } from "vitest";
+-import { z } from "zod";
+ import { IntegrationHarness } from "../utils/integration";
+ 
+ describe.concurrent("/fraud/**", async () => {
+@@ -17,13 +16,14 @@ describe.concurrent("/fraud/**", async () => {
+   const { http } = await h.init();
+ 
+   test("FraudRuleType = customerEmailMatch", async () => {
+-    const clickLink = E2E_FRAUD_PARTNER.links.customerEmailMatch;
++    const clickLink = E2E_FRAUD_PARTNER.link;
+ 
+     // Track a click
+     const clickResponse = await http.post<{ clickId: string }>({
+       path: "/track/click",
+       headers: {
+         ...E2E_TRACK_CLICK_HEADERS,
++        [DUB_TEST_IDENTITY_HEADER]: randomId(10),
+       },
+       body: {
+         domain: clickLink.domain,
+@@ -59,13 +59,14 @@ describe.concurrent("/fraud/**", async () => {
+   });
+ 
+   test("FraudRuleType = customerEmailSuspiciousDomain", async () => {
+-    const clickLink = E2E_FRAUD_PARTNER.links.customerEmailSuspiciousDomain;
++    const clickLink = E2E_FRAUD_PARTNER.link;
+ 
+     // Track a click
+     const clickResponse = await http.post<{ clickId: string }>({
+       path: "/track/click",
+       headers: {
+         ...E2E_TRACK_CLICK_HEADERS,
++        [DUB_TEST_IDENTITY_HEADER]: randomId(10),
+       },
+       body: {
+         domain: clickLink.domain,
+@@ -98,7 +99,7 @@ describe.concurrent("/fraud/**", async () => {
+   });
+ 
+   test("FraudRuleType = referralSourceBanned", async () => {
+-    const clickLink = E2E_FRAUD_PARTNER.links.referralSourceBanned;
++    const clickLink = E2E_FRAUD_PARTNER.link;
+ 
+     // Track a click
+     const clickResponse = await http.post<{ clickId: string }>({
+@@ -106,6 +107,7 @@ describe.concurrent("/fraud/**", async () => {
+       headers: {
+         ...E2E_TRACK_CLICK_HEADERS,
+         referer: `https://${E2E_FRAUD_REFERRAL_SOURCE_BANNED_DOMAIN}`,
++        [DUB_TEST_IDENTITY_HEADER]: randomId(10),
+       },
+       body: {
+         domain: clickLink.domain,
+@@ -138,13 +140,14 @@ describe.concurrent("/fraud/**", async () => {
+   });
+ 
+   test("FraudRuleType = paidTrafficDetected", async () => {
+-    const clickLink = E2E_FRAUD_PARTNER.links.paidTrafficDetected;
++    const clickLink = E2E_FRAUD_PARTNER.link;
+ 
+     // Track a click
+     const clickResponse = await http.post<{ clickId: string }>({
+       path: "/track/click",
+       headers: {
+         ...E2E_TRACK_CLICK_HEADERS,
++        [DUB_TEST_IDENTITY_HEADER]: randomId(10),
+       },
+       body: {
+         domain: clickLink.domain,
+@@ -237,7 +240,7 @@ async function waitForFraudEvent({
+   return await retry(
+     async () => {
+       const { data } = await http.get<
+-        z.infer<(typeof fraudEventSchemas)[keyof typeof fraudEventSchemas]>[]
++        fraudEventGroupProps[]
+       >({
+         path: "/fraud/events",
+         query: {
+@@ -254,4 +257,4 @@ async function waitForFraudEvent({
+     },
+     { retries: 10, interval: 600 },
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/apps/web/tests/utils/resource.ts b/apps/web/tests/utils/resource.ts
+index 94685c4..15b0dcc 100644
+--- a/apps/web/tests/utils/resource.ts
++++ b/apps/web/tests/utils/resource.ts
+@@ -8,6 +8,16 @@ export const E2E_LINK = {
+   url: "https://github.com/dubinc",
+ };
+ 
++/**
++ * Used exclusively in E2E tests to override the computed identity hash.
++ * When this header is present, `getIdentityHash()` will use its value
++ * as the hash input instead of relying on the real IP/User-Agent.
++ *
++ * This prevents deduplication during automated tests where multiple
++ * requests originate from the same IP and UA.
++ */
++export const DUB_TEST_IDENTITY_HEADER = "x-dub-test-identity";
++
+ export const E2E_TRACK_CLICK_HEADERS = {
+   referer: "https://dub.co",
+   "User-Agent":
+@@ -210,25 +220,11 @@ export const E2E_CUSTOMERS = [
+ export const E2E_FRAUD_PARTNER = {
+   id: "pn_1K8ND11BZ4XPEX39QX3YMBGY0",
+   email: "kiran+e2e+1@dub.co",
+-  links: {
+-    customerEmailMatch: {
+-      domain: "getacme.link",
+-      key: "fraud-customer-match",
+-    },
+-    customerEmailSuspiciousDomain: {
+-      domain: "getacme.link",
+-      key: "fraud-customer-suspicious",
+-    },
+-    referralSourceBanned: {
+-      domain: "getacme.link",
+-      key: "fraud-referral-source-banned",
+-    },
+-    paidTrafficDetected: {
+-      domain: "getacme.link",
+-      key: "fraud-paid-traffic",
+-    },
++  link: {
++    domain: "getacme.link",
++    key: "kiran-e2e-1",
+   },
+ } as const;
+ 
+ export const E2E_FRAUD_REFERRAL_SOURCE_BANNED_DOMAIN =
+-  "test-hostname-for-referral-source-banned-do-not-delete.com";
++  "test-hostname-for-referral-source-banned-do-not-delete.com";
+\ No newline at end of file

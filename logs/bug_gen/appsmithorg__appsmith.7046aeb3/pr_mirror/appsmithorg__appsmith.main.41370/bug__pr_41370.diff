@@ -1,0 +1,599 @@
+diff --git a/app/client/cypress/e2e/Regression/ClientSide/Widgets/TableV2/scrollbar_spec.ts b/app/client/cypress/e2e/Regression/ClientSide/Widgets/TableV2/scrollbar_spec.ts
+index b15899b..0dcd6db 100644
+--- a/app/client/cypress/e2e/Regression/ClientSide/Widgets/TableV2/scrollbar_spec.ts
++++ b/app/client/cypress/e2e/Regression/ClientSide/Widgets/TableV2/scrollbar_spec.ts
+@@ -24,11 +24,9 @@ describe(
+       });
+ 
+       cy.get(".t--draggable-tablewidgetv2 .table .simplebar-content").then(
+-        ($scrollBox) => {
+-          // +2 is because of the SCROLL_BAR_OFFSET, which got added to the table height in PR: https://github.com/appsmithorg/appsmith/pull/41370
+-          expect($scrollBox[0].clientHeight).to.be.equal(tableHeight + 2);
+-        },
++        ($scrollBox) =>
++          expect($scrollBox[0].clientHeight).to.be.equal(tableHeight),
+       );
+     });
+   },
+-);
++);
+\ No newline at end of file
+diff --git a/app/client/src/widgets/TableWidgetV2/component/Constants.ts b/app/client/src/widgets/TableWidgetV2/component/Constants.ts
+index 6896ccb..1aa9af6 100644
+--- a/app/client/src/widgets/TableWidgetV2/component/Constants.ts
++++ b/app/client/src/widgets/TableWidgetV2/component/Constants.ts
+@@ -469,163 +469,4 @@ export const ConditionFunctions: {
+   },
+   // TODO: Fix this the next time the file is edited
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  doesNotContain: (a: any, b: any) => {
+-    if (isString(a) && isString(b)) {
+-      return !a.includes(b);
+-    }
+-
+-    return false;
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  startsWith: (a: any, b: any) => {
+-    if (isString(a) && isString(b)) {
+-      return a.indexOf(b) === 0;
+-    }
+-
+-    return false;
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  endsWith: (a: any, b: any) => {
+-    if (isString(a) && isString(b)) {
+-      return a.length === a.lastIndexOf(b) + b.length;
+-    }
+-
+-    return false;
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  is: (a: any, b: any) => {
+-    return moment(a).isSame(moment(b), "d");
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  isNot: (a: any, b: any) => {
+-    return !moment(a).isSame(moment(b), "d");
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  isAfter: (a: any, b: any) => {
+-    return !moment(a).isAfter(moment(b), "d");
+-  },
+-  // TODO: Fix this the next time the file is edited
+-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-  isBefore: (a: any, b: any) => {
+-    return !moment(a).isBefore(moment(b), "d");
+-  },
+-};
+-
+-export enum JUSTIFY_CONTENT {
+-  LEFT = "flex-start",
+-  CENTER = "center",
+-  RIGHT = "flex-end",
+-}
+-
+-export enum TEXT_ALIGN {
+-  LEFT = "left",
+-  CENTER = "center",
+-  RIGHT = "right",
+-}
+-
+-export enum ALIGN_ITEMS {
+-  TOP = "flex-start",
+-  CENTER = "center",
+-  BOTTOM = "flex-end",
+-}
+-
+-export enum IMAGE_HORIZONTAL_ALIGN {
+-  LEFT = "flex-start",
+-  CENTER = "center",
+-  RIGHT = "flex-end",
+-}
+-
+-export enum IMAGE_VERTICAL_ALIGN {
+-  TOP = "flex-start",
+-  CENTER = "center",
+-  BOTTOM = "flex-end",
+-}
+-
+-export interface BaseCellComponentProps {
+-  compactMode: CompactMode;
+-  isHidden: boolean;
+-  allowCellWrapping?: boolean;
+-  horizontalAlignment?: CellAlignment;
+-  verticalAlignment?: VerticalAlignment;
+-  cellBackground?: string;
+-  isCellVisible: boolean;
+-  fontStyle?: string;
+-  textColor?: string;
+-  textSize?: string;
+-  isCellDisabled?: boolean;
+-}
+-
+-export enum CheckboxState {
+-  UNCHECKED = 0,
+-  CHECKED = 1,
+-  PARTIAL = 2,
+-}
+-
+-export const scrollbarOnHoverCSS = `
+-  .track-horizontal {
+-    height: 6px;
+-    bottom: 1px;
+-    width: 100%;
+-    opacity: 0;
+-    transition: opacity 0.15s ease-in;
+-    &:active {
+-      opacity: 1;
+-    }
+-  }
+-  &:hover {
+-    .track-horizontal {
+-      opacity: 1;
+-    }
+-  }
+-  .thumb-horizontal {
+-    &:hover, &:active {
+-      height: 6px !important;
+-    }
+-  }
+-`;
+-
+-export const MULTISELECT_CHECKBOX_WIDTH = 40;
+-
+-export enum AddNewRowActions {
+-  SAVE = "SAVE",
+-  DISCARD = "DISCARD",
+-}
+-
+-export const EDITABLE_CELL_PADDING_OFFSET = 8;
+-
+-export const TABLE_SCROLLBAR_WIDTH = 10;
+-export const TABLE_SCROLLBAR_HEIGHT = 10;
+-
+-export const POPOVER_ITEMS_TEXT_MAP = {
+-  SORT_ASC: "Sort column ascending",
+-  SORT_DSC: "Sort column descending",
+-  FREEZE_LEFT: "Freeze column left",
+-  FREEZE_RIGHT: "Freeze column right",
+-};
+-
+-export const HEADER_MENU_PORTAL_CLASS = ".header-menu-portal";
+-export const MENU_CONTENT_CLASS = ".menu-content";
+-export const DEFAULT_FILTER = {
+-  id: generateReactKey(),
+-  column: "",
+-  operator: OperatorTypes.OR,
+-  value: "",
+-  condition: "",
+-};
+-
+-export const itemHeight = 45;
+-
+-export const noOfItemsToDisplay = 4;
+-
+-// 12px for the (noOfItemsToDisplay+ 1) item to let the user know there are more items to scroll
+-export const extraSpace = 12;
+-
+-export enum TableSelectColumnOptionKeys {
+-  LABEL = "label",
+-  VALUE = "value",
+-}
++  doesNotContain: (a:
+\ No newline at end of file
+diff --git a/app/client/src/widgets/TableWidgetV2/component/TableContext.test.tsx b/app/client/src/widgets/TableWidgetV2/component/TableContext.test.tsx
+index 6eb798b..0685b3e 100644
+--- a/app/client/src/widgets/TableWidgetV2/component/TableContext.test.tsx
++++ b/app/client/src/widgets/TableWidgetV2/component/TableContext.test.tsx
+@@ -249,7 +249,7 @@ describe("TableContext", () => {
+         .tableContext;
+ 
+       expect(context.scrollContainerStyles).toEqual({
+-        height: 350, // 400 - 40 - 10 (height - TABLE_HEADER_HEIGHT - TABLE_SCROLLBAR_HEIGHT)
++        height: 352, // 400 - 40 - 8 (height - TABLE_HEADER_HEIGHT - TABLE_SCROLLBAR_HEIGHT)
+         width: 800,
+       });
+     });
+@@ -267,7 +267,7 @@ describe("TableContext", () => {
+         .tableContext;
+ 
+       expect(context.scrollContainerStyles).toEqual({
+-        height: 388, // 400 - 10 - 2 (height - TABLE_SCROLLBAR_HEIGHT - SCROLL_BAR_OFFSET)
++        height: 390, // 400 - 8 - 2 (height - TABLE_SCROLLBAR_HEIGHT - SCROLL_BAR_OFFSET)
+         width: 800,
+       });
+     });
+@@ -310,4 +310,4 @@ describe("TableContext", () => {
+ 
+     expect(firstText).toBe(secondText);
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/app/client/src/widgets/TableWidgetV2/component/TableStyledWrappers.tsx b/app/client/src/widgets/TableWidgetV2/component/TableStyledWrappers.tsx
+index f22db0b..e081928 100644
+--- a/app/client/src/widgets/TableWidgetV2/component/TableStyledWrappers.tsx
++++ b/app/client/src/widgets/TableWidgetV2/component/TableStyledWrappers.tsx
+@@ -64,19 +64,21 @@ export const TableWrapper = styled.div<{
+   .simplebar-track {
+     opacity: 0.7;
+     &.simplebar-horizontal {
+-      /* this height moves the scrollbar up and down */
++-      /* this height moves the scrollbar up and down */
+       height: ${TABLE_SCROLLBAR_HEIGHT}px;
+       .simplebar-scrollbar {
+-        /*this actual height of the scrollbar */
+-        height: 8px;
+-      }
+-      &.simplebar-hover {
+-        & .simplebar-scrollbar {
+-          transition: height 0.15s ease-in-out;
+-          height: 8px;
+-        }
+-      }
+-    }
++-        /*this actual height of the scrollbar */
++-        height: 8px;
+++        height: 5px;
++       }
++       &.simplebar-hover {
+++        height: 10px;
++         & .simplebar-scrollbar {
++-          transition: height 0.15s ease-in-out;
++           height: 8px;
++         }
++       }
++     }
+ 
+     &.simplebar-vertical {
+       direction: rtl;
+@@ -482,340 +484,4 @@ export const ActionWrapper = styled.div<{ disabled: boolean }>`
+       border: none;
+     }
+     .bp3-button span {
+-      font-weight: 400;
+-      text-decoration: none;
+-    }
+-    &&& .bp3-disabled {
+-      background: ${Colors.GREY_1};
+-      color: ${Colors.GREY_4};
+-    }
+-  }
+-`;
+-
+-export const IconButtonWrapper = styled.div<{ disabled: boolean }>`
+-  ${(props) => (props.disabled ? "cursor: not-allowed;" : null)}
+-  align-items: center;
+-  display: flex;
+-}
+-`;
+-
+-export const TableStyles = css<{
+-  cellProperties?: CellLayoutProperties;
+-  isTextType?: boolean;
+-}>``;
+-
+-export const CELL_WRAPPER_LINE_HEIGHT = 28;
+-
+-export const CellWrapper = styled.div<{
+-  isHidden?: boolean;
+-  isHyperLink?: boolean;
+-  isCellVisible?: boolean;
+-  isTextType?: boolean;
+-  compactMode?: string;
+-  allowCellWrapping?: boolean;
+-  horizontalAlignment?: CellAlignment;
+-  verticalAlignment?: VerticalAlignment;
+-  fontStyle?: string;
+-  textColor?: string;
+-  cellBackground?: string;
+-  textSize?: string;
+-  disablePadding?: boolean;
+-  imageSize?: ImageSize;
+-  isCellDisabled?: boolean;
+-}>`
+-  display: ${(props) => (props.isCellVisible !== false ? "flex" : "none")};
+-  align-items: center;
+-  justify-content: flex-start;
+-  width: 100%;
+-  height: 100%;
+-  ${(props) => (props.isHidden ? invisible : "")};
+-  font-weight: ${(props) =>
+-    props.fontStyle?.includes(FontStyleTypes.BOLD) ? "bold" : "normal"};
+-  color: ${(props) => props.textColor};
+-  font-style: ${(props) =>
+-    props.fontStyle?.includes(FontStyleTypes.ITALIC) ? "italic" : ""};
+-  text-decoration: ${(props) =>
+-    props.fontStyle?.includes(FontStyleTypes.UNDERLINE) && props.isTextType
+-      ? "underline"
+-      : ""};
+-  justify-content: ${(props) =>
+-    props.horizontalAlignment && JUSTIFY_CONTENT[props.horizontalAlignment]};
+-  text-align: ${(props) =>
+-    props.horizontalAlignment && TEXT_ALIGN[props.horizontalAlignment]};
+-  align-items: ${(props) =>
+-    props.verticalAlignment && ALIGN_ITEMS[props.verticalAlignment]};
+-
+-  background: ${(props) => {
+-    if (props.isCellDisabled) {
+-      return props.cellBackground
+-        ? lightenColor(props.cellBackground)
+-        : "var(--wds-color-bg-disabled)";
+-    } else {
+-      return props.cellBackground;
+-    }
+-  }};
+-
+-  &:hover,
+-  .selected-row & {
+-    background: ${(props) =>
+-      props.cellBackground && !props.isCellDisabled
+-        ? darkenColor(props.cellBackground, 5)
+-        : ""};
+-  }
+-  font-size: ${(props) => props.textSize};
+-
+-  padding: ${(props) =>
+-    props.disablePadding
+-      ? 0
+-      : `${
+-          props.compactMode
+-            ? `${TABLE_SIZES[props.compactMode].VERTICAL_PADDING}px 10px`
+-            : `${0}px 10px`
+-        }`};
+-  line-height: ${CELL_WRAPPER_LINE_HEIGHT}px;
+-  .${Classes.POPOVER_WRAPPER} {
+-    width: 100%;
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-  }
+-  ${(props) =>
+-    props.allowCellWrapping
+-      ? `
+-        white-space: break-spaces;
+-        word-break: break-word;
+-      `
+-      : `
+-      overflow: hidden;
+-      text-overflow: ellipsis;
+-      white-space: nowrap;`}
+-  .image-cell-wrapper {
+-    width: 100%;
+-    height: 100%;
+-    display: flex;
+-    align-items: ${(props) =>
+-      props.verticalAlignment && IMAGE_VERTICAL_ALIGN[props.verticalAlignment]};
+-    justify-content: ${(props) =>
+-      props.horizontalAlignment &&
+-      IMAGE_HORIZONTAL_ALIGN[props.horizontalAlignment]};
+-  }
+-  .image-cell {
+-    height: ${(props) =>
+-      props.imageSize ? ImageSizes[props.imageSize] : ImageSizes.DEFAULT};
+-    margin: 0 5px 0 0;
+-    ${BORDER_RADIUS}
+-    object-fit: contain;
+-  }
+-  video {
+-    ${BORDER_RADIUS}
+-  }
+-  ${(props) =>
+-    props.isHyperLink &&
+-    `
+-    cursor: pointer;
+-    &:hover {
+-      color: ${Colors.ROYAL_BLUE};
+-      text-decoration: underline;
+-    }`};
+-  &.video-cell {
+-    height: 100%;
+-    iframe {
+-      border: none;
+-      ${BORDER_RADIUS}
+-    }
+-  }
+-  .link-text {
+-    width: 100%;
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-    word-break: break-word;
+-    text-align: ${(props) =>
+-      props.horizontalAlignment && TEXT_ALIGN[props.horizontalAlignment]};
+-  }
+-  .hidden-icon {
+-    display: none;
+-  }
+-  &:hover {
+-    .hidden-icon {
+-      display: inline;
+-    }
+-  }
+-`;
+-
+-export const CellCheckboxWrapper = styled(CellWrapper)<{
+-  isChecked?: boolean;
+-  accentColor?: string;
+-  borderRadius?: string;
+-}>`
+-  left: 0;
+-  z-index: ${Layers.modalWidget};
+-  justify-content: center;
+-  width: ${MULTISELECT_CHECKBOX_WIDTH}px;
+-  height: auto;
+-  & > div {
+-    border-radius: ${({ borderRadius }) => borderRadius};
+-
+-    ${(props) =>
+-      props.isChecked
+-        ? `
+-          background: ${props.accentColor};
+-          &:hover {
+-            background: ${darkenColor(props.accentColor)};
+-          }
+-            `
+-        : `
+-          border: 1px solid ${Colors.GREY_3};
+-          &:hover {
+-            border: 1px solid ${Colors.GREY_5};
+-          }
+-        `};
+-  }
+-`;
+-
+-export const CellCheckbox = styled.div`
+-  height: 14px;
+-  width: 14px;
+-  background: ${Colors.WHITE};
+-  cursor: pointer;
+-  position: relative;
+-  .th-svg {
+-    display: block;
+-    position: absolute;
+-    left: 2px;
+-    top: 2px;
+-  }
+-`;
+-
+-const MIN_WIDTH_TO_SHOW_PAGE_ITEMS = 700;
+-
+-export const TableHeaderWrapper = styled.div<{
+-  serverSidePaginationEnabled: boolean;
+-  width: number;
+-  tableSizes: TableSizes;
+-  backgroundColor?: Color;
+-}>`
+-  position: relative;
+-  display: flex;
+-  width: 100%;
+-  .show-page-items {
+-    display: ${(props) =>
+-      props.width < MIN_WIDTH_TO_SHOW_PAGE_ITEMS ? "none" : "flex"};
+-  }
+-  height: ${(props) => props.tableSizes.TABLE_HEADER_HEIGHT}px;
+-  min-height: ${(props) => props.tableSizes.TABLE_HEADER_HEIGHT}px;
+-`;
+-
+-export const TableHeaderInnerWrapper = styled.div<{
+-  serverSidePaginationEnabled: boolean;
+-  width: number;
+-  tableSizes: TableSizes;
+-  backgroundColor?: Color;
+-  variant?: TableVariant;
+-}>`
+-  position: relative;
+-  display: flex;
+-  width: 100%;
+-  height: 100%;
+-  border-bottom: ${(props) =>
+-    props.variant !== "VARIANT2" &&
+-    `1px solid var(--wds-color-border-onaccent)`};
+-`;
+-
+-export const CommonFunctionsMenuWrapper = styled.div<{
+-  tableSizes: TableSizes;
+-}>`
+-  display: flex;
+-  align-items: center;
+-  height: 100%;
+-
+-  & .bp3-popover-target,
+-  & .bp3-popover-wrapper {
+-    height: 100%;
+-  }
+-
+-  & .bp3-popover-target {
+-    display: flex;
+-    align-items: center;
+-  }
+-`;
+-
+-export const TableHeaderContentWrapper = styled.div`
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  font-size: ${HEADER_CONTROL_FONT_SIZE};
+-  line-height: 20px;
+-  color: ${Colors.GRAY};
+-  margin: 0 4px;
+-  white-space: nowrap;
+-`;
+-
+-export const TableIconWrapper = styled.div<{
+-  selected?: boolean;
+-  disabled?: boolean;
+-}>`
+-  background: ${(props) =>
+-    props.selected ? Colors.ATHENS_GRAY : "transparent"};
+-  box-shadow: ${(props) =>
+-    props.selected ? `inset 0px 4px 0px ${Colors.GREEN}` : "none"};
+-  width: 48px;
+-  height: 38px;
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  ${(props) => (props.disabled ? invisible : "")};
+-  cursor: ${(props) => !props.disabled && "pointer"};
+-  position: relative;
+-  &:hover {
+-    background: ${Colors.ATHENS_GRAY};
+-  }
+-`;
+-
+-export const RenderOptionWrapper = styled.div<{ selected: boolean }>`
+-  display: flex;
+-  justify-content: space-between;
+-  align-items: center;
+-  width: 150px;
+-  position: relative;
+-  .title {
+-    color: ${Colors.GREY_10};
+-    width: 120px;
+-    white-space: nowrap;
+-    overflow: hidden;
+-    text-overflow: ellipsis;
+-  }
+-  .type {
+-    position: absolute;
+-    left: 135px;
+-    font-size: ${HEADER_CONTROL_FONT_SIZE} !important;
+-    color: ${Colors.GREY_10};
+-  }
+-`;
+-
+-export const MenuCategoryWrapper = styled.div`
+-  display: flex;
+-  width: 100%;
+-  align-items: center;
+-  justify-content: space-between;
+-  color: ${Colors.RIVER_BED};
+-`;
+-
+-export const MenuStyledOptionHeader = styled.div`
+-  font-weight: 600;
+-`;
+-
+-export const TooltipContentWrapper = styled.div<{ width?: number }>`
+-  word-break: break-all;
+-  max-width: ${(props) => props.width}px;
+-`;
+-
+-export const EmptyRow = styled.div`
+-  display: flex;
+-  flex: 1 0 auto;
+-`;
+-
+-export const EmptyCell = styled.div<{ width: number; sticky?: string }>`
+-  width: ${(props) => props.width}px;
+-  boxsizing: border-box;
+-  flex: ${(props) => props.width} 0 auto;
+-  z-index: ${(props) => (props.sticky ? Layers.dragPreview : 0)};
+-`;
++      font-weight:
+\ No newline at end of file

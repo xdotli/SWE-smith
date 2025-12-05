@@ -1,0 +1,303 @@
+diff --git a/app/client/src/widgets/TableWidgetV2/component/cellComponents/HeaderCell.tsx b/app/client/src/widgets/TableWidgetV2/component/cellComponents/HeaderCell.tsx
+index 9bc73b67ea4..b938f722a96 100644
+--- a/app/client/src/widgets/TableWidgetV2/component/cellComponents/HeaderCell.tsx
++++ b/app/client/src/widgets/TableWidgetV2/component/cellComponents/HeaderCell.tsx
+@@ -200,7 +200,10 @@ const HeaderCellComponent = (props: HeaderProps) => {
+   const isColumnEditable =
+     props.column.columnProperties.isCellEditable &&
+     props.column.columnProperties.isEditable &&
+-    isColumnTypeEditable(props.column.columnProperties.columnType);
++    isColumnTypeEditable(
++      props.column.columnProperties.columnType,
++      isInfiniteScrollEnabled,
++    );
+ 
+   const toggleColumnFreeze = (value: StickyType) => {
+     handleColumnFreeze &&
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/__tests__/propertyUtils.test.ts b/app/client/src/widgets/TableWidgetV2/widget/__tests__/propertyUtils.test.ts
+index 2d3eb8985b8..160ab69d5f8 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/__tests__/propertyUtils.test.ts
++++ b/app/client/src/widgets/TableWidgetV2/widget/__tests__/propertyUtils.test.ts
+@@ -10,7 +10,6 @@ import {
+   updateCustomColumnAliasOnLabelChange,
+   selectColumnOptionsValidation,
+   allowedFirstDayOfWeekRange,
+-  updateCellEditabilityOnInfiniteScrollChange,
+   updateSearchSortFilterOnInfiniteScrollChange,
+ } from "../propertyUtils";
+ import _ from "lodash";
+@@ -1151,96 +1150,4 @@ describe("Infinite Scroll Update Hooks - ", () => {
+       ),
+     ).toBeUndefined();
+   });
+-
+-  it("updateCellEditabilityOnInfiniteScrollChange - should disable cell editability when infinite scroll is enabled", () => {
+-    // Setup mock primary columns
+-    const props = {
+-      primaryColumns: {
+-        column1: {
+-          id: "column1",
+-          alias: "column1",
+-          isEditable: true,
+-          isCellEditable: true,
+-        },
+-        column2: {
+-          id: "column2",
+-          alias: "column2",
+-          isEditable: true,
+-          isCellEditable: true,
+-        },
+-      },
+-    } as unknown as TableWidgetProps;
+-
+-    // When infinite scroll is enabled
+-    expect(
+-      updateCellEditabilityOnInfiniteScrollChange(
+-        props,
+-        "infiniteScrollEnabled",
+-        true,
+-      ),
+-    ).toEqual([
+-      {
+-        propertyPath: "primaryColumns.column1.isCellEditable",
+-        propertyValue: false,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column1.isEditable",
+-        propertyValue: false,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column2.isCellEditable",
+-        propertyValue: false,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column2.isEditable",
+-        propertyValue: false,
+-      },
+-    ]);
+-
+-    // When infinite scroll is disabled
+-    expect(
+-      updateCellEditabilityOnInfiniteScrollChange(
+-        props,
+-        "infiniteScrollEnabled",
+-        false,
+-      ),
+-    ).toEqual([
+-      {
+-        propertyPath: "primaryColumns.column1.isCellEditable",
+-        propertyValue: true,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column1.isEditable",
+-        propertyValue: true,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column2.isCellEditable",
+-        propertyValue: true,
+-      },
+-      {
+-        propertyPath: "primaryColumns.column2.isEditable",
+-        propertyValue: true,
+-      },
+-    ]);
+-
+-    // Test with no primary columns
+-    const propsWithoutColumns = {} as TableWidgetProps;
+-
+-    expect(
+-      updateCellEditabilityOnInfiniteScrollChange(
+-        propsWithoutColumns,
+-        "infiniteScrollEnabled",
+-        true,
+-      ),
+-    ).toBeUndefined();
+-
+-    // When some other value is passed
+-    expect(
+-      updateCellEditabilityOnInfiniteScrollChange(
+-        props,
+-        "infiniteScrollEnabled",
+-        "some-other-value",
+-      ),
+-    ).toBeUndefined();
+-  });
+ });
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/index.tsx b/app/client/src/widgets/TableWidgetV2/widget/index.tsx
+index 78a21afa3f4..2e865783bec 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/index.tsx
++++ b/app/client/src/widgets/TableWidgetV2/widget/index.tsx
+@@ -580,6 +580,7 @@ class TableWidgetV2 extends BaseWidget<TableWidgetProps, WidgetState> {
+   getTableColumns = () => {
+     const {
+       columnWidthMap,
++      infiniteScrollEnabled,
+       isPreviewMode,
+       orderedTableColumns,
+       renderMode,
+@@ -597,6 +598,7 @@ class TableWidgetV2 extends BaseWidget<TableWidgetProps, WidgetState> {
+       componentWidth,
+       renderMode,
+       isPreviewMode,
++      infiniteScrollEnabled,
+     );
+   };
+ 
+@@ -2067,7 +2069,8 @@ class TableWidgetV2 extends BaseWidget<TableWidgetProps, WidgetState> {
+     }
+ 
+     const isColumnEditable =
+-      column.isEditable && isColumnTypeEditable(column.columnType);
++      column.isEditable &&
++      isColumnTypeEditable(column.columnType, this.props.infiniteScrollEnabled);
+     const alias = props.cell.column.columnProperties.alias;
+ 
+     const isCellEditable = isColumnEditable && cellProperties.isCellEditable;
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/PanelConfig/General.ts b/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/PanelConfig/General.ts
+index 82ccf971bc5..96210b4dd02 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/PanelConfig/General.ts
++++ b/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/PanelConfig/General.ts
+@@ -137,7 +137,10 @@ export default {
+         const columnType = get(props, `${baseProperty}.columnType`, "");
+         const isDerived = get(props, `${baseProperty}.isDerived`, false);
+ 
+-        return !isColumnTypeEditable(columnType) || isDerived;
++        return (
++          !isColumnTypeEditable(columnType, props.infiniteScrollEnabled) ||
++          isDerived
++        );
+       },
+     },
+     {
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/contentConfig.ts b/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/contentConfig.ts
+index 02de96fffcc..48351f35538 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/contentConfig.ts
++++ b/app/client/src/widgets/TableWidgetV2/widget/propertyConfig/contentConfig.ts
+@@ -22,7 +22,6 @@ import {
+   totalRecordsCountValidation,
+   uniqueColumnNameValidation,
+   updateAllowAddNewRowOnInfiniteScrollChange,
+-  updateCellEditabilityOnInfiniteScrollChange,
+   updateColumnOrderHook,
+   updateCustomColumnAliasOnLabelChange,
+   updateInlineEditingOptionDropdownVisibilityHook,
+@@ -197,7 +196,6 @@ export default [
+         isTriggerProperty: false,
+         updateHook: composePropertyUpdateHook([
+           updateAllowAddNewRowOnInfiniteScrollChange,
+-          updateCellEditabilityOnInfiniteScrollChange,
+           updateSearchSortFilterOnInfiniteScrollChange,
+         ]),
+         dependencies: ["primaryColumns", "serverSidePaginationEnabled"],
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/propertyUtils.ts b/app/client/src/widgets/TableWidgetV2/widget/propertyUtils.ts
+index c92a573664f..bf6bb16960d 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/propertyUtils.ts
++++ b/app/client/src/widgets/TableWidgetV2/widget/propertyUtils.ts
+@@ -1513,46 +1513,3 @@ export const updateSearchSortFilterOnInfiniteScrollChange = (
+ 
+   return;
+ };
+-
+-// Disable cell editability when infinite scroll is enabled
+-export const updateCellEditabilityOnInfiniteScrollChange = (
+-  props: TableWidgetProps,
+-  propertyPath: string,
+-  propertyValue: unknown,
+-): Array<{ propertyPath: string; propertyValue: unknown }> | undefined => {
+-  if (!props.primaryColumns) return;
+-
+-  const updates: Array<{ propertyPath: string; propertyValue: unknown }> = [];
+-
+-  if (propertyValue === true) {
+-    Object.entries(props.primaryColumns).forEach(([, column]) => {
+-      const columnName = column.alias;
+-
+-      updates.push({
+-        propertyPath: `primaryColumns.${columnName}.isCellEditable`,
+-        propertyValue: false,
+-      });
+-
+-      updates.push({
+-        propertyPath: `primaryColumns.${columnName}.isEditable`,
+-        propertyValue: false,
+-      });
+-    });
+-  } else if (propertyValue === false) {
+-    Object.entries(props.primaryColumns).forEach(([, column]) => {
+-      const columnName = column.alias;
+-
+-      updates.push({
+-        propertyPath: `primaryColumns.${columnName}.isCellEditable`,
+-        propertyValue: true,
+-      });
+-
+-      updates.push({
+-        propertyPath: `primaryColumns.${columnName}.isEditable`,
+-        propertyValue: true,
+-      });
+-    });
+-  }
+-
+-  return updates.length > 0 ? updates : undefined;
+-};
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/reactTableUtils/getColumnsPureFn.tsx b/app/client/src/widgets/TableWidgetV2/widget/reactTableUtils/getColumnsPureFn.tsx
+index 47e97e27666..769768d68d2 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/reactTableUtils/getColumnsPureFn.tsx
++++ b/app/client/src/widgets/TableWidgetV2/widget/reactTableUtils/getColumnsPureFn.tsx
+@@ -4,6 +4,7 @@ import { RenderModes } from "constants/WidgetConstants";
+ import { StickyType } from "../../component/Constants";
+ import {
+   COLUMN_MIN_WIDTH,
++  ColumnTypes,
+   DEFAULT_COLUMN_WIDTH,
+   DEFAULT_COLUMN_NAME,
+ } from "../../constants";
+@@ -21,6 +22,7 @@ export type getColumns = (
+   componentWidth: number,
+   renderMode: RenderMode,
+   isPreviewMode: boolean,
++  infiniteScrollEnabled?: boolean,
+ ) => ReactTableColumnProps[];
+ 
+ //TODO: (Vamsi) need to unit test this function
+@@ -32,6 +34,7 @@ export const getColumnsPureFn: getColumns = (
+   componentWidth,
+   renderMode,
+   isPreviewMode,
++  infiniteScrollEnabled = false,
+ ) => {
+   let columns: ReactTableColumnProps[] = [];
+   const hiddenColumns: ReactTableColumnProps[] = [];
+@@ -42,6 +45,14 @@ export const getColumnsPureFn: getColumns = (
+     // TODO: Fix this the next time the file is edited
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     orderedTableColumns.forEach((column: any) => {
++      // Skip EDIT_ACTIONS columns when infinite scroll is enabled
++      if (
++        infiniteScrollEnabled &&
++        column.columnType === ColumnTypes.EDIT_ACTIONS
++      ) {
++        return;
++      }
++
+       const isHidden = !column.isVisible;
+ 
+       const columnData = {
+diff --git a/app/client/src/widgets/TableWidgetV2/widget/utilities.ts b/app/client/src/widgets/TableWidgetV2/widget/utilities.ts
+index c1c17d8160c..5b2cd649cc5 100644
+--- a/app/client/src/widgets/TableWidgetV2/widget/utilities.ts
++++ b/app/client/src/widgets/TableWidgetV2/widget/utilities.ts
+@@ -540,8 +540,11 @@ const EdtiableColumnTypes: string[] = [
+   ColumnTypes.CURRENCY,
+ ];
+ 
+-export function isColumnTypeEditable(columnType: string) {
+-  return EdtiableColumnTypes.includes(columnType);
++export function isColumnTypeEditable(
++  columnType: string,
++  isInfiniteScrollEnabled = false,
++) {
++  return EdtiableColumnTypes.includes(columnType) && !isInfiniteScrollEnabled;
+ }
+ 
+ /*

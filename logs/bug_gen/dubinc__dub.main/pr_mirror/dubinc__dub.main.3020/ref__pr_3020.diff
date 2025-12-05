@@ -1,0 +1,590 @@
+diff --git a/apps/web/tests/rewards/lead-reward.test.ts b/apps/web/tests/rewards/lead-reward.test.ts
+new file mode 100644
+index 00000000000..990167233e9
+--- /dev/null
++++ b/apps/web/tests/rewards/lead-reward.test.ts
+@@ -0,0 +1,91 @@
++import { TrackLeadResponse } from "@/lib/types";
++import { randomCustomer } from "tests/utils/helpers";
++import {
++  E2E_LEAD_REWARD,
++  E2E_PARTNERS,
++  E2E_TRACK_CLICK_HEADERS,
++} from "tests/utils/resource";
++import { verifyCommission } from "tests/utils/verify-commission";
++import { describe, expect, test } from "vitest";
++import { IntegrationHarness } from "../utils/integration";
++
++describe.concurrent("Lead rewards", async () => {
++  const h = new IntegrationHarness();
++  const { http } = await h.init();
++
++  test("when {Partner} {Country} is {US}", async () => {
++    // Track the click
++    const clickResponse = await http.post<{ clickId: string }>({
++      path: "/track/click",
++      headers: E2E_TRACK_CLICK_HEADERS,
++      body: {
++        ...E2E_PARTNERS[0].shortLink,
++      },
++    });
++
++    expect(clickResponse.status).toEqual(200);
++
++    const clickId = clickResponse.data.clickId;
++    const customer = randomCustomer();
++
++    // Track the lead
++    const trackLeadResponse = await http.post<TrackLeadResponse>({
++      path: "/track/lead",
++      body: {
++        clickId,
++        eventName: "Signup",
++        customerExternalId: customer.externalId,
++        customerName: customer.name,
++        customerEmail: customer.email,
++        customerAvatar: customer.avatar,
++      },
++    });
++
++    expect(trackLeadResponse.status).toEqual(200);
++
++    // Verify the commission
++    await verifyCommission({
++      http,
++      customerExternalId: customer.externalId,
++      expectedEarnings: E2E_LEAD_REWARD.modifiers[0].amountInCents,
++    });
++  });
++
++  test("when {Partner} {Country} is not {US}", async () => {
++    // Track the click
++    const clickResponse = await http.post<{ clickId: string }>({
++      path: "/track/click",
++      headers: E2E_TRACK_CLICK_HEADERS,
++      body: {
++        ...E2E_PARTNERS[1].shortLink,
++      },
++    });
++
++    expect(clickResponse.status).toEqual(200);
++
++    const clickId = clickResponse.data.clickId;
++    const customer = randomCustomer();
++
++    // Track the lead
++    const trackLeadResponse = await http.post<TrackLeadResponse>({
++      path: "/track/lead",
++      body: {
++        clickId,
++        eventName: "Signup",
++        customerExternalId: customer.externalId,
++        customerName: customer.name,
++        customerEmail: customer.email,
++        customerAvatar: customer.avatar,
++      },
++    });
++
++    expect(trackLeadResponse.status).toEqual(200);
++
++    // Verify the commission
++    await verifyCommission({
++      http,
++      customerExternalId: customer.externalId,
++      expectedEarnings: E2E_LEAD_REWARD.amountInCents,
++    });
++  });
++});
+diff --git a/apps/web/tests/rewards/sale-reward.test.ts b/apps/web/tests/rewards/sale-reward.test.ts
+new file mode 100644
+index 00000000000..27bdf0ced11
+--- /dev/null
++++ b/apps/web/tests/rewards/sale-reward.test.ts
+@@ -0,0 +1,65 @@
++import { TrackSaleResponse } from "@/lib/types";
++import { randomId } from "tests/utils/helpers";
++import { E2E_CUSTOMERS, E2E_SALE_REWARD } from "tests/utils/resource";
++import { verifyCommission } from "tests/utils/verify-commission";
++import { describe, expect, test } from "vitest";
++import { IntegrationHarness } from "../utils/integration";
++
++describe.concurrent("Sale rewards", async () => {
++  const h = new IntegrationHarness();
++  const { http } = await h.init();
++
++  test("when {Customer} {Country} is {SG}", async () => {
++    const saleAmount = 10000; // $100 in cents
++    const invoiceId = `INV_${randomId()}`;
++
++    // Track the sale
++    const trackSaleResponse = await http.post<TrackSaleResponse>({
++      path: "/track/sale",
++      body: {
++        customerExternalId: E2E_CUSTOMERS[0].externalId,
++        eventName: "Subscription",
++        amount: saleAmount,
++        currency: "usd",
++        invoiceId,
++        paymentProcessor: "stripe",
++      },
++    });
++
++    expect(trackSaleResponse.status).toEqual(200);
++
++    // Verify the commission (10% of sale amount)
++    await verifyCommission({
++      http,
++      invoiceId,
++      expectedEarnings: saleAmount * 0.1,
++    });
++  });
++
++  test.skip("when {Customer} {Country} is {CA}", async () => {
++    const saleAmount = 10000; // $100 in cents
++    const invoiceId = `INV_${randomId()}`;
++
++    // Track the sale
++    const trackSaleResponse = await http.post<TrackSaleResponse>({
++      path: "/track/sale",
++      body: {
++        customerExternalId: E2E_CUSTOMERS[1].externalId,
++        eventName: "Subscription",
++        amount: saleAmount,
++        currency: "usd",
++        invoiceId,
++        paymentProcessor: "stripe",
++      },
++    });
++
++    expect(trackSaleResponse.status).toEqual(200);
++
++    // Verify the commission (base reward)
++    await verifyCommission({
++      http,
++      invoiceId,
++      expectedEarnings: E2E_SALE_REWARD.amountInCents,
++    });
++  });
++});
+diff --git a/apps/web/tests/tracks/track-lead.test.ts b/apps/web/tests/tracks/track-lead.test.ts
+index 53921ac8512..a1e7a83c21d 100644
+--- a/apps/web/tests/tracks/track-lead.test.ts
++++ b/apps/web/tests/tracks/track-lead.test.ts
+@@ -1,12 +1,6 @@
+-import {
+-  CommissionResponse,
+-  Customer,
+-  TrackLeadResponse,
+-  TrackSaleResponse,
+-} from "@/lib/types";
++import { TrackLeadResponse, TrackSaleResponse } from "@/lib/types";
+ import { randomCustomer } from "tests/utils/helpers";
+-import { HttpClient } from "tests/utils/http";
+-import { E2E_LEAD_REWARD, E2E_TRACK_CLICK_HEADERS } from "tests/utils/resource";
++import { E2E_TRACK_CLICK_HEADERS } from "tests/utils/resource";
+ import { describe, expect, test } from "vitest";
+ import { IntegrationHarness } from "../utils/integration";
+ 
+@@ -30,39 +24,6 @@ const expectValidLeadResponse = ({
+   });
+ };
+ 
+-const verifyCommission = async ({
+-  http,
+-  customerExternalId,
+-  expectedEarnings,
+-}: {
+-  http: HttpClient;
+-  customerExternalId: string;
+-  expectedEarnings: number;
+-}) => {
+-  // Find the customer first
+-  const { data: customers } = await http.get<Customer[]>({
+-    path: "/customers",
+-    query: {
+-      externalId: customerExternalId,
+-    },
+-  });
+-
+-  const customer = customers[0];
+-
+-  // Find the commission for the customer
+-  const { status, data: commissions } = await http.get<CommissionResponse[]>({
+-    path: "/commissions",
+-    query: {
+-      customerId: customer.id,
+-    },
+-  });
+-
+-  expect(status).toEqual(200);
+-  expect(commissions).toHaveLength(1);
+-  expect(commissions[0].customer?.id).toEqual(customer.id);
+-  expect(commissions[0].earnings).toEqual(expectedEarnings);
+-};
+-
+ describe("POST /track/lead", async () => {
+   const h = new IntegrationHarness();
+   const { http } = await h.init();
+@@ -254,44 +215,4 @@ describe("POST /track/lead", async () => {
+       clickId: trackedClickId,
+     });
+   });
+-
+-  test("track a lead and verify the reward based on the partner.country (US)", async () => {
+-    const clickResponse = await http.post<{ clickId: string }>({
+-      path: "/track/click",
+-      headers: E2E_TRACK_CLICK_HEADERS,
+-      body: {
+-        domain: "getacme.link",
+-        key: "marvin",
+-      },
+-    });
+-
+-    const trackedClickId = clickResponse.data.clickId;
+-    const customer = randomCustomer();
+-
+-    const response = await http.post<TrackLeadResponse>({
+-      path: "/track/lead",
+-      body: {
+-        clickId: trackedClickId,
+-        customerId: customer.externalId,
+-        eventName: "Signup",
+-        customerName: customer.name,
+-        customerEmail: customer.email,
+-        customerAvatar: customer.avatar,
+-      },
+-    });
+-
+-    expectValidLeadResponse({
+-      response,
+-      customer: customer,
+-      clickId: trackedClickId,
+-    });
+-
+-    await new Promise((resolve) => setTimeout(resolve, 2000));
+-
+-    await verifyCommission({
+-      http,
+-      customerExternalId: customer.externalId,
+-      expectedEarnings: E2E_LEAD_REWARD.modifiers[0].amountInCents,
+-    });
+-  });
+ });
+diff --git a/apps/web/tests/tracks/track-sale.test.ts b/apps/web/tests/tracks/track-sale.test.ts
+index 562036082ff..2acbb45e1e5 100644
+--- a/apps/web/tests/tracks/track-sale.test.ts
++++ b/apps/web/tests/tracks/track-sale.test.ts
+@@ -11,6 +11,7 @@ import {
+   E2E_SALE_REWARD,
+   E2E_TRACK_CLICK_HEADERS,
+ } from "tests/utils/resource";
++import { verifyCommission } from "tests/utils/verify-commission";
+ import { describe, expect, test } from "vitest";
+ import { IntegrationHarness } from "../utils/integration";
+ 
+@@ -38,25 +39,6 @@ const expectValidSaleResponse = (
+   });
+ };
+ 
+-// Helper function to verify commission details
+-const verifyCommission = async (
+-  http: any,
+-  invoiceId: string,
+-  expectedAmount: number,
+-  expectedEarnings: number,
+-) => {
+-  const { status, data: commissions } = await http.get({
+-    path: "/commissions",
+-    query: { invoiceId },
+-  });
+-
+-  expect(status).toEqual(200);
+-  expect(commissions).toHaveLength(1);
+-  expect(commissions[0].invoiceId).toEqual(invoiceId);
+-  expect(commissions[0].amount).toEqual(expectedAmount);
+-  expect(commissions[0].earnings).toEqual(expectedEarnings);
+-};
+-
+ describe("POST /track/sale", async () => {
+   const h = new IntegrationHarness();
+   const { http } = await h.init();
+@@ -129,19 +111,19 @@ describe("POST /track/sale", async () => {
+     // pause for 2 seconds for data to be fully processed
+     await new Promise((resolve) => setTimeout(resolve, 2000));
+ 
+-    // Verify commissions
+-    await verifyCommission(
++    await verifyCommission({
+       http,
+-      regularInvoiceId,
+-      response1.data.sale?.amount!,
+-      E2E_SALE_REWARD.amountInCents,
+-    );
+-    await verifyCommission(
++      invoiceId: regularInvoiceId,
++      expectedAmount: response1.data.sale?.amount!,
++      expectedEarnings: E2E_SALE_REWARD.amountInCents,
++    });
++
++    await verifyCommission({
+       http,
+-      premiumInvoiceId,
+-      response2.data.sale?.amount!,
+-      E2E_SALE_REWARD.modifiers[0].amountInCents,
+-    );
++      invoiceId: premiumInvoiceId,
++      expectedAmount: response2.data.sale?.amount!,
++      expectedEarnings: E2E_SALE_REWARD.modifiers[0].amountInCents!,
++    });
+   });
+ 
+   test("track a sale with an externalId that does not exist (should return null customer and sale)", async () => {
+@@ -311,18 +293,18 @@ describe("POST /track/sale", async () => {
+     // Pause for 2 seconds for data to be fully processed
+     await new Promise((resolve) => setTimeout(resolve, 2000));
+ 
+-    await verifyCommission(
++    await verifyCommission({
+       http,
+-      smallSaleInvoiceId,
+-      response1.data.sale?.amount!,
+-      E2E_SALE_REWARD.amountInCents,
+-    );
++      invoiceId: smallSaleInvoiceId,
++      expectedAmount: response1.data.sale?.amount!,
++      expectedEarnings: E2E_SALE_REWARD.amountInCents,
++    });
+ 
+-    await verifyCommission(
++    await verifyCommission({
+       http,
+-      largeSaleInvoiceId,
+-      response2.data.sale?.amount!,
+-      E2E_SALE_REWARD.modifiers[1].amountInCents,
+-    );
++      invoiceId: largeSaleInvoiceId,
++      expectedAmount: response2.data.sale?.amount!,
++      expectedEarnings: E2E_SALE_REWARD.modifiers[1].amountInCents!,
++    });
+   });
+ });
+diff --git a/apps/web/tests/utils/resource.ts b/apps/web/tests/utils/resource.ts
+index 67221a21284..6aefc236eb2 100644
+--- a/apps/web/tests/utils/resource.ts
++++ b/apps/web/tests/utils/resource.ts
+@@ -45,42 +45,72 @@ export const E2E_SALE_REWARD = {
+   amountInCents: 1000,
+   modifiers: [
+     {
+-      operator: "AND",
+       type: "flat",
+-      amountInCents: 3000,
++      operator: "AND",
+       conditions: [
+         {
++          value: "premiumProductId",
+           entity: "sale",
+-          attribute: "productId",
+           operator: "equals_to",
+-          value: "premiumProductId",
++          attribute: "productId",
+         },
+       ],
++      maxDuration: null,
++      amountInCents: 3000,
+     },
+     {
+-      operator: "AND",
+       type: "flat",
+-      amountInCents: 5000,
++      operator: "AND",
+       conditions: [
+         {
++          value: 15000,
+           entity: "sale",
+-          attribute: "amount",
+           operator: "greater_than",
+-          value: 15000,
++          attribute: "amount",
++        },
++      ],
++      maxDuration: null,
++      amountInCents: 5000,
++    },
++    {
++      type: "percentage",
++      operator: "AND",
++      conditions: [
++        {
++          value: "US",
++          entity: "customer",
++          operator: "equals_to",
++          attribute: "country",
++        },
++      ],
++      maxDuration: null,
++      amountInPercentage: 10,
++    },
++    {
++      type: "flat",
++      operator: "AND",
++      conditions: [
++        {
++          value: "CA",
++          entity: "customer",
++          operator: "equals_to",
++          attribute: "country",
+         },
+       ],
++      maxDuration: null,
++      amountInCents: 50,
+     },
+   ],
+ };
++
+ export const E2E_LEAD_REWARD = {
+   id: "rw_1K82ESAT4YPY0STR20GKXZ7DR",
+   event: "lead",
+   type: "flat",
+-  amountInCents: 1000,
++  amountInCents: 100,
+   modifiers: [
+     {
+       type: "flat",
+-      amountInCents: 200,
+       operator: "AND",
+       conditions: [
+         {
+@@ -91,6 +121,21 @@ export const E2E_LEAD_REWARD = {
+         },
+       ],
+       maxDuration: null,
++      amountInCents: 200,
++    },
++    {
++      type: "flat",
++      operator: "AND",
++      conditions: [
++        {
++          value: "US",
++          entity: "customer",
++          operator: "equals_to",
++          attribute: "country",
++        },
++      ],
++      maxDuration: null,
++      amountInCents: 400,
+     },
+   ],
+ };
+@@ -128,3 +173,35 @@ export const E2E_PARTNER_GROUP = {
+   id: "grp_1K2E25381GVMG7HHM057TB92F",
+   url: "https://acme.dub.sh/",
+ };
++
++export const E2E_PARTNERS = [
++  {
++    id: "pn_NNG3YjwhLhA7nCZSaXeLIsWu",
++    country: "US",
++    shortLink: {
++      domain: "getacme.link",
++      key: "marvin",
++    },
++  },
++  {
++    id: "pn_1K8ND11BZ4XPEX39QX3YMBGY0",
++    country: "SG",
++    shortLink: {
++      domain: "getacme.link",
++      key: "kiran-e2e-1",
++    },
++  },
++] as const;
++
++export const E2E_CUSTOMERS = [
++  {
++    id: "cus_1K82FYFF7RANMCGRHRGMWDNEC",
++    externalId: "cus_LnZbkb8boLsOn1YGLPxZGZMU",
++    country: "SG",
++  },
++  {
++    id: "cus_1K86CG1DZFW8EMSSWXX4AVZFA",
++    externalId: "cus_vq3UgXINHS99MIon8vNvAO1n",
++    country: "CA",
++  },
++] as const;
+diff --git a/apps/web/tests/utils/verify-commission.ts b/apps/web/tests/utils/verify-commission.ts
+new file mode 100644
+index 00000000000..94e9b5304ff
+--- /dev/null
++++ b/apps/web/tests/utils/verify-commission.ts
+@@ -0,0 +1,69 @@
++import { CommissionResponse, Customer } from "@/lib/types";
++import { expect } from "vitest";
++import { HttpClient } from "./http";
++
++interface VerifyCommissionProps {
++  http: HttpClient;
++  customerExternalId?: string;
++  invoiceId?: string;
++  expectedAmount?: number;
++  expectedEarnings: number;
++}
++
++export const verifyCommission = async ({
++  http,
++  customerExternalId,
++  invoiceId,
++  expectedAmount,
++  expectedEarnings,
++}: VerifyCommissionProps) => {
++  let customerId: string | undefined;
++
++  // Optional: resolve customer ID if customerExternalId is given
++  if (customerExternalId) {
++    const { data: customers } = await http.get<Customer[]>({
++      path: "/customers",
++      query: { externalId: customerExternalId },
++    });
++
++    expect(customers.length).toBeGreaterThan(0);
++    customerId = customers[0].id;
++
++    // Small delay if necessary for async commission processing
++    await new Promise((resolve) => setTimeout(resolve, 2000));
++  }
++
++  const query: Record<string, string> = {};
++
++  if (invoiceId) {
++    query.invoiceId = invoiceId;
++  }
++
++  if (customerId) {
++    query.customerId = customerId;
++  }
++
++  const { status, data: commissions } = await http.get<CommissionResponse[]>({
++    path: "/commissions",
++    query,
++  });
++
++  expect(status).toEqual(200);
++  expect(commissions).toHaveLength(1);
++
++  const commission = commissions[0];
++
++  if (invoiceId) {
++    expect(commission.invoiceId).toEqual(invoiceId);
++  }
++
++  if (customerId) {
++    expect(commission.customer?.id).toEqual(customerId);
++  }
++
++  if (expectedAmount !== undefined) {
++    expect(commission.amount).toEqual(expectedAmount);
++  }
++
++  expect(commission.earnings).toEqual(expectedEarnings);
++};

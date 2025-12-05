@@ -1,0 +1,170 @@
+diff --git a/packages/features/pbac/services/__tests__/role-management.factory.test.ts b/packages/features/pbac/services/__tests__/role-management.factory.test.ts
+index 669ad39345b884..0cdf1109c44a0e 100644
+--- a/packages/features/pbac/services/__tests__/role-management.factory.test.ts
++++ b/packages/features/pbac/services/__tests__/role-management.factory.test.ts
+@@ -1,7 +1,7 @@
+ import { vi, describe, it, expect, beforeEach } from "vitest";
+ 
+ import { FeaturesRepository } from "@calcom/features/flags/features.repository";
+-import { isOrganisationAdmin } from "@calcom/lib/server/queries/organisations";
++import { isOrganisationAdmin, isOrganisationOwner } from "@calcom/lib/server/queries/organisations";
+ import { prisma } from "@calcom/prisma";
+ import { MembershipRole } from "@calcom/prisma/enums";
+ 
+@@ -26,6 +26,7 @@ vi.mock("@calcom/prisma", () => ({
+ }));
+ vi.mock("@calcom/lib/server/queries/organisations", () => ({
+   isOrganisationAdmin: vi.fn(),
++  isOrganisationOwner: vi.fn(),
+ }));
+ 
+ describe("RoleManagementFactory", () => {
+@@ -407,6 +408,33 @@ describe("RoleManagementFactory", () => {
+           )
+         );
+       });
++
++      it("should prevent changing admin to owner", async () => {
++        vi.mocked(isOrganisationAdmin).mockResolvedValue({
++          id: membershipId,
++          userId,
++          teamId: organizationId,
++          role: MembershipRole.ADMIN,
++          accepted: true,
++          disableImpersonation: false,
++          createdAt: new Date(),
++          updatedAt: new Date(),
++          customRoleId: null,
++        });
++        vi.mocked(isOrganisationOwner).mockResolvedValue(false);
++        const manager = await factory.createRoleManager(organizationId);
++        await expect(
++          manager.checkPermissionToChangeRole(
++            userId,
++            organizationId,
++            "org",
++            membershipId,
++            MembershipRole.OWNER
++          )
++        ).rejects.toThrow(
++          new RoleManagementError("Only owners can update this role", RoleManagementErrorCode.UNAUTHORIZED)
++        );
++      });
+     });
+ 
+     describe("assignRole", () => {
+diff --git a/packages/features/pbac/services/legacy-role-manager.service.ts b/packages/features/pbac/services/legacy-role-manager.service.ts
+index 14e0c807cedb3c..c4c8e3ef308b9b 100644
+--- a/packages/features/pbac/services/legacy-role-manager.service.ts
++++ b/packages/features/pbac/services/legacy-role-manager.service.ts
+@@ -1,5 +1,5 @@
+ import { isTeamOwner } from "@calcom/features/ee/teams/lib/queries";
+-import { isOrganisationAdmin } from "@calcom/lib/server/queries/organisations";
++import { isOrganisationAdmin, isOrganisationOwner } from "@calcom/lib/server/queries/organisations";
+ import { prisma } from "@calcom/prisma";
+ import type { Membership } from "@calcom/prisma/client";
+ import { MembershipRole } from "@calcom/prisma/enums";
+@@ -73,6 +73,7 @@ export class LegacyRoleManager implements IRoleManager {
+     newRole?: MembershipRole | string
+   ): Promise<void> {
+     let hasPermission = false;
++    const isOwnerChange = newRole === MembershipRole.OWNER;
+     if (scope === "team") {
+       const team = await prisma.membership.findFirst({
+         where: {
+@@ -84,13 +85,16 @@ export class LegacyRoleManager implements IRoleManager {
+       });
+       hasPermission = !!team;
+     } else {
+-      hasPermission = !!(await isOrganisationAdmin(userId, targetId));
++      hasPermission =
++        newRole === MembershipRole.OWNER
++          ? !!(await isOrganisationOwner(userId, targetId))
++          : !!(await isOrganisationAdmin(userId, targetId));
+     }
+ 
+     // Only OWNER/ADMIN can update role
+     if (!hasPermission) {
+       throw new RoleManagementError(
+-        "Only owners or admin can update roles",
++        isOwnerChange ? "Only owners can update this role" : "Only owners or admin can update roles",
+         RoleManagementErrorCode.UNAUTHORIZED
+       );
+     }
+@@ -112,7 +116,7 @@ export class LegacyRoleManager implements IRoleManager {
+     organizationId: number,
+     role: MembershipRole | string,
+     // Used in other implementation
+-     
++
+     _membershipId: number
+   ): Promise<void> {
+     await prisma.membership.update({
+@@ -129,7 +133,7 @@ export class LegacyRoleManager implements IRoleManager {
+   }
+ 
+   // Used in other implementation
+-   
++
+   async getAllRoles(_organizationId: number): Promise<{ id: string; name: string }[]> {
+     return [
+       { id: MembershipRole.OWNER, name: "Owner" },
+@@ -139,7 +143,7 @@ export class LegacyRoleManager implements IRoleManager {
+   }
+ 
+   // Used in other implementation
+-   
++
+   async getTeamRoles(_teamId: number): Promise<{ id: string; name: string }[]> {
+     return [
+       { id: MembershipRole.OWNER, name: "Owner" },
+diff --git a/packages/trpc/server/routers/viewer/organizations/updateUser.handler.ts b/packages/trpc/server/routers/viewer/organizations/updateUser.handler.ts
+index 049781a3c6e381..d30ebbecb0d2ca 100644
+--- a/packages/trpc/server/routers/viewer/organizations/updateUser.handler.ts
++++ b/packages/trpc/server/routers/viewer/organizations/updateUser.handler.ts
+@@ -43,19 +43,6 @@ export const updateUserHandler = async ({ ctx, input }: UpdateUserOptions) => {
+   if (!organizationId)
+     throw new TRPCError({ code: "UNAUTHORIZED", message: "You must be a member of an organizaiton" });
+ 
+-  const roleManager = await RoleManagementFactory.getInstance().createRoleManager(organizationId);
+-
+-  try {
+-    await roleManager.checkPermissionToChangeRole(userId, organizationId, "org");
+-  } catch (error) {
+-    if (error instanceof RoleManagementError) {
+-      throw new TRPCError({ code: "UNAUTHORIZED", message: error.message });
+-    }
+-    throw error;
+-  }
+-
+-  await ensureOrganizationIsReviewed(organizationId);
+-
+   // Is requested user a member of the organization?
+   const requestedMember = await prisma.membership.findFirst({
+     where: {
+@@ -96,6 +83,25 @@ export const updateUserHandler = async ({ ctx, input }: UpdateUserOptions) => {
+   if (!requestedMember)
+     throw new TRPCError({ code: "UNAUTHORIZED", message: "User does not belong to your organization" });
+ 
++  const roleManager = await RoleManagementFactory.getInstance().createRoleManager(organizationId);
++
++  try {
++    await roleManager.checkPermissionToChangeRole(
++      userId,
++      organizationId,
++      "org",
++      requestedMember.id,
++      input.role
++    );
++  } catch (error) {
++    if (error instanceof RoleManagementError) {
++      throw new TRPCError({ code: "UNAUTHORIZED", message: error.message });
++    }
++    throw error;
++  }
++
++  await ensureOrganizationIsReviewed(organizationId);
++
+   const hasUsernameUpdated = input.username !== requestedMember.user.profiles[0]?.username;
+ 
+   if (input.username && hasUsernameUpdated && user.profile.organization?.slug) {

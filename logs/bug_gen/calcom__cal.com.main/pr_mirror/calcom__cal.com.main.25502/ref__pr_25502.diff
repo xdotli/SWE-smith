@@ -1,0 +1,326 @@
+diff --git a/packages/features/calendar-subscription/lib/CalendarSubscriptionService.ts b/packages/features/calendar-subscription/lib/CalendarSubscriptionService.ts
+index 236a718392a33d..6dfc3ae7031e8d 100644
+--- a/packages/features/calendar-subscription/lib/CalendarSubscriptionService.ts
++++ b/packages/features/calendar-subscription/lib/CalendarSubscriptionService.ts
+@@ -12,7 +12,7 @@ import type { CalendarSyncService } from "@calcom/features/calendar-subscription
+ import type { FeaturesRepository } from "@calcom/features/flags/features.repository";
+ import logger from "@calcom/lib/logger";
+ import type { ISelectedCalendarRepository } from "@calcom/lib/server/repository/SelectedCalendarRepository.interface";
+-import { SelectedCalendar } from "@calcom/prisma/client";
++import type { SelectedCalendar } from "@calcom/prisma/client";
+ 
+ const log = logger.getSubLogger({ prefix: ["CalendarSubscriptionService"] });
+ 
+@@ -204,9 +204,14 @@ export class CalendarSubscriptionService {
+    * Subscribe periodically to new calendars
+    */
+   async checkForNewSubscriptions() {
++    const teamIds = await this.deps.featuresRepository.getTeamsWithFeatureEnabled(
++      CalendarSubscriptionService.CALENDAR_SUBSCRIPTION_CACHE_FEATURE
++    );
++
+     const rows = await this.deps.selectedCalendarRepository.findNextSubscriptionBatch({
+       take: 100,
+       integrations: this.deps.adapterFactory.getProviders(),
++      teamIds,
+     });
+     log.debug("checkForNewSubscriptions", { count: rows.length });
+     await Promise.allSettled(rows.map(({ id }) => this.subscribe(id)));
+diff --git a/packages/features/calendar-subscription/lib/__tests__/CalendarSubscriptionService.test.ts b/packages/features/calendar-subscription/lib/__tests__/CalendarSubscriptionService.test.ts
+index a1081a2b1aaa3c..459b870a568b71 100644
+--- a/packages/features/calendar-subscription/lib/__tests__/CalendarSubscriptionService.test.ts
++++ b/packages/features/calendar-subscription/lib/__tests__/CalendarSubscriptionService.test.ts
+@@ -125,6 +125,8 @@ describe("CalendarSubscriptionService", () => {
+     mockFeaturesRepository = {
+       checkIfFeatureIsEnabledGlobally: vi.fn().mockResolvedValue(true),
+       checkIfUserHasFeature: vi.fn().mockResolvedValue(true),
++      checkIfTeamHasFeature: vi.fn().mockResolvedValue(true),
++      getTeamsWithFeatureEnabled: vi.fn().mockResolvedValue([1, 2, 3]),
+     };
+ 
+     mockCalendarCacheEventService = {
+@@ -376,12 +378,94 @@ describe("CalendarSubscriptionService", () => {
+ 
+       await service.checkForNewSubscriptions();
+ 
++      expect(mockFeaturesRepository.getTeamsWithFeatureEnabled).toHaveBeenCalledWith(
++        "calendar-subscription-cache"
++      );
+       expect(mockSelectedCalendarRepository.findNextSubscriptionBatch).toHaveBeenCalledWith({
+         take: 100,
+         integrations: ["google_calendar", "office365_calendar"],
++        teamIds: [1, 2, 3],
+       });
+       expect(subscribeSpy).toHaveBeenCalledWith(mockSelectedCalendar.id);
+     });
++
++    test("should handle mixed cache scenario where some teams have cache enabled and some do not", async () => {
++      const calendarWithCache = { ...mockSelectedCalendar, id: "calendar-with-cache", userId: 1 };
++      const calendarWithCache2 = { ...mockSelectedCalendar, id: "calendar-with-cache-2", userId: 2 };
++
++      mockFeaturesRepository.getTeamsWithFeatureEnabled.mockResolvedValue([10, 20]);
++
++      mockSelectedCalendarRepository.findNextSubscriptionBatch.mockResolvedValue([
++        calendarWithCache,
++        calendarWithCache2,
++      ]);
++
++      const subscribeSpy = vi.spyOn(service, "subscribe").mockResolvedValue(undefined);
++
++      await service.checkForNewSubscriptions();
++
++      expect(mockFeaturesRepository.getTeamsWithFeatureEnabled).toHaveBeenCalledWith(
++        "calendar-subscription-cache"
++      );
++      expect(mockSelectedCalendarRepository.findNextSubscriptionBatch).toHaveBeenCalledWith({
++        take: 100,
++        integrations: ["google_calendar", "office365_calendar"],
++        teamIds: [10, 20],
++      });
++      expect(subscribeSpy).toHaveBeenCalledTimes(2);
++      expect(subscribeSpy).toHaveBeenCalledWith("calendar-with-cache");
++      expect(subscribeSpy).toHaveBeenCalledWith("calendar-with-cache-2");
++    });
++
++    test("should only fetch calendars for teams with feature enabled, not entire organization hierarchy", async () => {
++      const teamId = 100;
++      const parentOrgId = 1;
++
++      mockFeaturesRepository.getTeamsWithFeatureEnabled.mockResolvedValue([teamId]);
++
++      const calendarForTeamMember = { ...mockSelectedCalendar, id: "team-member-calendar", userId: 5 };
++      mockSelectedCalendarRepository.findNextSubscriptionBatch.mockResolvedValue([calendarForTeamMember]);
++
++      const subscribeSpy = vi.spyOn(service, "subscribe").mockResolvedValue(undefined);
++
++      await service.checkForNewSubscriptions();
++
++      expect(mockFeaturesRepository.getTeamsWithFeatureEnabled).toHaveBeenCalledWith(
++        "calendar-subscription-cache"
++      );
++      expect(mockSelectedCalendarRepository.findNextSubscriptionBatch).toHaveBeenCalledWith({
++        take: 100,
++        integrations: ["google_calendar", "office365_calendar"],
++        teamIds: [teamId],
++      });
++      expect(mockSelectedCalendarRepository.findNextSubscriptionBatch).not.toHaveBeenCalledWith(
++        expect.objectContaining({
++          teamIds: expect.arrayContaining([parentOrgId]),
++        })
++      );
++      expect(subscribeSpy).toHaveBeenCalledTimes(1);
++      expect(subscribeSpy).toHaveBeenCalledWith("team-member-calendar");
++    });
++
++    test("should not process any calendars when no teams have the feature enabled", async () => {
++      mockFeaturesRepository.getTeamsWithFeatureEnabled.mockResolvedValue([]);
++
++      mockSelectedCalendarRepository.findNextSubscriptionBatch.mockResolvedValue([]);
++
++      const subscribeSpy = vi.spyOn(service, "subscribe").mockResolvedValue(undefined);
++
++      await service.checkForNewSubscriptions();
++
++      expect(mockFeaturesRepository.getTeamsWithFeatureEnabled).toHaveBeenCalledWith(
++        "calendar-subscription-cache"
++      );
++      expect(mockSelectedCalendarRepository.findNextSubscriptionBatch).toHaveBeenCalledWith({
++        take: 100,
++        integrations: ["google_calendar", "office365_calendar"],
++        teamIds: [],
++      });
++      expect(subscribeSpy).not.toHaveBeenCalled();
++    });
+   });
+ 
+   describe("feature flag methods", () => {
+diff --git a/packages/features/flags/features.repository.interface.ts b/packages/features/flags/features.repository.interface.ts
+index 60fa9a7f9d1e16..782714d4d9284d 100644
+--- a/packages/features/flags/features.repository.interface.ts
++++ b/packages/features/flags/features.repository.interface.ts
+@@ -4,4 +4,5 @@ export interface IFeaturesRepository {
+   checkIfFeatureIsEnabledGlobally(slug: keyof AppFlags): Promise<boolean>;
+   checkIfUserHasFeature(userId: number, slug: string): Promise<boolean>;
+   checkIfTeamHasFeature(teamId: number, slug: keyof AppFlags): Promise<boolean>;
++  getTeamsWithFeatureEnabled(slug: keyof AppFlags): Promise<number[]>;
+ }
+diff --git a/packages/features/flags/features.repository.ts b/packages/features/flags/features.repository.ts
+index b6df40504e82c0..48e3bd010470b6 100644
+--- a/packages/features/flags/features.repository.ts
++++ b/packages/features/flags/features.repository.ts
+@@ -351,4 +351,23 @@ export class FeaturesRepository implements IFeaturesRepository {
+       throw err;
+     }
+   }
++
++  async getTeamsWithFeatureEnabled(slug: keyof AppFlags): Promise<number[]> {
++    try {
++      // If globally disabled, treat as effectively disabled everywhere
++      const isGloballyEnabled = await this.checkIfFeatureIsEnabledGlobally(slug);
++      if (!isGloballyEnabled) return [];
++
++      const rows = await this.prismaClient.teamFeatures.findMany({
++        where: { featureId: slug },
++        select: { teamId: true },
++        orderBy: { teamId: "asc" },
++      });
++
++      return rows.map((r) => r.teamId);
++    } catch (err) {
++      captureException(err);
++      throw err;
++    }
++  }
+ }
+diff --git a/packages/lib/server/repository/SelectedCalendarRepository.interface.ts b/packages/lib/server/repository/SelectedCalendarRepository.interface.ts
+index 55b49b7b5ecebd..2d119385175042 100644
+--- a/packages/lib/server/repository/SelectedCalendarRepository.interface.ts
++++ b/packages/lib/server/repository/SelectedCalendarRepository.interface.ts
+@@ -24,9 +24,11 @@ export interface ISelectedCalendarRepository {
+    */
+   findNextSubscriptionBatch({
+     take,
++    teamIds,
+     integrations,
+   }: {
+     take: number;
++    teamIds: number[];
+     integrations?: string[];
+   }): Promise<SelectedCalendar[]>;
+ 
+diff --git a/packages/lib/server/repository/SelectedCalendarRepository.ts b/packages/lib/server/repository/SelectedCalendarRepository.ts
+index b40cfc70a37b57..716a35e646c42b 100644
+--- a/packages/lib/server/repository/SelectedCalendarRepository.ts
++++ b/packages/lib/server/repository/SelectedCalendarRepository.ts
+@@ -15,26 +15,24 @@ export class SelectedCalendarRepository implements ISelectedCalendarRepository {
+     return this.prismaClient.selectedCalendar.findFirst({ where: { channelId } });
+   }
+ 
+-  async findNextSubscriptionBatch({ take, integrations }: { take: number; integrations: string[] }) {
++  async findNextSubscriptionBatch({
++    take,
++    teamIds,
++    integrations,
++  }: {
++    take: number;
++    teamIds: number[];
++    integrations: string[];
++  }) {
+     return this.prismaClient.selectedCalendar.findMany({
+       where: {
+         integration: { in: integrations },
+         OR: [{ syncSubscribedAt: null }, { channelExpiration: { lte: new Date() } }],
+-        // initially we will run subscription only for teams that have
+-        // the feature flags enabled and it should be removed later
+         user: {
+           teams: {
+             some: {
+-              team: {
+-                features: {
+-                  some: {
+-                    OR: [
+-                      { featureId: "calendar-subscription-cache" },
+-                      { featureId: "calendar-subscription-sync" },
+-                    ],
+-                  },
+-                },
+-              },
++              teamId: { in: teamIds },
++              accepted: true,
+             },
+           },
+         },
+diff --git a/packages/lib/server/repository/__tests__/SelectedCalendarRepository.test.ts b/packages/lib/server/repository/__tests__/SelectedCalendarRepository.test.ts
+index d649c6da1754d6..ac1b8153a7335d 100644
+--- a/packages/lib/server/repository/__tests__/SelectedCalendarRepository.test.ts
++++ b/packages/lib/server/repository/__tests__/SelectedCalendarRepository.test.ts
+@@ -116,6 +116,7 @@ describe("SelectedCalendarRepository", () => {
+ 
+       const result = await repository.findNextSubscriptionBatch({
+         take: 10,
++        teamIds: [1, 2, 3],
+         integrations: ["google_calendar", "office365_calendar"],
+       });
+ 
+@@ -126,16 +127,8 @@ describe("SelectedCalendarRepository", () => {
+           user: {
+             teams: {
+               some: {
+-                team: {
+-                  features: {
+-                    some: {
+-                      OR: [
+-                        { featureId: "calendar-subscription-cache" },
+-                        { featureId: "calendar-subscription-sync" },
+-                      ],
+-                    },
+-                  },
+-                },
++                teamId: { in: [1, 2, 3] },
++                accepted: true,
+               },
+             },
+           },
+@@ -152,6 +145,7 @@ describe("SelectedCalendarRepository", () => {
+ 
+       const result = await repository.findNextSubscriptionBatch({
+         take: 5,
++        teamIds: [10, 20],
+         integrations: [],
+       });
+ 
+@@ -162,16 +156,8 @@ describe("SelectedCalendarRepository", () => {
+           user: {
+             teams: {
+               some: {
+-                team: {
+-                  features: {
+-                    some: {
+-                      OR: [
+-                        { featureId: "calendar-subscription-cache" },
+-                        { featureId: "calendar-subscription-sync" },
+-                      ],
+-                    },
+-                  },
+-                },
++                teamId: { in: [10, 20] },
++                accepted: true,
+               },
+             },
+           },
+@@ -181,6 +167,35 @@ describe("SelectedCalendarRepository", () => {
+ 
+       expect(result).toEqual(mockCalendars);
+     });
++
++    test("should handle empty teamIds array", async () => {
++      const mockCalendars: SelectedCalendar[] = [];
++      vi.mocked(mockPrismaClient.selectedCalendar.findMany).mockResolvedValue(mockCalendars);
++
++      const result = await repository.findNextSubscriptionBatch({
++        take: 10,
++        teamIds: [],
++        integrations: ["google_calendar"],
++      });
++
++      expect(mockPrismaClient.selectedCalendar.findMany).toHaveBeenCalledWith({
++        where: {
++          integration: { in: ["google_calendar"] },
++          OR: [{ syncSubscribedAt: null }, { channelExpiration: { lte: expect.any(Date) } }],
++          user: {
++            teams: {
++              some: {
++                teamId: { in: [] },
++                accepted: true,
++              },
++            },
++          },
++        },
++        take: 10,
++      });
++
++      expect(result).toEqual(mockCalendars);
++    });
+   });
+ 
+   describe("updateSyncStatus", () => {

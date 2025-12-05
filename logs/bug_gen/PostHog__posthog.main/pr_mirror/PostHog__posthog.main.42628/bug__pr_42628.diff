@@ -1,0 +1,951 @@
+diff --git a/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts b/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
+index 757be6c..4f6cfe9 100644
+--- a/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
++++ b/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
+@@ -86,7 +86,7 @@ describe('topBarSettingsButtonLogic', () => {
+         it('returns other setting section IDs regardless of CRM feature flag state', async () => {
+             router.actions.push(urls.persons())
+             featureFlagLogic.actions.setFeatureFlags([], {
+-                [FEATURE_FLAGS.CUSTOMER_ANALYTICS]: false,
++                [FEATURE_FLAGS.CRM_ITERATION_ONE]: false,
+             })
+ 
+             await expectLogic(logic).toMatchValues({
+@@ -94,7 +94,7 @@ describe('topBarSettingsButtonLogic', () => {
+             })
+ 
+             featureFlagLogic.actions.setFeatureFlags([], {
+-                [FEATURE_FLAGS.CUSTOMER_ANALYTICS]: true,
++                [FEATURE_FLAGS.CRM_ITERATION_ONE]: true,
+             })
+ 
+             await expectLogic(logic).toMatchValues({
+@@ -102,4 +102,4 @@ describe('topBarSettingsButtonLogic', () => {
+             })
+         })
+     })
+-})
++})
+\ No newline at end of file
+diff --git a/frontend/src/lib/constants.tsx b/frontend/src/lib/constants.tsx
+index 49090d6..061af59 100644
+--- a/frontend/src/lib/constants.tsx
++++ b/frontend/src/lib/constants.tsx
+@@ -223,228 +223,4 @@ export const FEATURE_FLAGS = {
+     BATCH_EXPORT_NEW_LOGS: 'batch-export-new-logs', // owner: #team-batch-exports
+     BATCH_EXPORTS_DATABRICKS: 'databricks-batch-exports', // owner: @rossgray #team-batch-exports
+     BING_ADS_SOURCE: 'bing-ads-source', // owner: @jabahamondes #team-web-analytics
+-    CDP_ACTIVITY_LOG_NOTIFICATIONS: 'cdp-activity-log-notifications', // owner: #team-workflows-cdp
+-    CDP_HOG_SOURCES: 'cdp-hog-sources', // owner #team-workflows-cdp
+-    CDP_NEW_PRICING: 'cdp-new-pricing', // owner: #team-workflows
+-    CDP_PERSON_UPDATES: 'cdp-person-updates', // owner: #team-workflows-cdp
+-    COHORT_CALCULATION_HISTORY: 'cohort-calculation-history', // owner: @gustavo #team-feature-flags
+-    COPY_WEB_ANALYTICS_DATA: 'copy-web-analytics-data', // owner: @lricoy  #team-web-analytics
+-    CREATE_FORM_TOOL: 'phai-create-form-tool', // owner: @kappa90 #team-posthog-ai
+-    CRM_ITERATION_ONE: 'crm-iteration-one', // owner: @arthurdedeus #team-customer-analytics
+-    CUSTOM_PRODUCTS_SIDEBAR: 'custom-products-sidebar', // owner: @rafaeelaudibert #team-growth
+-    CUSTOMER_ANALYTICS: 'customer-analytics-roadmap', // owner: @arthurdedeus #team-customer-analytics
+-    DASHBOARD_TILE_OVERRIDES: 'dashboard-tile-overrides', // owner: @gesh #team-product-analytics
+-    DATA_WAREHOUSE_SCENE: 'data-warehouse-scene', // owner: #team-data-stack
+-    DATE_PICKER_EXPLICIT_DATE_TOGGLE: 'date-picker-explicit-date-toggle', // owner: @gesh #team-product-analytics
+-    DEFAULT_EVALUATION_ENVIRONMENTS: 'default-evaluation-environments', // owner: @dmarticus #team-feature-flags
+-    DWH_FREE_SYNCS: 'dwh-free-syncs', // owner: @Gilbert09  #team-data-stack
+-    DWH_JOIN_TABLE_PREVIEW: 'dwh-join-table-preview', // owner: @arthurdedeus #team-customer-analytics
+-    EDITOR_DRAFTS: 'editor-drafts', // owner: @EDsCODE #team-data-stack
+-    ENDPOINTS: 'embedded-analytics', // owner: @sakce #team-clickhouse
+-    ERROR_TRACKING_ISSUE_CORRELATION: 'error-tracking-issue-correlation', // owner: @david #team-error-tracking
+-    ERROR_TRACKING_ISSUE_SPLITTING: 'error-tracking-issue-splitting', // owner: @david #team-error-tracking
+-    ERROR_TRACKING_RELATED_ISSUES: 'error-tracking-related-issues', // owner: #team-error-tracking
+-    ERROR_TRACKING_REVENUE_SORTING: 'error-tracking-revenue-sorting', // owner: @david #team-error-tracking
+-    EXPERIMENT_AI_SUMMARY: 'experiment-ai-summary', // owner: @jurajmajerik #team-experiments
+-    EXPERIMENTS_BREAKDOWN_FILTER: 'experiments-breakdown-filter', // owner: @rodrigoi #team-experiments
+-    EXPERIMENTS_NEW_CALCULATOR: 'experiments-new-calculator', // owner: @jurajmajerik #team-experiments
+-    EXPERIMENTS_RETENTION_METRICS: 'experiments-retention-metrics', // owner: @rodrigoi #team-experiments
+-    EXPERIMENTS_SHOW_SQL: 'experiments-show-sql', // owner: @jurajmajerik #team-experiments
+-    EXPERIMENTS_USE_NEW_QUERY_BUILDER: 'experiments-use-new-query-builder', // owner: @andehen #team-experiments
+-    EXTERNAL_SURVEYS: 'external-surveys', // owner: #team-surveys
+-    FLAG_EVALUATION_RUNTIMES: 'flag-evaluation-runtimes', // owner: @dmarticus #team-feature-flags
+-    FLAG_EVALUATION_TAGS: 'flag-evaluation-tags', // owner: @dmarticus #team-feature-flags
+-    FLAGGED_FEATURE_INDICATOR: 'flagged-feature-indicator', // owner: @benjackwhite
+-    HOME_FEED_TAB: 'home-feed-tab', // owner: @ksvat #team-replay
+-    INCIDENT_IO_STATUS_PAGE: 'incident-io-status-page', // owner: @benjackwhite
+-    LINKS: 'links', // owner: @marconlp #team-link (team doesn't exist for now, maybe will come back in the future)
+-    LIVE_DEBUGGER: 'live-debugger', // owner: @marcecoll
+-    LLM_ANALYTICS_CUSTOMIZABLE_DASHBOARD: 'llm-analytics-customizable-dashboard', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_DATASETS: 'llm-analytics-datasets', // owner: #team-llm-analytics #team-posthog-ai
+-    LLM_ANALYTICS_DISCUSSIONS: 'llm-analytics-discussions', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_EARLY_ADOPTERS: 'llm-analytics-early-adopters', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_ERRORS_TAB: 'llm-analytics-errors-tab', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_EVALUATIONS: 'llm-analytics-evaluations', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_SESSION_SUMMARIZATION: 'llm-analytics-session-summarization', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_SESSIONS_VIEW: 'llm-analytics-sessions-view', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_SUMMARIZATION: 'llm-analytics-summarization', // owner: #team-llm-analytics
+-    LLM_ANALYTICS_TEXT_VIEW: 'llm-analytics-text-view', // owner: #team-llm-analytics
+-    LLM_OBSERVABILITY_SHOW_INPUT_OUTPUT: 'llm-observability-show-input-output', // owner: #team-llm-analytics
+-    LOGS_PRE_EARLY_ACCESS: 'logs-internal', // owner: #team-logs
+-    LOGS_VIRTUALIZED_LIST: 'logs-virtualized-list', // owner: #team-logs
+-    LOGS: 'logs', // owner: #team-logs
+-    MANAGED_VIEWSETS: 'managed-viewsets', // owner: @rafaeelaudibert #team-revenue-analytics
+-    MAX_AI_INSIGHT_SEARCH: 'max-ai-insight-search', // owner: #team-posthog-ai
+-    MAX_BILLING_CONTEXT: 'max-billing-context', // owner: @pawel-cebula #team-billing
+-    MAX_DEEP_RESEARCH: 'max-deep-research', // owner: @kappa90 #team-posthog-ai
+-    MAX_SESSION_SUMMARIZATION: 'max-session-summarization', // owner: #team-posthog-ai
+-    MESSAGING_SES: 'messaging-ses', // owner #team-workflows
+-    NOTEBOOKS_COLLAPSIBLE_SECTIONS: 'notebooks-collapsible-sections', // owner: @daibhin @benjackwhite
+-    ONBOARDING_AI_CONSENT_STEP: 'onboarding-ai-consent-step', // owner: @mattbro #team-growth
+-    ONBOARDING_TELL_US_MORE_STEP: 'onboarding-tell-us-more-step', // owner: @rafaeelaudibert #team-growth
+-    ONBOARDING_USE_CASE_SELECTION: 'onboarding-use-case-selection', // owner: @mattbro #team-growth
+-    PASSWORD_PROTECTED_SHARES: 'password-protected-shares', // owner: @aspicer
+-    PATHS_V2: 'paths-v2', // owner: @thmsobrmlr #team-product-analytics
+-    POSTHOG_AI_BILLING_DISPLAY: 'posthog-ai-billing-display', // owner: #team-posthog-ai
+-    POSTHOG_AI_BILLING_USAGE_COMMAND: 'posthog-ai-billing-usage-command', // owner: #team-posthog-ai
+-    POSTHOG_AI_BILLING_USAGE_REPORT: 'posthog-ai-billing-usage-report', // owner: #team-posthog-ai
+-    POSTHOG_AI_CONVERSATION_FEEDBACK_CONFIG: 'posthog-ai-conversation-feedback-config', // owner: #team-posthog-ai
+-    POSTHOG_AI_CONVERSATION_FEEDBACK_LLMA_SESSIONS: 'posthog-ai-conversation-feedback-llma-sessions', // owner: #team-posthog-ai
+-    POSTHOG_AI_GENERAL_AVAILABILITY: 'posthog-ai-general-availability', // owner: #team-posthog-ai
+-    QUERY_EXECUTION_DETAILS: 'query-execution-details', // owner: @sakce
+-    RECORDINGS_PLAYER_EVENT_PROPERTY_EXPANSION: 'recordings-player-event-property-expansion', // owner: @pauldambra #team-replay
+-    REMOTE_CONFIG: 'remote-config', // owner: #team-platform-features
+-    REPLAY_CLIENT_SIDE_DECOMPRESSION: 'replay-client-side-decompression', // owner: @pauldambra #team-replay
+-    REPLAY_DECOMPRESSION_WORKER: 'replay-decompression-worker', // owner: @pauldambra #team-replay
+-    REPLAY_FILTERS_REDESIGN: 'replay-filters-redesign', // owner: @ksvat #team-replay
+-    REPLAY_NEW_DETECTED_URL_COLLECTIONS: 'replay-new-detected-url-collections', // owner: @ksvat #team-replay multivariate
+-    REPLAY_WAIT_FOR_FULL_SNAPSHOT_PLAYBACK: 'replay-wait-for-full-snapshot-playback', // owner: @ksvat #team-replay
+-    REPLAY_X_LLM_ANALYTICS_CONVERSATION_VIEW: 'replay-x-llm-analytics-conversation-view', // owner: @pauldambra #team-replay
+-    SCHEDULE_FEATURE_FLAG_VARIANTS_UPDATE: 'schedule-feature-flag-variants-update', // owner: @gustavo #team-feature-flags
+-    SCHEMA_MANAGEMENT: 'schema-management', // owner: @aspicer
+-    SEEKBAR_PREVIEW_SCRUBBING: 'seekbar-preview-scrubbing', // owner: @pauldambra #team-replay
+-    SESSIONS_EXPLORER: 'sessions-explorer', // owner: @jabahamondes #team-web-analytics
+-    SHOPIFY_DWH: 'shopify-dwh', // owner: @andrew #team-data-stack
+-    SHOW_REFERRER_FAVICON: 'show-referrer-favicon', // owner: @jordanm-posthog #team-web-analytics
+-    SSE_DASHBOARDS: 'sse-dashboards', // owner: @aspicer #team-product-analytics
+-    SURVEY_ANALYSIS_MAX_TOOL: 'survey-analysis-max-tool', // owner: #team-surveys
+-    SURVEYS_EXPERIMENTS_CROSS_SELL: 'surveys-experiments-cross-sell', // owner: @adboio #team-surveys
+-    SURVEYS_FF_CROSS_SELL: 'surveys-ff-cross-sell', // owner: @adboio #team-surveys
+-    SURVEYS_FUNNELS_CROSS_SELL: 'survey-funnels-cross-sell', // owner: @adboio #team-surveys
+-    SURVEYS_INSIGHT_BUTTON_EXPERIMENT: 'ask-users-why-ai-vs-quickcreate', // owner: @adboio #team-surveys multivariate
+-    SWITCH_SUBSCRIPTION_PLAN: 'switch-subscription-plan', // owner: @a-lider #team-platform-features
+-    TASK_SUMMARIES: 'task-summaries', // owner: #team-llm-analytics
+-    TASKS: 'tasks', // owner: #team-llm-analytics
+-    TOGGLE_PROPERTY_ARRAYS: 'toggle-property-arrays', // owner: @arthurdedeus #team-customer-analytics
+-    USE_TEMPORAL_SUBSCRIPTIONS: 'use-temporal-subscriptions', // owner: @aspicer #team-product-analytics
+-    USER_INTERVIEWS: 'user-interviews', // owner: @Twixes @jurajmajerik
+-    WEB_ANALYTICS_CONVERSION_GOAL_PREAGG: 'web-analytics-conversion-goal-preagg', // owner: @lricoy #team-web-analytics
+-    WEB_ANALYTICS_EMPTY_ONBOARDING: 'web-analytics-empty-onboarding', // owner: @jordanm-posthog #team-web-analytics
+-    WEB_ANALYTICS_HIGHER_CONCURRENCY: 'web-analytics-higher-concurrency', // owner: @lricoy #team-web-analytics
+-    WEB_ANALYTICS_MARKETING: 'marketing-analytics', // owner: @jabahamondes #team-web-analytics
+-    WEB_ANALYTICS_OPEN_AS_INSIGHT: 'web-analytics-open-as-insight', // owner: @lricoy #team-web-analytics
+-    WEB_ANALYTICS_POSTHOG_AI: 'web-analytics-posthog-ai', // owner: @lricoy #team-web-analytics
+-    WEB_ANALYTICS_TILE_TOGGLES: 'web-analytics-tile-toggles', // owner: @lricoy #team-web-analytics
+-    WORKFLOWS_INTERNAL_EVENT_FILTERS: 'workflows-internal-event-filters', // owner: @haven #team-workflows
+-    WORKFLOWS_SCHEDULED_TRIGGERS: 'workflows-scheduled-triggers', // owner: #team-workflows
+-    WORKFLOWS: 'messaging', // owner @haven #team-workflows
+-    AVERAGE_PAGE_VIEW_COLUMN: 'average-page-view-column', // owner: @jordanm-posthog #team-web-analytics
+-} as const
+-export type FeatureFlagLookupKey = keyof typeof FEATURE_FLAGS
+-export type FeatureFlagKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS]
+-
+-export const STORYBOOK_FEATURE_FLAGS = Object.values(FEATURE_FLAGS).filter(
+-    (flag) => flag !== FEATURE_FLAGS.AI_ONLY_MODE
+-)
+-
+-export const INSIGHT_VISUAL_ORDER = {
+-    trends: 10,
+-    funnel: 20,
+-    retention: 30,
+-    paths: 40,
+-    stickiness: 50,
+-    lifecycle: 60,
+-    calendarHeatmap: 70,
+-    sql: 80,
+-    hog: 90,
+-}
+-
+-export const ENTITY_MATCH_TYPE = 'entities'
+-export const PROPERTY_MATCH_TYPE = 'properties'
+-
+-export enum FunnelLayout {
+-    horizontal = 'horizontal',
+-    vertical = 'vertical',
+-}
+-
+-export const BIN_COUNT_AUTO = 'auto' as const
+-
+-export const RETENTION_MEAN_NONE = 'none' as const
+-
+-// Cohort types
+-export enum CohortTypeEnum {
+-    Static = 'static',
+-    Dynamic = 'dynamic',
+-}
+-
+-/**
+- * Mock Node.js `process`, which is required by VFile that is used by ReactMarkdown.
+- * See https://github.com/remarkjs/react-markdown/issues/339.
+- */
+-export const MOCK_NODE_PROCESS = { cwd: () => '', env: {} } as unknown as NodeJS.Process
+-
+-export const SSO_PROVIDER_NAMES: Record<SSOProvider, string> = {
+-    'google-oauth2': 'Google',
+-    github: 'GitHub',
+-    gitlab: 'GitLab',
+-    saml: 'Single sign-on (SAML)',
+-}
+-
+-export const DOMAIN_REGEX = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/
+-export const SECURE_URL_REGEX = /^(?:http(s)?:\/\/)[\w.-]+(?:\.[\w.-]+)+[\w\-._~:/?#[\]@!$&'()*+,;=]+$/gi
+-
+-export const CLOUD_HOSTNAMES = {
+-    [Region.US]: 'us.posthog.com',
+-    [Region.EU]: 'eu.posthog.com',
+-}
+-
+-export const SESSION_RECORDINGS_PLAYLIST_FREE_COUNT = 5
+-export const SESSION_RECORDINGS_TTL_WARNING_THRESHOLD_DAYS = 10 // days
+-
+-export const GENERATED_DASHBOARD_PREFIX = 'Generated Dashboard'
+-
+-export const ACTIVITY_PAGE_SIZE = 20
+-export const ADVANCED_ACTIVITY_PAGE_SIZE = 100
+-export const EVENT_DEFINITIONS_PER_PAGE = 50
+-export const PROPERTY_DEFINITIONS_PER_EVENT = 5
+-export const EVENT_PROPERTY_DEFINITIONS_PER_PAGE = 50
+-export const LOGS_PORTION_LIMIT = 50
+-
+-export const SESSION_REPLAY_MINIMUM_DURATION_OPTIONS: LemonSelectOptions<number | null> = [
+-    {
+-        label: 'no minimum',
+-        value: null,
+-    },
+-    {
+-        label: '1',
+-        value: 1000,
+-    },
+-    {
+-        label: '2',
+-        value: 2000,
+-    },
+-    {
+-        label: '5',
+-        value: 5000,
+-    },
+-    {
+-        label: '10',
+-        value: 10000,
+-    },
+-    {
+-        label: '15',
+-        value: 15000,
+-    },
+-    {
+-        label: '30',
+-        value: 30000,
+-    },
+-]
+-
+-export const UNSUBSCRIBE_SURVEY_ID = '018b6e13-590c-0000-decb-c727a2b3f462'
+-export const SESSION_RECORDING_OPT_OUT_SURVEY_ID = '01985c68-bd25-0000-b7e3-f1ccc987e979'
+-export const TRIAL_CANCELLATION_SURVEY_ID = '019923cd-461c-0000-27ed-ed8e422c596e'
+-
+-export const TAILWIND_BREAKPOINTS = {
+-    sm: 526,
+-    md: 768,
+-    lg: 992,
+-    xl: 1200,
+-    '2xl': 1600,
+-}
+-
+-export const INSIGHT_ALERT_FIRING_SUB_TEMPLATE_ID = 'insight-alert-firing'
+-export const INSIGHT_ALERT_DESTINATION_LOGIC_KEY = 'insightAlertDestination'
+-export const INSIGHT_ALERT_FIRING_EVENT_ID = '$insight_alert_firing'
+-
+-export const COHORT_PERSONS_QUERY_LIMIT = 10000
++    CDP_
+\ No newline at end of file
+diff --git a/frontend/src/queries/nodes/DataTable/DataTable.tsx b/frontend/src/queries/nodes/DataTable/DataTable.tsx
+index 2f99a9a..df3d8a5 100644
+--- a/frontend/src/queries/nodes/DataTable/DataTable.tsx
++++ b/frontend/src/queries/nodes/DataTable/DataTable.tsx
+@@ -174,7 +174,6 @@ export function DataTable({
+ 
+     const canUseWebAnalyticsPreAggregatedTables = useFeatureFlag('SETTINGS_WEB_ANALYTICS_PRE_AGGREGATED_TABLES')
+     const hasCrmIterationOneEnabled = useFeatureFlag('CRM_ITERATION_ONE')
+-    const hasCustomerAnalyticsEnabled = useFeatureFlag('CRM_ITERATION_ONE')
+     const usedWebAnalyticsPreAggregatedTables =
+         canUseWebAnalyticsPreAggregatedTables &&
+         response &&
+@@ -336,583 +335,4 @@ export function DataTable({
+                                                     source: {
+                                                         ...source,
+                                                         select: columns
+-                                                            .map((s, i) => (i === index ? hogQl : s))
+-                                                            .filter((c) =>
+-                                                                isAggregation
+-                                                                    ? c !== '*' && c !== 'person.$delete'
+-                                                                    : true
+-                                                            ),
+-                                                        orderBy:
+-                                                            isOrderBy || isDescOrderBy
+-                                                                ? [isDescOrderBy ? `${hogQl} DESC` : hogQl]
+-                                                                : source.orderBy,
+-                                                    },
+-                                                })
+-                                            }
+-                                        }}
+-                                    />
+-                                </>
+-                            )}
+-                            {canSort &&
+-                            key !== 'person.$delete' &&
+-                            key !== 'person' &&
+-                            columnFeatures.includes(ColumnFeature.canSort) ? (
+-                                <>
+-                                    <LemonDivider />
+-                                    <LemonButton
+-                                        fullWidth
+-                                        data-attr="datatable-sort-asc"
+-                                        onClick={() => {
+-                                            const orderBy =
+-                                                query.source.kind === NodeKind.MarketingAnalyticsTableQuery
+-                                                    ? createMarketingAnalyticsOrderBy(key, 'ASC')
+-                                                    : [key]
+-                                            setQuery?.({
+-                                                ...query,
+-                                                source: {
+-                                                    ...query.source,
+-                                                    orderBy,
+-                                                } as EventsQuery,
+-                                            })
+-                                        }}
+-                                    >
+-                                        Sort ascending
+-                                    </LemonButton>
+-                                    <LemonButton
+-                                        fullWidth
+-                                        data-attr="datatable-sort-desc"
+-                                        onClick={() => {
+-                                            const orderBy =
+-                                                query.source.kind === NodeKind.MarketingAnalyticsTableQuery
+-                                                    ? createMarketingAnalyticsOrderBy(key, 'DESC')
+-                                                    : [`${key}\n DESC`]
+-                                            setQuery?.({
+-                                                ...query,
+-                                                source: {
+-                                                    ...query.source,
+-                                                    orderBy,
+-                                                } as EventsQuery,
+-                                            })
+-                                        }}
+-                                    >
+-                                        Sort descending
+-                                    </LemonButton>
+-                                    <LemonButton
+-                                        fullWidth
+-                                        data-attr="datatable-reset-sort"
+-                                        onClick={() => {
+-                                            setQuery?.({
+-                                                ...query,
+-                                                source: {
+-                                                    ...query.source,
+-                                                    orderBy: [],
+-                                                } as EventsQuery,
+-                                            })
+-                                        }}
+-                                    >
+-                                        Reset sorting
+-                                    </LemonButton>
+-                                </>
+-                            ) : null}
+-
+-                            {columnFeatures.includes(ColumnFeature.canAddColumns) && (
+-                                <>
+-                                    <LemonDivider />
+-                                    <TaxonomicPopover
+-                                        groupType={TaxonomicFilterGroupType.HogQLExpression}
+-                                        value=""
+-                                        groupTypes={groupTypes}
+-                                        metadataSource={query.source}
+-                                        placeholder={<span className="not-italic">Add column left</span>}
+-                                        data-attr="datatable-add-column-left"
+-                                        type="tertiary"
+-                                        fullWidth
+-                                        onChange={(v, g) => {
+-                                            const hogQl = isActorsQuery(query.source)
+-                                                ? taxonomicPersonFilterToHogQL(g, v)
+-                                                : isGroupsQuery(query.source)
+-                                                  ? taxonomicGroupFilterToHogQL(g, v)
+-                                                  : taxonomicEventFilterToHogQL(g, v)
+-                                            if (
+-                                                setQuery &&
+-                                                hogQl &&
+-                                                sourceFeatures.has(QueryFeature.selectAndOrderByColumns)
+-                                            ) {
+-                                                const isAggregation = isHogQLAggregation(hogQl)
+-                                                const source = query.source as EventsQuery
+-                                                const columns = columnsInLemonTable ?? getDataNodeDefaultColumns(source)
+-                                                setQuery({
+-                                                    ...query,
+-                                                    source: {
+-                                                        ...source,
+-                                                        select: [
+-                                                            ...columns.slice(0, index),
+-                                                            hogQl,
+-                                                            ...columns.slice(index),
+-                                                        ].filter((c) =>
+-                                                            isAggregation ? c !== '*' && c !== 'person.$delete' : true
+-                                                        ),
+-                                                    } as EventsQuery | ActorsQuery,
+-                                                })
+-                                            }
+-                                        }}
+-                                    />
+-                                    <TaxonomicPopover
+-                                        groupType={TaxonomicFilterGroupType.HogQLExpression}
+-                                        value=""
+-                                        groupTypes={groupTypes}
+-                                        metadataSource={query.source}
+-                                        placeholder={<span className="not-italic">Add column right</span>}
+-                                        data-attr="datatable-add-column-right"
+-                                        type="tertiary"
+-                                        fullWidth
+-                                        onChange={(v, g) => {
+-                                            const hogQl = isActorsQuery(query.source)
+-                                                ? taxonomicPersonFilterToHogQL(g, v)
+-                                                : isGroupsQuery(query.source)
+-                                                  ? taxonomicGroupFilterToHogQL(g, v)
+-                                                  : taxonomicEventFilterToHogQL(g, v)
+-                                            if (
+-                                                setQuery &&
+-                                                hogQl &&
+-                                                sourceFeatures.has(QueryFeature.selectAndOrderByColumns)
+-                                            ) {
+-                                                const isAggregation = isHogQLAggregation(hogQl)
+-                                                const source = query.source as EventsQuery
+-                                                const columns = columnsInLemonTable ?? getDataNodeDefaultColumns(source)
+-                                                setQuery?.({
+-                                                    ...query,
+-                                                    source: {
+-                                                        ...source,
+-                                                        select: [
+-                                                            ...columns.slice(0, index + 1),
+-                                                            hogQl,
+-                                                            ...columns.slice(index + 1),
+-                                                        ].filter((c) =>
+-                                                            isAggregation ? c !== '*' && c !== 'person.$delete' : true
+-                                                        ),
+-                                                    } as EventsQuery | ActorsQuery,
+-                                                })
+-                                            }
+-                                        }}
+-                                    />
+-                                </>
+-                            )}
+-                            {columnsInQuery.filter((c) => c !== '*').length > 1 &&
+-                                columnFeatures.includes(ColumnFeature.canRemove) && (
+-                                    <>
+-                                        <LemonDivider />
+-                                        <LemonButton
+-                                            fullWidth
+-                                            status="danger"
+-                                            data-attr="datatable-remove-column"
+-                                            onClick={() => {
+-                                                const cleanColumnKey = removeExpressionComment(key)
+-                                                const newSource: EventsQuery = {
+-                                                    ...(query.source as EventsQuery),
+-                                                    select: (query.source as EventsQuery).select.filter(
+-                                                        (_, i) => i !== index
+-                                                    ),
+-                                                    // remove the current column from orderBy if it's there
+-                                                    orderBy: (
+-                                                        query.source as EventsQuery | MarketingAnalyticsTableQuery
+-                                                    ).orderBy?.find((orderKey) => {
+-                                                        if (
+-                                                            typeof orderKey === 'object' &&
+-                                                            isMarketingAnalyticsTableQuery(query.source)
+-                                                        ) {
+-                                                            return orderKey[0] === cleanColumnKey
+-                                                        } else if (typeof orderKey === 'string') {
+-                                                            return (
+-                                                                removeExpressionComment(orderKey) === cleanColumnKey ||
+-                                                                removeExpressionComment(orderKey) ===
+-                                                                    `-${cleanColumnKey}`
+-                                                            )
+-                                                        }
+-                                                    })
+-                                                        ? undefined
+-                                                        : (query.source as EventsQuery).orderBy,
+-                                                }
+-                                                const newPinnedColumns = query.pinnedColumns?.filter(
+-                                                    (column) => column !== key
+-                                                )
+-                                                setQuery?.({
+-                                                    ...query,
+-                                                    source: newSource,
+-                                                    pinnedColumns: newPinnedColumns,
+-                                                })
+-                                            }}
+-                                        >
+-                                            Remove column
+-                                        </LemonButton>
+-                                    </>
+-                                )}
+-                            {columnFeatures.includes(ColumnFeature.canPin) && (
+-                                <>
+-                                    <LemonDivider />
+-                                    <LemonButton
+-                                        fullWidth
+-                                        data-attr="datatable-pin-column"
+-                                        onClick={() => {
+-                                            let newPinnedColumns = new Set(query.pinnedColumns ?? [])
+-                                            if (newPinnedColumns.has(key)) {
+-                                                newPinnedColumns.delete(key)
+-                                            } else {
+-                                                newPinnedColumns.add(key)
+-                                            }
+-                                            setQuery?.({
+-                                                ...query,
+-                                                pinnedColumns: Array.from(newPinnedColumns),
+-                                            })
+-                                        }}
+-                                    >
+-                                        {query.pinnedColumns?.includes(key) ? 'Unpin' : 'Pin column'}
+-                                    </LemonButton>
+-                                </>
+-                            )}
+-                        </>
+-                    ) : undefined,
+-            }
+-        }),
+-        ...(recordingColumnShown
+-            ? [
+-                  {
+-                      dataIndex: '__recording' as any,
+-                      title: '',
+-                      render: function RenderRecording(_: any, { label, result }: DataTableRow) {
+-                          if (label) {
+-                              return { props: { colSpan: 0 } }
+-                          }
+-                          if (result && columnsInResponse?.includes('*')) {
+-                              const event = result[columnsInResponse.indexOf('*')]
+-                              return (
+-                                  <ViewRecordingButton
+-                                      sessionId={event?.properties?.$session_id}
+-                                      recordingStatus={event?.properties?.$recording_status}
+-                                      timestamp={event?.timestamp}
+-                                      inModal
+-                                      size="xsmall"
+-                                      type="secondary"
+-                                  />
+-                              )
+-                          }
+-                          return null
+-                      },
+-                      width: 100,
+-                      align: 'center' as const,
+-                  },
+-              ]
+-            : []),
+-    ].filter((column) => !query.hiddenColumns?.includes(column.dataIndex) && column.dataIndex !== '*')
+-
+-    const setQuerySource = useCallback(
+-        (
+-            source:
+-                | EventsNode
+-                | EventsQuery
+-                | PersonsNode
+-                | ActorsQuery
+-                | GroupsQuery
+-                | HogQLQuery
+-                | SessionAttributionExplorerQuery
+-                | SessionsQuery
+-                | TracesQuery
+-                | MarketingAnalyticsTableQuery
+-        ) => setQuery?.({ ...query, source }),
+-        [setQuery, query]
+-    )
+-
+-    const firstRowLeft = [
+-        showSourceQueryOptions && backToSourceQuery ? <BackToSource key="return-to-source" /> : null,
+-        showSourceQueryOptions &&
+-        backToSourceQuery &&
+-        isActorsQuery(query.source) &&
+-        isInsightActorsQuery(query.source.source) ? (
+-            <InsightActorsQueryOptions
+-                query={query.source.source}
+-                setQuery={(q) =>
+-                    setQuerySource({
+-                        ...query.source,
+-                        source: { ...(query.source as ActorsQuery).source, ...q },
+-                    } as ActorsQuery)
+-                }
+-                key="source-query-options"
+-            />
+-        ) : null,
+-        showDateRange && sourceFeatures.has(QueryFeature.dateRangePicker) ? (
+-            <DateRange
+-                key="date-range"
+-                query={
+-                    query.source as
+-                        | HogQLQuery
+-                        | EventsQuery
+-                        | SessionAttributionExplorerQuery
+-                        | SessionsQuery
+-                        | TracesQuery
+-                }
+-                setQuery={setQuerySource}
+-            />
+-        ) : null,
+-        showEventFilter && sourceFeatures.has(QueryFeature.eventNameFilter) ? (
+-            <EventName key="event-name" query={query.source as EventsQuery | SessionsQuery} setQuery={setQuerySource} />
+-        ) : null,
+-        showSearch && sourceFeatures.has(QueryFeature.personsSearch) ? (
+-            <PersonsSearch key="persons-search" query={query.source as PersonsNode} setQuery={setQuerySource} />
+-        ) : null,
+-        showSearch && sourceFeatures.has(QueryFeature.groupsSearch) ? (
+-            <GroupsSearch
+-                key="groups-search"
+-                query={query.source as GroupsQuery}
+-                setQuery={setQuerySource}
+-                groupTypeLabel={context?.groupTypeLabel}
+-            />
+-        ) : null,
+-        showPropertyFilter &&
+-        sourceFeatures.has(QueryFeature.eventPropertyFilters) &&
+-        !isSessionsQuery(query.source) ? (
+-            <EventPropertyFilters
+-                key="event-property"
+-                query={query.source as EventsQuery | HogQLQuery | SessionAttributionExplorerQuery | TracesQuery}
+-                setQuery={setQuerySource}
+-                taxonomicGroupTypes={Array.isArray(showPropertyFilter) ? showPropertyFilter : undefined}
+-            />
+-        ) : null,
+-        showSavedFilters && uniqueKey ? (
+-            <DataTableSavedFiltersButton
+-                key="saved-filters-button"
+-                uniqueKey={String(uniqueKey)}
+-                query={query}
+-                setQuery={setQuery}
+-            />
+-        ) : null,
+-        showPropertyFilter && sourceFeatures.has(QueryFeature.personPropertyFilters) ? (
+-            <PersonPropertyFilters
+-                key="person-property"
+-                query={query.source as PersonsNode}
+-                setQuery={setQuerySource}
+-            />
+-        ) : null,
+-        showPropertyFilter && sourceFeatures.has(QueryFeature.sessionPropertyFilters) ? (
+-            <SessionPropertyFilters
+-                key="session-property"
+-                query={query.source as SessionsQuery}
+-                setQuery={setQuerySource}
+-            />
+-        ) : null,
+-        showPropertyFilter && sourceFeatures.has(QueryFeature.groupPropertyFilters) ? (
+-            <div className="flex gap-2">
+-                <GroupPropertyFilters
+-                    key="group-property"
+-                    query={query.source as GroupsQuery}
+-                    setQuery={setQuerySource}
+-                />
+-                {hasCrmIterationOneEnabled && (
+-                    <LemonButton
+-                        data-attr="save-group-view"
+-                        type="primary"
+-                        size="small"
+-                        onClick={() => setSaveGroupViewModalOpen(true)}
+-                    >
+-                        Save view
+-                    </LemonButton>
+-                )}
+-            </div>
+-        ) : null,
+-    ].filter((x) => !!x)
+-
+-    const firstRowRight = [
+-        showTestAccountFilters && sourceFeatures.has(QueryFeature.testAccountFilters) ? (
+-            <TestAccountFilters key="test-account-filters" query={query.source} setQuery={setQuerySource} />
+-        ) : null,
+-        showSavedQueries && sourceFeatures.has(QueryFeature.savedEventsQueries) ? (
+-            <SavedQueries key="saved-queries" query={query} setQuery={setQuery} />
+-        ) : null,
+-    ].filter((x) => !!x)
+-
+-    const secondRowLeft = [
+-        showReload ? <Reload key="reload" /> : null,
+-        showElapsedTime ? <ElapsedTime key="elapsed-time" showTimings={showTimings} /> : null,
+-    ].filter((x) => !!x)
+-
+-    const secondRowRight = [
+-        sourceFeatures.has(QueryFeature.linkDataButton) &&
+-        (hasCrmIterationOneEnabled || hasCustomerAnalyticsEnabled) ? (
+-            <ViewLinkButton tableName="groups" />
+-        ) : null,
+-        (showColumnConfigurator || showPersistentColumnConfigurator) &&
+-        sourceFeatures.has(QueryFeature.columnConfigurator) ? (
+-            <ColumnConfigurator key="column-configurator" query={query} setQuery={setQuery} />
+-        ) : null,
+-        <DataTableViewReplays key="data-table-view-replays" />,
+-        showExport ? (
+-            <DataTableExport
+-                key="data-table-export"
+-                query={query}
+-                setQuery={setQuery}
+-                fileNameForExport={context?.fileNameForExport}
+-            />
+-        ) : null,
+-        showExport && showOpenEditorButton ? (
+-            <DataTableOpenEditor key="data-table-open-editor" query={query} setQuery={setQuery} />
+-        ) : null,
+-    ].filter((x) => !!x)
+-
+-    const showFirstRow = !isReadOnly && (firstRowLeft.length > 0 || firstRowRight.length > 0)
+-    const showSecondRow = !isReadOnly && (secondRowLeft.length > 0 || secondRowRight.length > 0)
+-    const inlineEditorButtonOnRow = showFirstRow ? 1 : showSecondRow ? 2 : 0
+-
+-    const editorButton = (
+-        <>
+-            <OpenEditorButton query={query} />
+-            {response && 'hogql' in response && response?.hogql ? <EditHogQLButton hogql={response.hogql} /> : null}
+-        </>
+-    )
+-
+-    // The editor button moved under "export". Show only if there's no export button.
+-    if (!showExport && showOpenEditorButton && !isReadOnly) {
+-        if (inlineEditorButtonOnRow === 1) {
+-            firstRowRight.push(editorButton)
+-        } else if (inlineEditorButtonOnRow === 2) {
+-            secondRowRight.push(editorButton)
+-        }
+-    }
+-    return (
+-        <BindLogic logic={dataTableLogic} props={dataTableLogicProps}>
+-            <BindLogic logic={dataNodeLogic} props={dataNodeLogicProps}>
+-                <div className="relative w-full flex flex-col gap-2 flex-1 h-full">
+-                    {showHogQLEditor && isHogQLQuery(query.source) && !isReadOnly ? (
+-                        <HogQLQueryEditor query={query.source} setQuery={setQuerySource} embedded={embedded} />
+-                    ) : null}
+-                    {showFirstRow && (
+-                        <div className="flex gap-2 items-center flex-wrap">
+-                            {firstRowLeft}
+-                            {firstRowLeft.length > 0 && firstRowRight.length > 0 ? <div className="flex-1" /> : null}
+-                            {firstRowRight}
+-                        </div>
+-                    )}
+-                    {showSavedFilters && uniqueKey && (
+-                        <DataTableSavedFilters uniqueKey={String(uniqueKey)} query={query} setQuery={setQuery} />
+-                    )}
+-                    {showFirstRow && showSecondRow && <LemonDivider className="my-0" />}
+-                    {showSecondRow && (
+-                        <div className="flex gap-2 justify-between flex-wrap DataTable__second-row">
+-                            <div className="flex gap-2 items-center">{secondRowLeft}</div>
+-                            <div className="flex gap-2 items-center">{secondRowRight}</div>
+-                        </div>
+-                    )}
+-                    {showOpenEditorButton && inlineEditorButtonOnRow === 0 && !isReadOnly ? (
+-                        <div className="absolute right-0 z-10 p-1">{editorButton}</div>
+-                    ) : null}
+-                    {showResultsTable && (
+-                        <div className="relative">
+-                            {usedWebAnalyticsPreAggregatedTables && <PreAggregatedBadge />}
+-                            <LemonTable
+-                                data-attr={dataAttr}
+-                                className="DataTable"
+-                                loading={responseLoading && !nextDataLoading && !newDataLoading}
+-                                columns={lemonColumns}
+-                                embedded={embedded}
+-                                key={
+-                                    [...(columnsInResponse ?? []), ...columnsInQuery].join(
+-                                        '::'
+-                                    ) /* Bust the LemonTable cache when columns change */
+-                                }
+-                                dataSource={dataTableRows ?? []}
+-                                rowKey={(_, rowIndex) => {
+-                                    return rowIndex
+-                                }}
+-                                sorting={null}
+-                                useURLForSorting={false}
+-                                emptyState={
+-                                    responseError ? (
+-                                        sourceFeatures.has(QueryFeature.displayResponseError) ? (
+-                                            <InsightErrorState
+-                                                query={query}
+-                                                excludeDetail
+-                                                title={
+-                                                    queryCancelled
+-                                                        ? 'The query was cancelled'
+-                                                        : response && 'error' in response
+-                                                          ? response.error
+-                                                          : responseError
+-                                                }
+-                                            />
+-                                        ) : (
+-                                            <InsightErrorState query={query} />
+-                                        )
+-                                    ) : (
+-                                        <InsightEmptyState
+-                                            heading={context?.emptyStateHeading}
+-                                            detail={context?.emptyStateDetail}
+-                                        />
+-                                    )
+-                                }
+-                                expandable={
+-                                    context?.expandable
+-                                        ? context.expandable
+-                                        : expandable && columnsInResponse?.includes('*')
+-                                          ? {
+-                                                expandedRowRender: function renderExpand({ result }) {
+-                                                    if (
+-                                                        (isEventsQuery(query.source) ||
+-                                                            isRevenueExampleEventsQuery(query.source)) &&
+-                                                        Array.isArray(result)
+-                                                    ) {
+-                                                        return (
+-                                                            <EventDetails
+-                                                                event={result[columnsInResponse.indexOf('*')] ?? {}}
+-                                                            />
+-                                                        )
+-                                                    }
+-                                                    if (result && !Array.isArray(result)) {
+-                                                        return <EventDetails event={result as EventType} />
+-                                                    }
+-                                                },
+-                                                rowExpandable: ({ result }) => !!result,
+-                                                noIndent: true,
+-                                            }
+-                                          : undefined
+-                                }
+-                                rowClassName={({ result, label }) =>
+-                                    clsx('DataTable__row', {
+-                                        'DataTable__row--highlight_once': result && highlightedRows.has(result),
+-                                        'DataTable__row--category_row': !!label,
+-                                        'border border-x-danger-dark bg-danger-highlight':
+-                                            sourceFeatures.has(QueryFeature.highlightExceptionEventRows) &&
+-                                            result &&
+-                                            result[0] &&
+-                                            result[0]['event'] === '$exception',
+-                                        DataTable__has_pinned_columns: (query.pinnedColumns ?? []).length > 0,
+-                                    })
+-                                }
+-                                footer={
+-                                    (dataTableRows ?? []).length > 0 &&
+-                                    !sourceFeatures.has(QueryFeature.hideLoadNextButton) ? (
+-                                        <LoadNext query={query.source} />
+-                                    ) : null
+-                                }
+-                                onRow={onRow}
+-                                pinnedColumns={query.pinnedColumns}
+-                                rowActions={
+-                                    eventActionsColumnShown
+-                                        ? ({ result, label }) => {
+-                                              if (label) {
+-                                                  return null
+-                                              }
+-                                              if (result && columnsInResponse?.includes('*')) {
+-                                                  return eventRowActionsContent(result[columnsInResponse.indexOf('*')])
+-                                              }
+-                                              return null
+-                                          }
+-                                        : undefined
+-                                }
+-                            />
+-                        </div>
+-                    )}
+-                    {/* TODO: this doesn't seem like the right solution... */}
+-                    <PersonDeleteModal />
+-                </div>
+-            </BindLogic>
+-        </BindLogic>
+-    )
+-}
++                                                            .map((s, i) => (i === index
+\ No newline at end of file
+diff --git a/frontend/src/scenes/groups/Group.tsx b/frontend/src/scenes/groups/Group.tsx
+index 148c29e..9847681 100644
+--- a/frontend/src/scenes/groups/Group.tsx
++++ b/frontend/src/scenes/groups/Group.tsx
+@@ -121,7 +121,7 @@ export function Group({ tabId }: { tabId?: string }): JSX.Element {
+                         label: <span data-attr="groups-overview-tab">Overview</span>,
+                         content: <GroupOverview groupData={groupData} />,
+                     },
+-                    ...(featureFlags[FEATURE_FLAGS.CUSTOMER_ANALYTICS] && groupData.notebook
++                    ...(featureFlags[FEATURE_FLAGS.CRM_ITERATION_ONE] && groupData.notebook
+                         ? [
+                               {
+                                   key: GroupsTabType.NOTES,
+@@ -270,4 +270,4 @@ export function Group({ tabId }: { tabId?: string }): JSX.Element {
+             />
+         </SceneContent>
+     )
+-}
++}
+\ No newline at end of file
+diff --git a/frontend/src/scenes/groups/Groups.tsx b/frontend/src/scenes/groups/Groups.tsx
+index a83a634..23b1151 100644
+--- a/frontend/src/scenes/groups/Groups.tsx
++++ b/frontend/src/scenes/groups/Groups.tsx
+@@ -46,7 +46,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+ 
+     const { groupsAccessStatus } = useValues(groupsAccessLogic)
+     const { aggregationLabel } = useValues(groupsModel)
+-    const hasCustomerAnalyticsEnabled = useFeatureFlag('CUSTOMER_ANALYTICS')
++    const hasCrmIterationOneEnabled = useFeatureFlag('CRM_ITERATION_ONE')
+ 
+     if (groupTypeIndex === undefined) {
+         throw new Error('groupTypeIndex is undefined')
+@@ -79,7 +79,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+         },
+     } as QueryContext['columns']
+     let hiddenColumns = [] as string[]
+-    if (hasCustomerAnalyticsEnabled) {
++    if (hasCrmIterationOneEnabled) {
+         columns = getCRMColumns(groupTypeName, groupTypeIndex)
+         hiddenColumns.push('key')
+     }
+@@ -95,7 +95,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+                     type: 'cohort',
+                 }}
+                 actions={
+-                    hasCustomerAnalyticsEnabled ? (
++                    hasCrmIterationOneEnabled ? (
+                         <LemonButton
+                             type="primary"
+                             size="small"
+@@ -135,7 +135,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+                 dataAttr="groups-table"
+             />
+ 
+-            {hasCustomerAnalyticsEnabled && (
++            {hasCrmIterationOneEnabled && (
+                 <LemonModal
+                     isOpen={saveGroupViewModalOpen}
+                     onClose={() => setSaveGroupViewModalOpen(false)}
+@@ -171,4 +171,4 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+             )}
+         </SceneContent>
+     )
+-}
++}
+\ No newline at end of file
+diff --git a/frontend/src/scenes/groups/groupsNewLogic.ts b/frontend/src/scenes/groups/groupsNewLogic.ts
+index 15cf699..c5319a3 100644
+--- a/frontend/src/scenes/groups/groupsNewLogic.ts
++++ b/frontend/src/scenes/groups/groupsNewLogic.ts
+@@ -213,8 +213,8 @@ export const groupsNewLogic = kea<groupsNewLogicType>([
+     })),
+ 
+     afterMount(({ props, values }) => {
+-        // Redirect if customer analytics is not enabled
+-        if (!values.featureFlags[FEATURE_FLAGS.CUSTOMER_ANALYTICS]) {
++        // Redirect if the CRM feature flag is not enabled
++        if (!values.featureFlags[FEATURE_FLAGS.CRM_ITERATION_ONE]) {
+             router.actions.push(urls.groups(props.groupTypeIndex))
+         }
+     }),
+@@ -252,4 +252,4 @@ export function flattenProperties(properties: GroupProperty[]): Record<string, a
+             },
+             {} as Record<string, any>
+         )
+-}
++}
+\ No newline at end of file

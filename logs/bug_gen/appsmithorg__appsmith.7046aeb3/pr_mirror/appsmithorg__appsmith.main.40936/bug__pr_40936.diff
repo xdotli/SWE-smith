@@ -1,0 +1,539 @@
+diff --git a/app/client/src/ce/entities/FeatureFlag.ts b/app/client/src/ce/entities/FeatureFlag.ts
+index f460d67..2135259 100644
+--- a/app/client/src/ce/entities/FeatureFlag.ts
++++ b/app/client/src/ce/entities/FeatureFlag.ts
+@@ -62,8 +62,6 @@ export const FEATURE_FLAG = {
+   license_ai_agent_instance_enabled: "license_ai_agent_instance_enabled",
+   release_jsobjects_onpageunloadactions_enabled:
+     "release_jsobjects_onpageunloadactions_enabled",
+-  configure_block_event_tracking_for_anonymous_users:
+-    "configure_block_event_tracking_for_anonymous_users",
+   release_static_url_enabled: "release_static_url_enabled",
+   release_window_dimensions_enabled: "release_window_dimensions_enabled",
+ } as const;
+@@ -117,7 +115,6 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+   release_reactive_actions_enabled: false,
+   license_ai_agent_instance_enabled: false,
+   release_jsobjects_onpageunloadactions_enabled: false,
+-  configure_block_event_tracking_for_anonymous_users: false,
+   release_static_url_enabled: false,
+   release_window_dimensions_enabled: false,
+ };
+@@ -125,4 +122,4 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+ export const AB_TESTING_EVENT_KEYS = {
+   abTestingFlagLabel: "abTestingFlagLabel",
+   abTestingFlagValue: "abTestingFlagValue",
+-};
++};
+\ No newline at end of file
+diff --git a/app/client/src/ce/sagas/userSagas.tsx b/app/client/src/ce/sagas/userSagas.tsx
+index c83357d..bf81406 100644
+--- a/app/client/src/ce/sagas/userSagas.tsx
++++ b/app/client/src/ce/sagas/userSagas.tsx
+@@ -7,7 +7,6 @@ import {
+   take,
+   type TakeEffect,
+ } from "redux-saga/effects";
+-import type { SagaIterator } from "redux-saga";
+ import type {
+   ReduxAction,
+   ReduxActionWithPromise,
+@@ -89,7 +88,6 @@ import {
+   segmentInitUncertain,
+ } from "actions/analyticsActions";
+ import { getSegmentState } from "selectors/analyticsSelectors";
+-import { getOrganizationConfig } from "ee/selectors/organizationSelectors";
+ 
+ export function* getCurrentUserSaga(action?: {
+   payload?: { userProfile?: ApiResponse };
+@@ -152,28 +150,7 @@ function* getSessionRecordingConfig() {
+   };
+ }
+ 
+-function shouldTrackUser(
+-  currentUser: User,
+-  licenseActive: boolean,
+-  featureFlag: boolean,
+-): boolean {
+-  try {
+-    const isAnonymous =
+-      currentUser?.isAnonymous || currentUser?.username === "anonymousUser";
+-
+-    if (!isAnonymous) {
+-      return true;
+-    }
+-
+-    const telemetryOn = currentUser?.enableTelemetry ?? false;
+-
+-    return isAnonymous && (licenseActive || (telemetryOn && !featureFlag));
+-  } catch (error) {
+-    return true;
+-  }
+-}
+-
+-function* initTrackers(currentUser: User): SagaIterator {
++function* initTrackers(currentUser: User) {
+   try {
+     const isFFFetched: boolean = yield select(getFeatureFlagsFetched);
+ 
+@@ -185,21 +162,7 @@ function* initTrackers(currentUser: User): SagaIterator {
+       getSessionRecordingConfig,
+     );
+ 
+-    const featureFlags: FeatureFlags = yield select(selectFeatureFlags);
+-    const organizationConfig = yield select(getOrganizationConfig);
+-
+-    const shouldTrack = shouldTrackUser(
+-      currentUser,
+-      organizationConfig.license.active,
+-      featureFlags.configure_block_event_tracking_for_anonymous_users,
+-    );
+-
+-    yield call(
+-      AnalyticsUtil.initialize,
+-      currentUser,
+-      sessionRecordingConfig,
+-      shouldTrack,
+-    );
++    yield call(AnalyticsUtil.initialize, currentUser, sessionRecordingConfig);
+     yield put(segmentInitSuccess());
+   } catch (e) {
+     log.error(e);
+@@ -520,257 +483,4 @@ export function* verifyResetPasswordTokenSaga(
+       });
+     } else {
+       yield put({
+-        type: ReduxActionErrorTypes.RESET_PASSWORD_VERIFY_TOKEN_ERROR,
+-      });
+-    }
+-  } catch (error) {
+-    log.error(error);
+-    yield put({
+-      type: ReduxActionErrorTypes.RESET_PASSWORD_VERIFY_TOKEN_ERROR,
+-    });
+-  }
+-}
+-
+-export function* verifyUserInviteSaga(action: ReduxAction<VerifyTokenRequest>) {
+-  try {
+-    const request: VerifyTokenRequest = action.payload;
+-    const response: ApiResponse = yield call(UserApi.verifyUserInvite, request);
+-    const isValidResponse: boolean = yield validateResponse(response);
+-
+-    if (isValidResponse) {
+-      yield put(verifyInviteSuccess());
+-    }
+-  } catch (error) {
+-    log.error(error);
+-    yield put(verifyInviteError(error));
+-  }
+-}
+-
+-export function* logoutSaga(action: ReduxAction<{ redirectURL: string }>) {
+-  try {
+-    const redirectURL = action.payload?.redirectURL;
+-    const response: ApiResponse = yield call(UserApi.logoutUser);
+-    const isValidResponse: boolean = yield validateResponse(response);
+-
+-    if (isValidResponse) {
+-      UsagePulse.stopTrackingActivity();
+-      AnalyticsUtil.reset();
+-      const currentUser: User | undefined = yield select(getCurrentUser);
+-
+-      yield put(logoutUserSuccess(!!currentUser?.emptyInstance));
+-      localStorage.clear();
+-      yield put(flushErrorsAndRedirect(redirectURL || AUTH_LOGIN_URL));
+-    }
+-  } catch (error) {
+-    log.error(error);
+-    yield put(logoutUserError(error));
+-  }
+-}
+-
+-export function* waitForFetchUserSuccess() {
+-  const currentUser: string | undefined = yield select(getCurrentUser);
+-
+-  if (!currentUser) {
+-    yield take(ReduxActionTypes.FETCH_USER_DETAILS_SUCCESS);
+-  }
+-}
+-
+-export function* removePhoto(
+-  action: ReduxAction<{ callback: (id: string) => void }>,
+-) {
+-  try {
+-    const response: ApiResponse = yield call(UserApi.deletePhoto);
+-    //@ts-expect-error: response is of type unknown
+-    const photoId = response.data?.profilePhotoAssetId; //get updated photo id of iploaded image
+-
+-    if (action.payload.callback) action.payload.callback(photoId);
+-  } catch (error) {
+-    log.error(error);
+-  }
+-}
+-
+-export function* updatePhoto(
+-  action: ReduxAction<{ file: File; callback: (id: string) => void }>,
+-) {
+-  try {
+-    const response: ApiResponse = yield call(UserApi.uploadPhoto, {
+-      file: action.payload.file,
+-    });
+-
+-    if (!response.responseMeta.success) {
+-      throw response.responseMeta.error;
+-    }
+-
+-    //@ts-expect-error: response is of type unknown
+-    const photoId = response.data?.profilePhotoAssetId; //get updated photo id of iploaded image
+-
+-    if (action.payload.callback) action.payload.callback(photoId);
+-  } catch (error) {
+-    log.error(error);
+-
+-    const payload: ErrorActionPayload = {
+-      show: true,
+-      error: {
+-        message:
+-          // TODO: Fix this the next time the file is edited
+-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-          (error as any).message ??
+-          createMessage(USER_PROFILE_PICTURE_UPLOAD_FAILED),
+-      },
+-    };
+-
+-    yield put({
+-      type: ReduxActionErrorTypes.USER_PROFILE_PICTURE_UPLOAD_FAILED,
+-      payload,
+-    });
+-  }
+-}
+-
+-export function* fetchFeatureFlags(action?: {
+-  payload?: { featureFlags?: ApiResponse<FeatureFlags> };
+-}) {
+-  const featureFlags = action?.payload?.featureFlags;
+-
+-  try {
+-    const response: ApiResponse<FeatureFlags> = yield call(
+-      getFromServerWhenNoPrefetchedResult,
+-      featureFlags,
+-      () => call(UserApi.fetchFeatureFlags),
+-    );
+-
+-    const isValidResponse: boolean = yield validateResponse(response);
+-
+-    if (isValidResponse) {
+-      yield put(
+-        fetchFeatureFlagsSuccess({
+-          ...DEFAULT_FEATURE_FLAG_VALUE,
+-          ...response.data,
+-        }),
+-      );
+-    }
+-  } catch (error) {
+-    log.error(error);
+-    yield put(fetchFeatureFlagsError(error));
+-  }
+-}
+-
+-export function* updateFirstTimeUserOnboardingSage() {
+-  const enable: boolean | null = yield call(getEnableStartSignposting);
+-
+-  if (enable) {
+-    const applicationIds: string[] =
+-      yield getFirstTimeUserOnboardingApplicationIds() || [];
+-    const introModalVisibility: string | null =
+-      yield getFirstTimeUserOnboardingIntroModalVisibility();
+-
+-    yield put({
+-      type: ReduxActionTypes.SET_FIRST_TIME_USER_ONBOARDING_APPLICATION_IDS,
+-      payload: applicationIds,
+-    });
+-    yield put({
+-      type: ReduxActionTypes.SET_SHOW_FIRST_TIME_USER_ONBOARDING_MODAL,
+-      payload: introModalVisibility,
+-    });
+-  }
+-}
+-
+-export function* leaveWorkspaceSaga(
+-  action: ReduxAction<LeaveWorkspaceRequest>,
+-) {
+-  try {
+-    const request: LeaveWorkspaceRequest = action.payload;
+-    const { workspaceId } = action.payload;
+-    const response: ApiResponse = yield call(UserApi.leaveWorkspace, request);
+-    const isValidResponse: boolean = yield validateResponse(response);
+-
+-    if (isValidResponse) {
+-      yield put({
+-        type: ReduxActionTypes.DELETE_WORKSPACE_SUCCESS,
+-        payload: workspaceId,
+-      });
+-      toast.show(`You have successfully left the workspace`, {
+-        kind: "success",
+-      });
+-      history.push("/applications");
+-    }
+-  } catch (error) {
+-    // do nothing as it's already handled globally
+-  }
+-}
+-
+-export function* fetchProductAlertSaga(action?: {
+-  payload?: { productAlert?: ApiResponse<ProductAlert> };
+-}) {
+-  const productAlert = action?.payload?.productAlert;
+-
+-  try {
+-    const response: ApiResponse<ProductAlert> = yield call(
+-      getFromServerWhenNoPrefetchedResult,
+-      productAlert,
+-      () => call(UserApi.getProductAlert),
+-    );
+-
+-    const isValidResponse: boolean = yield validateResponse(response);
+-
+-    if (isValidResponse) {
+-      const message = response.data;
+-
+-      if (message.messageId) {
+-        const config = getMessageConfig(message.messageId);
+-
+-        yield put(fetchProductAlertSuccess({ message, config }));
+-      }
+-    } else {
+-      yield put(fetchProductAlertFailure(response.data));
+-    }
+-  } catch (e) {
+-    yield put(fetchProductAlertFailure(e));
+-  }
+-}
+-
+-export const PRODUCT_ALERT_CONFIG_STORAGE_KEY = "PRODUCT_ALERT_CONFIG";
+-export const getMessageConfig = (id: string): ProductAlertConfig => {
+-  const storedConfig =
+-    localStorage.getItem(PRODUCT_ALERT_CONFIG_STORAGE_KEY) || "{}";
+-  const alertConfig: Record<string, ProductAlertConfig> =
+-    JSON.parse(storedConfig);
+-
+-  if (id in alertConfig) {
+-    return alertConfig[id];
+-  }
+-
+-  return {
+-    snoozeTill: new Date(),
+-    dismissed: false,
+-  };
+-};
+-
+-export const setMessageConfig = (id: string, config: ProductAlertConfig) => {
+-  const storedConfig =
+-    localStorage.getItem(PRODUCT_ALERT_CONFIG_STORAGE_KEY) || "{}";
+-  const alertConfig: Record<string, ProductAlertConfig> =
+-    JSON.parse(storedConfig);
+-
+-  const updatedConfig: Record<string, ProductAlertConfig> = {
+-    ...alertConfig,
+-    [id]: config,
+-  };
+-
+-  localStorage.setItem(
+-    PRODUCT_ALERT_CONFIG_STORAGE_KEY,
+-    JSON.stringify(updatedConfig),
+-  );
+-};
+-
+-export function* globalFunctionLogoutUser(
+-  action: ReduxAction<{ redirectURL: string }>,
+-) {
+-  const redirectURL = `${AUTH_LOGIN_URL}?redirectUrl=${encodeURIComponent(action.payload?.redirectURL ? action.payload?.redirectURL : history.location.pathname)}`;
+-
+-  yield call(logoutSaga, {
+-    type: ReduxActionTypes.LOGOUT_USER_INIT,
+-    payload: {
+-      redirectURL,
+-    },
+-  });
+-}
++        type: ReduxActionErrorTypes.RESET_PASSWORD_VERIFY_TOKEN_ERROR,
+\ No newline at end of file
+diff --git a/app/client/src/ce/utils/AnalyticsUtil.tsx b/app/client/src/ce/utils/AnalyticsUtil.tsx
+index 1312995..da286c5 100644
+--- a/app/client/src/ce/utils/AnalyticsUtil.tsx
++++ b/app/client/src/ce/utils/AnalyticsUtil.tsx
+@@ -30,14 +30,13 @@ let segmentAnalytics: SegmentSingleton | null = null;
+ async function initialize(
+   user: User,
+   sessionRecordingConfig: SessionRecordingConfig,
+-  shouldTrackUser: boolean,
+ ) {
+   // SentryUtil.init();
+   await SmartlookUtil.init();
+ 
+   segmentAnalytics = SegmentSingleton.getInstance();
+ 
+-  await segmentAnalytics.init(shouldTrackUser);
++  await segmentAnalytics.init();
+ 
+   // Mixpanel needs to be initialized after Segment
+   await MixpanelSingleton.getInstance().init(sessionRecordingConfig);
+@@ -149,4 +148,4 @@ export {
+   getEventExtraProperties,
+   initLicense,
+   avoidTracking,
+-};
++};
+\ No newline at end of file
+diff --git a/app/client/src/utils/Analytics/segment.test.ts b/app/client/src/utils/Analytics/segment.test.ts
+index 274919b..6761ee9 100644
+--- a/app/client/src/utils/Analytics/segment.test.ts
++++ b/app/client/src/utils/Analytics/segment.test.ts
+@@ -58,7 +58,7 @@ describe("SegmentSingleton", () => {
+   describe("init", () => {
+     it("should initialize successfully with API key", async () => {
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init(true);
++      const result = await segment.init();
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).toHaveBeenCalledWith(
+@@ -73,15 +73,7 @@ describe("SegmentSingleton", () => {
+       });
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init(true);
+-
+-      expect(result).toBe(true);
+-      expect(mockAnalyticsBrowser.load).not.toHaveBeenCalled();
+-    });
+-
+-    it("should not initialize when shouldTrackUser is false", async () => {
+-      const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init(false);
++      const result = await segment.init();
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).not.toHaveBeenCalled();
+@@ -97,7 +89,7 @@ describe("SegmentSingleton", () => {
+       });
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init(true);
++      const result = await segment.init();
+ 
+       expect(result).toBe(true);
+       expect(mockAnalyticsBrowser.load).toHaveBeenCalledWith(
+@@ -127,7 +119,7 @@ describe("SegmentSingleton", () => {
+       const eventData = { test: "data" };
+ 
+       segment.track("test-event", eventData);
+-      await segment.init(true);
++      await segment.init();
+ 
+       expect(mockAnalytics.track).toHaveBeenCalledWith("test-event", eventData);
+     });
+@@ -135,7 +127,7 @@ describe("SegmentSingleton", () => {
+     it("should track events directly when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init(true);
++      await segment.init();
+ 
+       const eventData = { test: "data" };
+ 
+@@ -149,7 +141,7 @@ describe("SegmentSingleton", () => {
+     it("should call analytics identify when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init(true);
++      await segment.init();
+ 
+       const userId = "test-user";
+       const traits = { name: "Test User" };
+@@ -164,7 +156,7 @@ describe("SegmentSingleton", () => {
+     it("should call analytics reset when initialized", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init(true);
++      await segment.init();
+ 
+       segment.reset();
+ 
+@@ -177,7 +169,7 @@ describe("SegmentSingleton", () => {
+       mockAnalyticsBrowser.load.mockRejectedValueOnce(new Error("Init failed"));
+ 
+       const segment = SegmentSingleton.getInstance();
+-      const result = await segment.init(true);
++      const result = await segment.init();
+ 
+       expect(result).toBe(false);
+       expect(log.error).toHaveBeenCalledWith(
+@@ -190,7 +182,7 @@ describe("SegmentSingleton", () => {
+     it("should not track events after avoidTracking is called", async () => {
+       const segment = SegmentSingleton.getInstance();
+ 
+-      await segment.init(true);
++      await segment.init();
+ 
+       // Track an event before calling avoidTracking
+       segment.track("pre-avoid-event", { data: "value" });
+@@ -222,10 +214,10 @@ describe("SegmentSingleton", () => {
+       segment.avoidTracking();
+ 
+       // Initialize
+-      await segment.init(true);
++      await segment.init();
+ 
+       // Analytics track should not be called since we're avoiding tracking
+       expect(mockAnalytics.track).not.toHaveBeenCalled();
+     });
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/app/client/src/utils/Analytics/segment.ts b/app/client/src/utils/Analytics/segment.ts
+index c150554..47a8e46 100644
+--- a/app/client/src/utils/Analytics/segment.ts
++++ b/app/client/src/utils/Analytics/segment.ts
+@@ -49,7 +49,7 @@ class SegmentSingleton {
+     }
+   }
+ 
+-  public async init(shouldTrackUser: boolean): Promise<boolean> {
++  public async init(): Promise<boolean> {
+     const { segment } = getAppsmithConfigs();
+ 
+     if (!segment.enabled) {
+@@ -58,12 +58,6 @@ class SegmentSingleton {
+       return true;
+     }
+ 
+-    if (!shouldTrackUser) {
+-      this.avoidTracking();
+-
+-      return true;
+-    }
+-
+     if (this.analytics) {
+       log.warn("Segment is already initialized.");
+ 
+@@ -88,8 +82,8 @@ class SegmentSingleton {
+               deliveryStrategy: {
+                 strategy: "batching", // The delivery strategy used for sending events to Segment
+                 config: {
+-                  size: 100, // The batch size is the threshold that forces all batched events to be sent once it’s reached.
+-                  timeout: 1000, // The number of milliseconds that forces all events queued for batching to be sent, regardless of the batch size, once it’s reached
++                  size: 100, // The batch size is the threshold that forces all batched events to be sent once it's reached.
++                  timeout: 1000, // The number of milliseconds that forces all events queued for batching to be sent, regardless of the batch size, once it's reached
+                 },
+               },
+             },
+@@ -171,4 +165,4 @@ class SegmentSingleton {
+   }
+ }
+ 
+-export default SegmentSingleton;
++export default SegmentSingleton;
+\ No newline at end of file

@@ -1,0 +1,68 @@
+diff --git a/.changeset/shiny-hounds-learn.md b/.changeset/shiny-hounds-learn.md
+new file mode 100644
+index 0000000000000..df370ca61eba5
+--- /dev/null
++++ b/.changeset/shiny-hounds-learn.md
+@@ -0,0 +1,5 @@
++---
++"@medusajs/file-s3": patch
++---
++
++URL-encode S3 object metadata and returned URL
+diff --git a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+index d874e88c3a21f..50fa4ca54bded 100644
+--- a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
++++ b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+@@ -1,5 +1,5 @@
+-import fs from "fs/promises"
+ import axios from "axios"
++import fs from "fs/promises"
+ import { S3FileService } from "../../src/services/s3-file"
+ jest.setTimeout(100000)
+ 
+@@ -82,6 +82,23 @@ describe.skip("S3 File Plugin", () => {
+     })
+   })
+ 
++  it("uploads a file with non-ascii characters in the name", async () => {
++    const fileContent = await fs.readFile(fixtureImagePath)
++    const fixtureAsBinary = fileContent.toString("base64")
++
++    const resp = await s3Service.upload({
++      filename: "catphoto-か.jpg",
++      mimeType: "image/jpeg",
++      content: fixtureAsBinary,
++      access: "private",
++    })
++
++    expect(resp).toEqual({
++      key: expect.stringMatching(/tests\/catphoto-か.*\.jpg/),
++      url: expect.stringMatching(/https:\/\/.*\/catphoto-%E3%81%8B.*\.jpg/),
++    })
++  })
++
+   it("gets a presigned upload URL and uploads a file successfully", async () => {
+     const fileContent = await fs.readFile(fixtureImagePath)
+     const fixtureAsBinary = fileContent.toString("binary")
+diff --git a/packages/modules/providers/file-s3/src/services/s3-file.ts b/packages/modules/providers/file-s3/src/services/s3-file.ts
+index 4caedd5587468..ef3b8be1352f2 100644
+--- a/packages/modules/providers/file-s3/src/services/s3-file.ts
++++ b/packages/modules/providers/file-s3/src/services/s3-file.ts
+@@ -148,7 +148,7 @@ export class S3FileService extends AbstractFileProviderService {
+       // Note: We could potentially set the content disposition when uploading,
+       // but storing the original filename as metadata should suffice.
+       Metadata: {
+-        "x-amz-meta-original-filename": file.filename,
++        "original-filename": encodeURIComponent(file.filename),
+       },
+     })
+ 
+@@ -160,7 +160,7 @@ export class S3FileService extends AbstractFileProviderService {
+     }
+ 
+     return {
+-      url: `${this.config_.fileUrl}/${fileKey}`,
++      url: `${this.config_.fileUrl}/${encodeURI(fileKey)}`,
+       key: fileKey,
+     }
+   }

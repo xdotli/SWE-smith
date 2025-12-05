@@ -1,0 +1,1487 @@
+diff --git a/packages/features/ee/organizations/lib/service/onboarding/BaseOnboardingService.ts b/packages/features/ee/organizations/lib/service/onboarding/BaseOnboardingService.ts
+index aec2473..47a3e4d 100644
+--- a/packages/features/ee/organizations/lib/service/onboarding/BaseOnboardingService.ts
++++ b/packages/features/ee/organizations/lib/service/onboarding/BaseOnboardingService.ts
+@@ -9,7 +9,6 @@ import {
+   setupDomain,
+ } from "@calcom/features/ee/organizations/lib/server/orgCreationUtils";
+ import { getOrganizationRepository } from "@calcom/features/ee/organizations/di/OrganizationRepository.container";
+-import { TeamRepository } from "@calcom/features/ee/teams/repositories/TeamRepository";
+ import { UserRepository } from "@calcom/features/users/repositories/UserRepository";
+ import { DEFAULT_SCHEDULE, getAvailabilityFromSchedule } from "@calcom/lib/availability";
+ import { WEBAPP_URL } from "@calcom/lib/constants";
+@@ -144,52 +143,8 @@ export abstract class BaseOnboardingService implements IOrganizationOnboardingSe
+     return organizationOnboarding;
+   }
+ 
+-  private async ensureConflictingSlugTeamIsMigrated(
+-    orgSlug: string,
+-    teams: TeamInput[] = []
+-  ): Promise<TeamInput[]> {
+-    const teamRepository = new TeamRepository(prisma);
+-    const ownedTeams = await teamRepository.findOwnedTeamsByUserId({ userId: this.user.id });
+-
+-    const conflictingTeam = ownedTeams.find((team) => team.slug === orgSlug);
+-
+-    if (!conflictingTeam) {
+-      return teams;
+-    }
+-
+-    const existingTeam = teams.find((t) => t.id === conflictingTeam.id);
+-
+-    if (existingTeam) {
+-      if (existingTeam.isBeingMigrated) {
+-        return teams;
+-      }
+-
+-      return teams.map((team) =>
+-        team.id === conflictingTeam.id
+-          ? { ...team, isBeingMigrated: true }
+-          : team
+-      );
+-    }
+-
+-    return [
+-      ...teams,
+-      {
+-        id: conflictingTeam.id,
+-        name: conflictingTeam.name,
+-        isBeingMigrated: true,
+-        slug: conflictingTeam.slug,
+-      },
+-    ];
+-  }
+-
+-  protected async buildTeamsAndInvites(
+-    orgSlug: string,
+-    teams: TeamInput[] = [],
+-    invitedMembers: InvitedMemberInput[] = []
+-  ) {
+-    const enrichedTeams = await this.ensureConflictingSlugTeamIsMigrated(orgSlug, teams);
+-
+-    const teamsData = enrichedTeams
++  protected filterTeamsAndInvites(teams: TeamInput[] = [], invitedMembers: InvitedMemberInput[] = []) {
++    const teamsData = teams
+       .filter((team) => team.name.trim().length > 0)
+       .map((team) => ({
+         id: team.id === -1 ? -1 : team.id,
+@@ -433,329 +388,4 @@ export abstract class BaseOnboardingService implements IOrganizationOnboardingSe
+     return { organization };
+   }
+ 
+-  protected async createOrganizationWithNonExistentUserAsOwner({
+-    email,
+-    orgData,
+-  }: {
+-    email: string;
+-    orgData: OrganizationData;
+-  }) {
+-    const organizationRepository = getOrganizationRepository();
+-    let organization = orgData.id
+-      ? await organizationRepository.findById({ id: orgData.id })
+-      : await organizationRepository.findBySlug({ slug: orgData.slug });
+-
+-    if (organization) {
+-      log.info(
+-        `createOrganizationWithNonExistentUserAsOwner: Reusing existing organization:`,
+-        safeStringify({ slug: orgData.slug, id: organization.id })
+-      );
+-      const owner = await findUserToBeOrgOwner(email);
+-      if (!owner) {
+-        throw new Error(`Org exists but owner could not be found for email: ${email}`);
+-      }
+-      return { organization, owner };
+-    }
+-
+-    const orgCreationResult = await organizationRepository.createWithNonExistentOwner({
+-      orgData: {
+-        ...orgData,
+-        // To be uploaded after org is created
+-        logoUrl: null,
+-        bannerUrl: null,
+-      },
+-      owner: {
+-        email: email,
+-      },
+-      creationSource: CreationSource.WEBAPP,
+-    });
+-
+-    organization = {
+-      ...orgCreationResult.organization,
+-      ...await this.uploadOrganizationBrandAssets({
+-        logoUrl: orgData.logoUrl,
+-        bannerUrl: orgData.bannerUrl,
+-        organizationId: orgCreationResult.organization.id,
+-      })
+-    };
+-
+-    const { ownerProfile, orgOwner: orgOwnerFromCreation } = orgCreationResult;
+-    const orgOwner = await findUserToBeOrgOwner(orgOwnerFromCreation.email);
+-    if (!orgOwner) {
+-      throw new Error(
+-        `Just created the owner ${orgOwnerFromCreation.email}, but couldn't find it in the database`
+-      );
+-    }
+-
+-    const translation = await getTranslation(orgOwner.locale ?? "en", "common");
+-
+-    await sendEmailVerification({
+-      email: orgOwner.email,
+-      language: orgOwner.locale ?? "en",
+-      username: ownerProfile.username || "",
+-      isPlatform: orgData.isPlatform,
+-    });
+-
+-    if (!orgData.isPlatform) {
+-      await sendOrganizationCreationEmail({
+-        language: translation,
+-        from: orgOwner.name ?? `${organization.name}'s admin`,
+-        to: orgOwner.email,
+-        ownerNewUsername: ownerProfile.username,
+-        ownerOldUsername: null,
+-        orgDomain: getOrgFullOrigin(orgData.slug, { protocol: false }),
+-        orgName: organization.name,
+-        prevLink: null,
+-        newLink: `${getOrgFullOrigin(orgData.slug, { protocol: true })}/${ownerProfile.username}`,
+-      });
+-    }
+-
+-    return {
+-      organization,
+-      owner: orgOwner,
+-    };
+-  }
+-
+-  protected async createOrMoveTeamsToOrganization(teams: TeamData[], owner: User, organizationId: number) {
+-    if (teams.length === 0) return;
+-
+-    const teamsToCreate = teams.filter((team) => !team.isBeingMigrated).map((team) => team.name);
+-    const teamsToMove = teams
+-      .filter((team) => team.isBeingMigrated)
+-      .map((team) => ({
+-        id: team.id,
+-        newSlug: team.slug ? slugify(team.slug) : team.slug,
+-        shouldMove: true,
+-      }));
+-
+-    log.info(
+-      `Creating ${teamsToCreate} teams and moving ${teamsToMove.map(
+-        (team) => team.newSlug
+-      )} teams for organization ${organizationId}`
+-    );
+-
+-    await createTeamsHandler({
+-      ctx: {
+-        user: {
+-          ...owner,
+-          organizationId,
+-        },
+-      },
+-      input: {
+-        teamNames: teamsToCreate,
+-        orgId: organizationId,
+-        moveTeams: teamsToMove,
+-        creationSource: CreationSource.WEBAPP,
+-      },
+-    });
+-
+-    log.info(
+-      `Created ${teamsToCreate.length} teams and moved ${teamsToMove.length} teams for organization ${organizationId}`
+-    );
+-  }
+-
+-  protected async inviteMembers(invitedMembers: InvitedMember[], organization: Team, teamsData: TeamData[]) {
+-    if (invitedMembers.length === 0) return;
+-
+-    log.info(
+-      `Processing ${invitedMembers.length} member invites for organization ${organization.id}`,
+-      safeStringify({
+-        invitedMembers: invitedMembers.map((m) => ({
+-          email: m.email,
+-          teamId: m.teamId,
+-          teamName: m.teamName,
+-          role: m.role,
+-        })),
+-      })
+-    );
+-
+-    const createdTeams = await prisma.team.findMany({
+-      where: {
+-        parentId: organization.id,
+-      },
+-      select: {
+-        id: true,
+-        name: true,
+-        slug: true,
+-      },
+-    });
+-
+-    log.info(
+-      `Found ${createdTeams.length} teams in organization`,
+-      safeStringify({
+-        teams: createdTeams.map((t) => ({ id: t.id, name: t.name })),
+-      })
+-    );
+-
+-    const teamNameToId = new Map<string, number>();
+-    createdTeams.forEach((team) => {
+-      teamNameToId.set(team.name.toLowerCase(), team.id);
+-    });
+-
+-    const teamIdMap = new Map<number, number>();
+-    teamsData.forEach((teamData) => {
+-      if (teamData.isBeingMigrated) {
+-        teamIdMap.set(teamData.id, teamData.id);
+-      } else {
+-        const createdTeam = createdTeams.find((t) => t.name === teamData.name);
+-        if (createdTeam) {
+-          teamIdMap.set(teamData.id, createdTeam.id);
+-        }
+-      }
+-    });
+-
+-    const invitesToOrg: InvitedMember[] = [];
+-    const invitesToTeams = new Map<number, InvitedMember[]>();
+-
+-    for (const member of invitedMembers) {
+-      let targetTeamId: number | undefined;
+-
+-      if (member.teamId !== undefined) {
+-        targetTeamId = teamIdMap.get(member.teamId) || member.teamId;
+-        log.debug(`Member ${member.email}: teamId ${member.teamId} -> resolved to ${targetTeamId}`);
+-      } else if (member.teamName) {
+-        targetTeamId = teamNameToId.get(member.teamName.toLowerCase());
+-        log.debug(
+-          `Member ${member.email}: teamName "${member.teamName}" -> resolved to ${targetTeamId || "not found"
+-          }`
+-        );
+-      }
+-
+-      if (targetTeamId && createdTeams.some((t) => t.id === targetTeamId)) {
+-        if (!invitesToTeams.has(targetTeamId)) {
+-          invitesToTeams.set(targetTeamId, []);
+-        }
+-        invitesToTeams.get(targetTeamId)!.push(member);
+-        log.debug(`Member ${member.email} will be invited to team ${targetTeamId}`);
+-      } else {
+-        invitesToOrg.push(member);
+-        log.debug(
+-          `Member ${member.email} will be invited to organization (no team specified or team not found)`
+-        );
+-      }
+-    }
+-
+-    log.info(
+-      "Invite categorization complete",
+-      safeStringify({
+-        orgInvites: invitesToOrg.length,
+-        teamInvites: invitesToTeams.size,
+-        teamBreakdown: Array.from(invitesToTeams.entries()).map(([teamId, members]) => ({
+-          teamId,
+-          count: members.length,
+-          emails: members.map((m) => m.email),
+-        })),
+-      })
+-    );
+-
+-    if (invitesToOrg.length > 0) {
+-      log.info(`Inviting ${invitesToOrg.length} members to organization ${organization.id}`);
+-      await inviteMembersWithNoInviterPermissionCheck({
+-        inviterName: null,
+-        teamId: organization.id,
+-        language: "en",
+-        creationSource: CreationSource.WEBAPP,
+-        orgSlug: organization.slug || null,
+-        invitations: invitesToOrg.map((member) => ({
+-          usernameOrEmail: member.email,
+-          role: (member.role as MembershipRole) || MembershipRole.MEMBER,
+-        })),
+-        isDirectUserAction: false,
+-      });
+-    }
+-
+-    for (const [teamId, members] of Array.from(invitesToTeams.entries())) {
+-      const teamName = createdTeams.find((t) => t.id === teamId)?.name || `team ${teamId}`;
+-      log.info(`Inviting ${members.length} members to team "${teamName}" (${teamId})`);
+-      await inviteMembersWithNoInviterPermissionCheck({
+-        inviterName: null,
+-        teamId: teamId,
+-        language: "en",
+-        creationSource: CreationSource.WEBAPP,
+-        orgSlug: organization.slug || null,
+-        invitations: members.map((member: InvitedMember) => ({
+-          usernameOrEmail: member.email,
+-          role: (member.role as MembershipRole) || MembershipRole.MEMBER,
+-        })),
+-        isDirectUserAction: false,
+-      });
+-    }
+-
+-    log.info("All member invites processed successfully");
+-  }
+-
+-  protected async ensureStripeCustomerIdIsUpdated({
+-    owner,
+-    stripeCustomerId,
+-  }: {
+-    owner: User;
+-    stripeCustomerId: string;
+-  }) {
+-    const parsedMetadata = userMetadata.parse(owner.metadata);
+-
+-    await new UserRepository(prisma).updateStripeCustomerId({
+-      id: owner.id,
+-      stripeCustomerId: stripeCustomerId,
+-      existingMetadata: parsedMetadata,
+-    });
+-  }
+-
+-  protected async backwardCompatibilityForSubscriptionDetails({
+-    organization,
+-    paymentSubscriptionId,
+-    paymentSubscriptionItemId,
+-  }: {
+-    organization: {
+-      id: number;
+-      metadata: Prisma.JsonValue;
+-    };
+-    paymentSubscriptionId?: string;
+-    paymentSubscriptionItemId?: string;
+-  }) {
+-    if (!paymentSubscriptionId || !paymentSubscriptionItemId) {
+-      return organization;
+-    }
+-
+-    const existingMetadata = teamMetadataStrictSchema.parse(organization.metadata);
+-    const organizationRepository = getOrganizationRepository();
+-    const updatedOrganization = await organizationRepository.updateStripeSubscriptionDetails({
+-      id: organization.id,
+-      stripeSubscriptionId: paymentSubscriptionId,
+-      stripeSubscriptionItemId: paymentSubscriptionItemId,
+-      existingMetadata,
+-    });
+-    return updatedOrganization;
+-  }
+-
+-  protected async hasConflictingOrganization({ slug, onboardingId }: { slug: string; onboardingId: string }) {
+-    const organizationRepository = getOrganizationRepository();
+-    const organization = await organizationRepository.findBySlugIncludeOnboarding({ slug });
+-    if (!organization?.organizationOnboarding) {
+-      return false;
+-    }
+-
+-    return organization.organizationOnboarding.id !== onboardingId;
+-  }
+-
+-  protected async handleDomainSetup({
+-    organizationOnboarding,
+-    orgOwnerTranslation,
+-  }: {
+-    organizationOnboarding: OrganizationOnboardingData;
+-    orgOwnerTranslation: TFunction;
+-  }) {
+-    if (!organizationOnboarding.isDomainConfigured) {
+-      await setupDomain({
+-        slug: organizationOnboarding.slug,
+-        isPlatform: organizationOnboarding.isPlatform,
+-        orgOwnerEmail: organizationOnboarding.orgOwnerEmail,
+-        orgOwnerTranslation,
+-      });
+-    }
+-
+-    await OrganizationOnboardingRepository.update(organizationOnboarding.id, {
+-      isDomainConfigured: true,
+-    });
+-  }
+-}
+-
++  protected async createOrganizationWithNonExistentUserAsOw
+\ No newline at end of file
+diff --git a/packages/features/ee/organizations/lib/service/onboarding/BillingEnabledOrgOnboardingService.ts b/packages/features/ee/organizations/lib/service/onboarding/BillingEnabledOrgOnboardingService.ts
+index 3b63e01..cd34b9a 100644
+--- a/packages/features/ee/organizations/lib/service/onboarding/BillingEnabledOrgOnboardingService.ts
++++ b/packages/features/ee/organizations/lib/service/onboarding/BillingEnabledOrgOnboardingService.ts
+@@ -43,11 +43,7 @@ export class BillingEnabledOrgOnboardingService extends BaseOnboardingService {
+       })
+     );
+ 
+-    const { teamsData, invitedMembersData } = await this.buildTeamsAndInvites(
+-      input.slug,
+-      input.teams,
+-      input.invitedMembers
+-    );
++    const { teamsData, invitedMembersData } = this.filterTeamsAndInvites(input.teams, input.invitedMembers);
+ 
+     log.debug(
+       "BillingEnabledOrgOnboardingService - After filterTeamsAndInvites",
+@@ -272,4 +268,4 @@ export class BillingEnabledOrgOnboardingService extends BaseOnboardingService {
+ 
+     return { organization, owner };
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/features/ee/organizations/lib/service/onboarding/SelfHostedOnboardingService.ts b/packages/features/ee/organizations/lib/service/onboarding/SelfHostedOnboardingService.ts
+index d87bcf8..3081d37 100644
+--- a/packages/features/ee/organizations/lib/service/onboarding/SelfHostedOnboardingService.ts
++++ b/packages/features/ee/organizations/lib/service/onboarding/SelfHostedOnboardingService.ts
+@@ -28,7 +28,7 @@ const teamsSchema = orgOnboardingTeamsSchema;
+ /**
+  * Handles organization onboarding when billing is disabled (self-hosted admin flow).
+  *
+-* Flow:
++ * Flow:
+  * 1. Create onboarding record
+  * 2. Store teams/invites in database
+  * 3. Immediately create organization, teams, and invite members
+@@ -46,12 +46,8 @@ export class SelfHostedOrganizationOnboardingService extends BaseOnboardingServi
+       })
+     );
+ 
+-    // Step 1: Build and validate teams/invites (includes conflict slug detection)
+-    const { teamsData, invitedMembersData } = await this.buildTeamsAndInvites(
+-      input.slug,
+-      input.teams,
+-      input.invitedMembers
+-    );
++    // Step 1: Filter and normalize teams/invites
++    const { teamsData, invitedMembersData } = this.filterTeamsAndInvites(input.teams, input.invitedMembers);
+ 
+     // Step 2: Create onboarding record with ALL data at once
+     const organizationOnboarding = await this.createOnboardingRecord({
+@@ -232,4 +228,4 @@ export class SelfHostedOrganizationOnboardingService extends BaseOnboardingServi
+ 
+     return { organization, owner };
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/features/ee/organizations/lib/service/onboarding/__tests__/BaseOnboardingService.test.ts b/packages/features/ee/organizations/lib/service/onboarding/__tests__/BaseOnboardingService.test.ts
+index 6823792..f281b3c 100644
+--- a/packages/features/ee/organizations/lib/service/onboarding/__tests__/BaseOnboardingService.test.ts
++++ b/packages/features/ee/organizations/lib/service/onboarding/__tests__/BaseOnboardingService.test.ts
+@@ -1,35 +1,24 @@
+-import { describe, expect, it, vi } from "vitest";
++import { describe, expect, it } from "vitest";
+ 
+-import type { User } from "@calcom/prisma/client";
+ import { UserPermissionRole } from "@calcom/prisma/enums";
+ 
+-vi.mock("@calcom/features/ee/teams/repositories/TeamRepository", () => ({
+-  TeamRepository: class {
+-    constructor() {}
+-    findOwnedTeamsByUserId(_: { userId: number }) {
+-      return Promise.resolve([]);
+-    }
+-  },
+-}));
+-
+ import { BaseOnboardingService } from "../BaseOnboardingService";
+-import type { CreateOnboardingIntentInput, OnboardingIntentResult } from "../types";
++import type { CreateOnboardingIntentInput } from "../types";
+ 
+ class TestableBaseOnboardingService extends BaseOnboardingService {
+-  async createOnboardingIntent(_input: CreateOnboardingIntentInput): Promise<OnboardingIntentResult> {
++  async createOnboardingIntent(input: CreateOnboardingIntentInput): Promise<any> {
+     throw new Error("Not implemented");
+   }
+ 
+-  public async testBuildTeamsAndInvites(
+-    orgSlug: string,
++  public testFilterTeamsAndInvites(
+     teams: CreateOnboardingIntentInput["teams"],
+     invitedMembers: CreateOnboardingIntentInput["invitedMembers"]
+   ) {
+-    return this.buildTeamsAndInvites(orgSlug, teams, invitedMembers);
++    return this.filterTeamsAndInvites(teams, invitedMembers);
+   }
+ }
+ 
+-const mockUser: Pick<User, "id" | "email" | "role" | "name"> = {
++const mockUser = {
+   id: 1,
+   email: "user@example.com",
+   role: UserPermissionRole.USER,
+@@ -37,9 +26,9 @@ const mockUser: Pick<User, "id" | "email" | "role" | "name"> = {
+ };
+ 
+ describe("BaseOnboardingService", () => {
+-  describe("buildTeamsAndInvites", () => {
+-    it("should filter out invites with empty emails", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++  describe("filterTeamsAndInvites", () => {
++    it("should filter out invites with empty emails", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const invites = [
+         { email: "valid@example.com", teamName: "Marketing", role: "MEMBER" },
+@@ -48,7 +37,7 @@ describe("BaseOnboardingService", () => {
+         { email: "another@example.com", teamName: "Design", role: "MEMBER" },
+       ];
+ 
+-      const { invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", [], invites);
++      const { invitedMembersData } = service.testFilterTeamsAndInvites([], invites);
+ 
+       expect(invitedMembersData).toHaveLength(2);
+       expect(invitedMembersData).toEqual([
+@@ -69,8 +58,8 @@ describe("BaseOnboardingService", () => {
+       ]);
+     });
+ 
+-    it("should preserve all fields from invites including role", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should preserve all fields from invites including role", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const invites = [
+         {
+@@ -89,7 +78,7 @@ describe("BaseOnboardingService", () => {
+         },
+       ];
+ 
+-      const { invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", [], invites);
++      const { invitedMembersData } = service.testFilterTeamsAndInvites([], invites);
+ 
+       expect(invitedMembersData).toEqual([
+         {
+@@ -109,15 +98,15 @@ describe("BaseOnboardingService", () => {
+       ]);
+     });
+ 
+-    it("should handle invites without optional fields", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should handle invites without optional fields", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const invites = [
+         { email: "minimal@example.com" },
+         { email: "withteam@example.com", teamName: "Sales" },
+       ];
+ 
+-      const { invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", [], invites);
++      const { invitedMembersData } = service.testFilterTeamsAndInvites([], invites);
+ 
+       expect(invitedMembersData).toEqual([
+         {
+@@ -137,8 +126,8 @@ describe("BaseOnboardingService", () => {
+       ]);
+     });
+ 
+-    it("should filter out teams with empty names", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should filter out teams with empty names", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const teams = [
+         { id: 1, name: "Marketing", isBeingMigrated: false, slug: null },
+@@ -147,7 +136,7 @@ describe("BaseOnboardingService", () => {
+         { id: 4, name: "Engineering", isBeingMigrated: true, slug: "eng" },
+       ];
+ 
+-      const { teamsData } = await service.testBuildTeamsAndInvites("test-org", teams, []);
++      const { teamsData } = service.testFilterTeamsAndInvites(teams, []);
+ 
+       expect(teamsData).toHaveLength(2);
+       expect(teamsData).toEqual([
+@@ -156,15 +145,15 @@ describe("BaseOnboardingService", () => {
+       ]);
+     });
+ 
+-    it("should preserve team properties including migration status", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should preserve team properties including migration status", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const teams = [
+         { id: -1, name: "New Team", isBeingMigrated: false, slug: null },
+         { id: 42, name: "Existing Team", isBeingMigrated: true, slug: "existing-team" },
+       ];
+ 
+-      const { teamsData } = await service.testBuildTeamsAndInvites("test-org", teams, []);
++      const { teamsData } = service.testFilterTeamsAndInvites(teams, []);
+ 
+       expect(teamsData).toEqual([
+         { id: -1, name: "New Team", isBeingMigrated: false, slug: null },
+@@ -172,26 +161,26 @@ describe("BaseOnboardingService", () => {
+       ]);
+     });
+ 
+-    it("should handle empty teams and invites arrays", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should handle empty teams and invites arrays", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+-      const { teamsData, invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", [], []);
++      const { teamsData, invitedMembersData } = service.testFilterTeamsAndInvites([], []);
+ 
+       expect(teamsData).toEqual([]);
+       expect(invitedMembersData).toEqual([]);
+     });
+ 
+-    it("should handle undefined teams and invites", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should handle undefined teams and invites", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+-      const { teamsData, invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", undefined, undefined);
++      const { teamsData, invitedMembersData } = service.testFilterTeamsAndInvites(undefined, undefined);
+ 
+       expect(teamsData).toEqual([]);
+       expect(invitedMembersData).toEqual([]);
+     });
+ 
+-    it("should preserve invites with teamId=-1 for new teams", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should preserve invites with teamId=-1 for new teams", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const teams = [
+         { id: -1, name: "Marketing", isBeingMigrated: false, slug: null },
+@@ -203,7 +192,7 @@ describe("BaseOnboardingService", () => {
+         { email: "user2@example.com", teamId: -1, teamName: "Sales", role: "ADMIN" },
+       ];
+ 
+-      const { teamsData, invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", teams, invites);
++      const { teamsData, invitedMembersData } = service.testFilterTeamsAndInvites(teams, invites);
+ 
+       expect(teamsData).toHaveLength(2);
+       expect(invitedMembersData).toHaveLength(2);
+@@ -213,8 +202,8 @@ describe("BaseOnboardingService", () => {
+       expect(invitedMembersData[1].role).toBe("ADMIN");
+     });
+ 
+-    it("should handle mixed scenarios with both org-level and team-specific invites", async () => {
+-      const service = new TestableBaseOnboardingService(mockUser);
++    it("should handle mixed scenarios with both org-level and team-specific invites", () => {
++      const service = new TestableBaseOnboardingService(mockUser as any);
+ 
+       const teams = [
+         { id: -1, name: "Marketing", isBeingMigrated: false, slug: null },
+@@ -227,7 +216,7 @@ describe("BaseOnboardingService", () => {
+         { email: "eng@example.com", teamName: "Engineering", teamId: 42, role: "ADMIN" },
+       ];
+ 
+-      const { teamsData, invitedMembersData } = await service.testBuildTeamsAndInvites("test-org", teams, invites);
++      const { teamsData, invitedMembersData } = service.testFilterTeamsAndInvites(teams, invites);
+ 
+       expect(teamsData).toHaveLength(2);
+       expect(invitedMembersData).toHaveLength(3);
+@@ -257,4 +246,4 @@ describe("BaseOnboardingService", () => {
+       });
+     });
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/features/ee/organizations/lib/service/onboarding/__tests__/BillingEnabledOrgOnboardingService.test.ts b/packages/features/ee/organizations/lib/service/onboarding/__tests__/BillingEnabledOrgOnboardingService.test.ts
+index d1e8786..eb55d4f 100644
+--- a/packages/features/ee/organizations/lib/service/onboarding/__tests__/BillingEnabledOrgOnboardingService.test.ts
++++ b/packages/features/ee/organizations/lib/service/onboarding/__tests__/BillingEnabledOrgOnboardingService.test.ts
+@@ -223,181 +223,6 @@ describe("BillingEnabledOrgOnboardingService", () => {
+       });
+     });
+ 
+-    it("should automatically migrate team with conflicting slug", async () => {
+-      // Create a team owned by the user with the same slug as the org
+-      const conflictingTeam = await prismock.team.create({
+-        data: {
+-          id: 100,
+-          name: "Test Org Team",
+-          slug: "test-org", // Same as mockInput.slug
+-        },
+-      });
+-
+-      await prismock.membership.create({
+-        data: {
+-          userId: mockUser.id,
+-          teamId: conflictingTeam.id,
+-          role: MembershipRole.OWNER,
+-          accepted: true,
+-        },
+-      });
+-
+-      const inputWithoutConflictingTeam = {
+-        ...mockInput,
+-        teams: [{ id: -1, name: "Engineering", isBeingMigrated: false, slug: null }],
+-      };
+-
+-      await service.createOnboardingIntent(inputWithoutConflictingTeam);
+-
+-      // Verify the conflicting team was automatically added to migration
+-      expect(mockPaymentService.createOrganizationOnboarding).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teams: expect.arrayContaining([
+-            { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-            { id: 100, name: "Test Org Team", isBeingMigrated: true, slug: "test-org" },
+-          ]),
+-        })
+-      );
+-    });
+-
+-    it("should mark existing team for migration if slug conflicts", async () => {
+-      // Create a team owned by the user with the same slug as the org
+-      const conflictingTeam = await prismock.team.create({
+-        data: {
+-          id: 100,
+-          name: "Test Org Team",
+-          slug: "test-org", // Same as mockInput.slug
+-        },
+-      });
+-
+-      await prismock.membership.create({
+-        data: {
+-          userId: mockUser.id,
+-          teamId: conflictingTeam.id,
+-          role: MembershipRole.OWNER,
+-          accepted: true,
+-        },
+-      });
+-
+-      const inputWithConflictingTeamNotMigrated = {
+-        ...mockInput,
+-        teams: [
+-          { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-          { id: 100, name: "Test Org Team", isBeingMigrated: false, slug: "test-org" },
+-        ],
+-      };
+-
+-      await service.createOnboardingIntent(inputWithConflictingTeamNotMigrated);
+-
+-      // Verify the conflicting team was marked for migration
+-      expect(mockPaymentService.createOrganizationOnboarding).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teams: expect.arrayContaining([
+-            { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-            { id: 100, name: "Test Org Team", isBeingMigrated: true, slug: "test-org" },
+-          ]),
+-        })
+-      );
+-    });
+-
+-    it("should not duplicate team if already marked for migration with conflicting slug", async () => {
+-      // Create a team owned by the user with the same slug as the org
+-      const conflictingTeam = await prismock.team.create({
+-        data: {
+-          id: 100,
+-          name: "Test Org Team",
+-          slug: "test-org", // Same as mockInput.slug
+-        },
+-      });
+-
+-      await prismock.membership.create({
+-        data: {
+-          userId: mockUser.id,
+-          teamId: conflictingTeam.id,
+-          role: MembershipRole.OWNER,
+-          accepted: true,
+-        },
+-      });
+-
+-      const inputWithConflictingTeamAlreadyMigrated = {
+-        ...mockInput,
+-        teams: [
+-          { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-          { id: 100, name: "Test Org Team", isBeingMigrated: true, slug: "test-org" },
+-        ],
+-      };
+-
+-      await service.createOnboardingIntent(inputWithConflictingTeamAlreadyMigrated);
+-
+-      // Verify no duplication occurred
+-      expect(mockPaymentService.createOrganizationOnboarding).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teams: [
+-            { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-            { id: 100, name: "Test Org Team", isBeingMigrated: true, slug: "test-org" },
+-          ],
+-        })
+-      );
+-    });
+-
+-    it("should not migrate team with non-conflicting slug", async () => {
+-      // Create a team owned by the user with a different slug
+-      const nonConflictingTeam = await prismock.team.create({
+-        data: {
+-          id: 100,
+-          name: "Different Team",
+-          slug: "different-team",
+-        },
+-      });
+-
+-      await prismock.membership.create({
+-        data: {
+-          userId: mockUser.id,
+-          teamId: nonConflictingTeam.id,
+-          role: MembershipRole.OWNER,
+-          accepted: true,
+-        },
+-      });
+-
+-      await service.createOnboardingIntent(mockInput);
+-
+-      // Verify the non-conflicting team was NOT added
+-      expect(mockPaymentService.createOrganizationOnboarding).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teams: mockInput.teams,
+-        })
+-      );
+-    });
+-
+-    it("should only migrate teams where user is OWNER or ADMIN", async () => {
+-      // Create a team with conflicting slug but user is only a MEMBER
+-      const teamAsMember = await prismock.team.create({
+-        data: {
+-          id: 100,
+-          name: "Team As Member",
+-          slug: "test-org",
+-        },
+-      });
+-
+-      await prismock.membership.create({
+-        data: {
+-          userId: mockUser.id,
+-          teamId: teamAsMember.id,
+-          role: MembershipRole.MEMBER,
+-          accepted: true,
+-        },
+-      });
+-
+-      await service.createOnboardingIntent(mockInput);
+-
+-      // Verify the team was NOT migrated (user isn't owner/admin)
+-      expect(mockPaymentService.createOrganizationOnboarding).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teams: mockInput.teams,
+-        })
+-      );
+-    });
+-
+     it("should immediately create organization when admin creates org for self", async () => {
+       vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+ 
+@@ -582,462 +407,4 @@ describe("BillingEnabledOrgOnboardingService", () => {
+       });
+ 
+       const { organization, owner } = await service.createOrganization(mockOrganizationOnboarding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      // Verify organization creation
+-      expect(organization).toBeDefined();
+-      expect(organization.name).toBe(mockOrganizationOnboarding.name);
+-      expect(organization.slug).toBe(mockOrganizationOnboarding.slug);
+-
+-      // Verify owner is the existing user
+-      expect(owner.id).toBe(existingUser.id);
+-      expect(owner.email).toBe(existingUser.email);
+-
+-      expect(createDomain).toHaveBeenCalledWith(organization.slug);
+-      expect(inviteMembersWithNoInviterPermissionCheck).toHaveBeenCalled();
+-      expect(createTeamsHandler).toHaveBeenCalled();
+-    });
+-
+-    it("should reuse existing organization if organizationId is already set (idempotency)", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      const existingOrg = await createTestOrganization({
+-        name: mockOrganizationOnboarding.name,
+-        slug: mockOrganizationOnboarding.slug,
+-      });
+-
+-      const existingUser = await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const onboardingWithOrgId = {
+-        ...mockOrganizationOnboarding,
+-        organizationId: existingOrg.id,
+-      };
+-
+-      const { organization } = await service.createOrganization(onboardingWithOrgId, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      // Verify the existing organization was reused
+-      expect(organization.id).toBe(existingOrg.id);
+-    });
+-
+-    it("should throw error if organization with same slug exists", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      await createTestOrganization({
+-        name: "Conflicting Org",
+-        slug: mockOrganizationOnboarding.slug,
+-      });
+-
+-      await expect(
+-        service.createOrganization(mockOrganizationOnboarding, {
+-          subscriptionId: "sub_123",
+-          subscriptionItemId: "si_123",
+-        })
+-      ).rejects.toThrow("organization_url_taken");
+-    });
+-
+-    it("should update stripe customer ID for existing user", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      const existingUser = await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      await service.createOrganization(mockOrganizationOnboarding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      // Verify user's stripe customer ID was updated
+-      const updatedUser = await prismock.user.findUnique({
+-        where: { id: existingUser.id },
+-      });
+-
+-      expect(updatedUser?.metadata).toEqual(
+-        expect.objectContaining({
+-          stripeCustomerId: mockOrganizationOnboarding.stripeCustomerId,
+-        })
+-      );
+-    });
+-
+-    it("should create organization even if there is a team with same slug that orgOwner is a member of", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      const existingUser = await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const teamWithConflictingSlug = await createTestTeam({
+-        name: "TestTeamWithConflictingSlug",
+-        slug: mockOrganizationOnboarding.slug,
+-      });
+-
+-      // Make the orgOwner a member of the team
+-      await createTestMembership({
+-        userId: existingUser.id,
+-        teamId: teamWithConflictingSlug.id,
+-        role: MembershipRole.ADMIN,
+-      });
+-
+-      const { organization } = await service.createOrganization(mockOrganizationOnboarding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      expect(organization.slug).toBe(mockOrganizationOnboarding.slug);
+-    });
+-
+-    it("should not create organization if there is a team with same slug that orgOwner is NOT a member of", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      await createTestTeam({
+-        name: "TestTeamWithConflictingSlugNotOwnedByOrgOwner",
+-        slug: mockOrganizationOnboarding.slug,
+-      });
+-
+-      await expect(
+-        service.createOrganization(mockOrganizationOnboarding, {
+-          subscriptionId: "sub_123",
+-          subscriptionItemId: "si_123",
+-        })
+-      ).rejects.toThrow("organization_url_taken");
+-    });
+-
+-    it("should invite members with isDirectUserAction set to false", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        username: "org-owner",
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const result = await service.createOrganization(mockOrganizationOnboarding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      // Verify inviteMembersWithNoInviterPermissionCheck was called with isDirectUserAction: false
+-      expect(inviteMembersWithNoInviterPermissionCheck).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teamId: result.organization.id,
+-          invitations: [
+-            { usernameOrEmail: "member1@example.com", role: MembershipRole.MEMBER },
+-            { usernameOrEmail: "member2@example.com", role: MembershipRole.MEMBER },
+-          ],
+-          isDirectUserAction: false,
+-        })
+-      );
+-    });
+-
+-    it("should invite members to specific teams based on teamName", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const onboardingWithTeamInvites = {
+-        ...mockOrganizationOnboarding,
+-        teams: [
+-          { id: -1, name: "Marketing", isBeingMigrated: false, slug: null },
+-          { id: -1, name: "Engineering", isBeingMigrated: false, slug: null },
+-        ],
+-        invitedMembers: [
+-          { email: "marketer@example.com", teamName: "marketing", role: MembershipRole.MEMBER },
+-          { email: "engineer@example.com", teamName: "engineering", role: MembershipRole.ADMIN },
+-          { email: "orguser@example.com" },
+-        ],
+-      };
+-
+-      // Setup: createTeamsHandler will be called and we need teams to exist for inviteMembers
+-      vi.mocked(createTeamsHandler).mockImplementation(async (options) => {
+-        const marketing = await prismock.team.create({
+-          data: {
+-            name: "Marketing",
+-            slug: "marketing",
+-            parentId: options.input.orgId,
+-          },
+-        });
+-        const engineering = await prismock.team.create({
+-          data: {
+-            name: "Engineering",
+-            slug: "engineering",
+-            parentId: options.input.orgId,
+-          },
+-        });
+-        return { teams: [marketing, engineering] } as any;
+-      });
+-
+-      const result = await service.createOrganization(onboardingWithTeamInvites, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      // Verify invites were sent to 3 different targets (org + 2 teams)
+-      expect(inviteMembersWithNoInviterPermissionCheck).toHaveBeenCalledTimes(3);
+-
+-      // Check org-level invite
+-      const orgInviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === result.organization.id);
+-      expect(orgInviteCall).toBeDefined();
+-      expect(orgInviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "orguser@example.com", role: MembershipRole.MEMBER },
+-      ]);
+-
+-      // Check Marketing team invite
+-      const teams = await prismock.team.findMany({ where: { parentId: result.organization.id } });
+-      const marketingTeam = teams.find((t) => t.name === "Marketing");
+-      const marketingInviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === marketingTeam!.id);
+-      expect(marketingInviteCall).toBeDefined();
+-      expect(marketingInviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "marketer@example.com", role: MembershipRole.MEMBER },
+-      ]);
+-
+-      // Check Engineering team invite
+-      const engineeringTeam = teams.find((t) => t.name === "Engineering");
+-      const engineeringInviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === engineeringTeam!.id);
+-      expect(engineeringInviteCall).toBeDefined();
+-      expect(engineeringInviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "engineer@example.com", role: MembershipRole.ADMIN },
+-      ]);
+-    });
+-
+-    it("should preserve custom roles for invited members", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const onboardingWithRoles = {
+-        ...mockOrganizationOnboarding,
+-        invitedMembers: [
+-          { email: "admin@example.com", role: MembershipRole.ADMIN },
+-          { email: "member@example.com", role: MembershipRole.MEMBER },
+-        ],
+-      };
+-
+-      const result = await service.createOrganization(onboardingWithRoles, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      const inviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === result.organization.id);
+-
+-      expect(inviteCall).toBeDefined();
+-      expect(inviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "admin@example.com", role: MembershipRole.ADMIN },
+-        { usernameOrEmail: "member@example.com", role: MembershipRole.MEMBER },
+-      ]);
+-    });
+-
+-    it("should handle mixed org-level and team-specific invites", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const onboardingWithMixedInvites = {
+-        ...mockOrganizationOnboarding,
+-        teams: [{ id: -1, name: "Sales", isBeingMigrated: false, slug: null }],
+-        invitedMembers: [
+-          { email: "sales1@example.com", teamName: "sales", role: MembershipRole.MEMBER },
+-          { email: "sales2@example.com", teamName: "sales", role: MembershipRole.ADMIN },
+-          { email: "org1@example.com", role: MembershipRole.MEMBER },
+-          { email: "org2@example.com", role: MembershipRole.MEMBER },
+-        ],
+-      };
+-
+-      vi.mocked(createTeamsHandler).mockImplementation(async (options) => {
+-        const salesTeam = await prismock.team.create({
+-          data: {
+-            name: "Sales",
+-            slug: "sales",
+-            parentId: options.input.orgId,
+-          },
+-        });
+-        return { teams: [salesTeam] } as any;
+-      });
+-
+-      const result = await service.createOrganization(onboardingWithMixedInvites, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      expect(inviteMembersWithNoInviterPermissionCheck).toHaveBeenCalledTimes(2);
+-
+-      // Find org-level invites
+-      const orgInviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === result.organization.id);
+-
+-      expect(orgInviteCall).toBeDefined();
+-      expect(orgInviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "org1@example.com", role: MembershipRole.MEMBER },
+-        { usernameOrEmail: "org2@example.com", role: MembershipRole.MEMBER },
+-      ]);
+-
+-      // Find Sales team invites
+-      const teams = await prismock.team.findMany({ where: { parentId: result.organization.id } });
+-      const salesTeam = teams.find((t) => t.name === "Sales");
+-      const salesInviteCall = vi
+-        .mocked(inviteMembersWithNoInviterPermissionCheck)
+-        .mock.calls.find((call) => call[0].teamId === salesTeam!.id);
+-
+-      expect(salesInviteCall).toBeDefined();
+-      expect(salesInviteCall![0].invitations).toEqual([
+-        { usernameOrEmail: "sales1@example.com", role: MembershipRole.MEMBER },
+-        { usernameOrEmail: "sales2@example.com", role: MembershipRole.ADMIN },
+-      ]);
+-    });
+-
+-    it("should fall back to org-level invite if teamName does not match any created team", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const mockOrganizationOnboarding = await createTestOnboarding();
+-
+-      await createTestUser({
+-        email: mockOrganizationOnboarding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const onboardingWithNonMatchingTeam = {
+-        ...mockOrganizationOnboarding,
+-        teams: [{ id: -1, name: "Marketing", isBeingMigrated: false, slug: null }],
+-        invitedMembers: [
+-          { email: "user@example.com", teamName: "NonExistentTeam", role: MembershipRole.MEMBER },
+-        ],
+-      };
+-
+-      vi.mocked(createTeamsHandler).mockResolvedValue({
+-        teams: [{ id: 300, name: "Marketing" }],
+-      } as any);
+-
+-      const result = await service.createOrganization(onboardingWithNonMatchingTeam, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      expect(inviteMembersWithNoInviterPermissionCheck).toHaveBeenCalledWith(
+-        expect.objectContaining({
+-          teamId: result.organization.id,
+-          invitations: [{ usernameOrEmail: "user@example.com", role: MembershipRole.MEMBER }],
+-          isDirectUserAction: false,
+-        })
+-      );
+-    });
+-
+-    it("should transfer branding data (logo, brandColor, bannerUrl) from onboarding to organization", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const onboardingWithBranding = await createTestOnboarding({
+-        logo: "https://example.com/logo.png",
+-        bio: "Test organization bio",
+-        brandColor: "#FF5733",
+-        bannerUrl: "https://example.com/banner.jpg",
+-      });
+-
+-      await createTestUser({
+-        email: onboardingWithBranding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const { organization } = await service.createOrganization(onboardingWithBranding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      expect(organization.logoUrl).toBe("https://example.com/logo.png");
+-      expect(organization.bio).toBe("Test organization bio");
+-      expect(organization.brandColor).toBe("#FF5733");
+-      expect(organization.bannerUrl).toBe("https://example.com/banner.jpg");
+-    });
+-
+-    it("should handle null branding data correctly", async () => {
+-      vi.spyOn(constants, "IS_SELF_HOSTED", "get").mockReturnValue(false);
+-
+-      const onboardingWithNullBranding = await createTestOnboarding({
+-        logo: null,
+-        bio: null,
+-        brandColor: null,
+-        bannerUrl: null,
+-      });
+-
+-      await createTestUser({
+-        email: onboardingWithNullBranding.orgOwnerEmail,
+-        onboardingCompleted: true,
+-        emailVerified: new Date(),
+-      });
+-
+-      const { organization } = await service.createOrganization(onboardingWithNullBranding, {
+-        subscriptionId: "sub_123",
+-        subscriptionItemId: "si_123",
+-      });
+-
+-      expect(organization.logoUrl).toBeNull();
+-      expect(organization.bio).toBeNull();
+-      expect(organization.brandColor).toBeNull();
+-      expect(organization.bannerUrl).toBeNull();
+-    });
+-  });
+-});
++        subsc
+\ No newline at end of file
+diff --git a/packages/features/ee/teams/repositories/TeamRepository.ts b/packages/features/ee/teams/repositories/TeamRepository.ts
+index a949d0f..c7578fe 100644
+--- a/packages/features/ee/teams/repositories/TeamRepository.ts
++++ b/packages/features/ee/teams/repositories/TeamRepository.ts
+@@ -347,33 +347,6 @@ export class TeamRepository {
+       });
+   }
+ 
+-  /**
+-   * Get teams where the user is an OWNER or ADMIN (excludes organizations)
+-   */
+-  async findOwnedTeamsByUserId({ userId }: { userId: number }) {
+-    const memberships = await this.prismaClient.membership.findMany({
+-      where: {
+-        userId: userId,
+-        accepted: true,
+-        role: {
+-          in: [MembershipRole.OWNER, MembershipRole.ADMIN],
+-        },
+-      },
+-      include: {
+-        team: {
+-          select: {
+-            id: true,
+-            name: true,
+-            slug: true,
+-            isOrganization: true,
+-          },
+-        },
+-      },
+-    });
+-
+-    return memberships.filter((mmship) => !mmship.team.isOrganization).map((mmship) => mmship.team);
+-  }
+-
+   async findTeamWithOrganizationSettings(teamId: number) {
+     return await this.prismaClient.team.findUnique({
+       where: { id: teamId },
+@@ -517,75 +490,4 @@ export class TeamRepository {
+   async findOrgTeamsExcludingTeam({ parentId, excludeTeamId }: { parentId: number; excludeTeamId: number }) {
+     return await this.prismaClient.team.findMany({
+       where: {
+-        parentId,
+-        id: {
+-          not: excludeTeamId,
+-        },
+-      },
+-      select: { id: true },
+-    });
+-  }
+-
+-  async findTeamsForCreditCheck({ teamIds }: { teamIds: number[] }) {
+-    return await this.prismaClient.team.findMany({
+-      where: { id: { in: teamIds } },
+-      select: { id: true, isOrganization: true, parentId: true, parent: { select: { id: true } } },
+-    });
+-  }
+-
+-  async findTeamMembersWithPermission({
+-    teamId,
+-    permission,
+-    fallbackRoles,
+-  }: {
+-    teamId: number;
+-    permission: string;
+-    fallbackRoles: MembershipRole[];
+-  }) {
+-    const { resource, action } = this.parsePermission(permission);
+-
+-    type UserResult = {
+-      id: number;
+-      name: string | null;
+-      email: string;
+-      locale: string | null;
+-    };
+-
+-    const users = await this.prismaClient.$queryRaw<UserResult[]>`
+-      SELECT DISTINCT u.id, u.name, u.email, u.locale
+-      FROM "Membership" m
+-      INNER JOIN "User" u ON m."userId" = u.id
+-      LEFT JOIN "Role" r ON m."customRoleId" = r.id
+-      LEFT JOIN "TeamFeatures" f ON m."teamId" = f."teamId" AND f."featureId" = 'pbac'
+-      WHERE m."teamId" = ${teamId}
+-        AND m."accepted" = true
+-        AND (
+-          -- Scenario 1: PBAC enabled + custom role with permission
+-          (f."teamId" IS NOT NULL
+-           AND m."customRoleId" IS NOT NULL
+-           AND EXISTS (
+-             SELECT 1 FROM "RolePermission" rp
+-             WHERE rp."roleId" = r.id
+-               AND (
+-                 (rp."resource" = '*' AND rp."action" = '*') OR
+-                 (rp."resource" = ${resource} AND rp."action" = ${action}) OR
+-                 (rp."resource" = ${resource} AND rp."action" = '*') OR
+-                 (rp."resource" = '*' AND rp."action" = ${action})
+-               )
+-           ))
+-          OR
+-          -- Scenario 2 & 3: Legacy role ADMIN/OWNER (works for both PBAC and non-PBAC teams)
+-          (m."role"::text = ANY(${fallbackRoles}))
+-        )
+-    `;
+-
+-    return users;
+-  }
+-
+-  private parsePermission(permission: string): { resource: string; action: string } {
+-    const lastDotIndex = permission.lastIndexOf(".");
+-    const resource = permission.substring(0, lastDotIndex);
+-    const action = permission.substring(lastDotIndex + 1);
+-    return { resource, action };
+-  }
+-}
++        parentI
+\ No newline at end of file
+diff --git a/packages/trpc/server/routers/viewer/teams/listOwnedTeams.handler.ts b/packages/trpc/server/routers/viewer/teams/listOwnedTeams.handler.ts
+index 03df278..6b7ca74 100644
+--- a/packages/trpc/server/routers/viewer/teams/listOwnedTeams.handler.ts
++++ b/packages/trpc/server/routers/viewer/teams/listOwnedTeams.handler.ts
+@@ -1,5 +1,5 @@
+-import { TeamRepository } from "@calcom/features/ee/teams/repositories/TeamRepository";
+ import { prisma } from "@calcom/prisma";
++import { MembershipRole } from "@calcom/prisma/enums";
+ 
+ import type { TrpcSessionUser } from "../../../types";
+ 
+@@ -10,6 +10,29 @@ type ListOptions = {
+ };
+ 
+ export const listOwnedTeamsHandler = async ({ ctx }: ListOptions) => {
+-  const teamRepository = new TeamRepository(prisma);
+-  return await teamRepository.findOwnedTeamsByUserId({ userId: ctx.user.id });
+-};
++  const user = await prisma.user.findUnique({
++    where: {
++      id: ctx.user.id,
++    },
++    select: {
++      id: true,
++      teams: {
++        where: {
++          accepted: true,
++          role: {
++            in: [MembershipRole.OWNER, MembershipRole.ADMIN],
++          },
++        },
++        select: {
++          team: true,
++        },
++      },
++    },
++  });
++
++  return user?.teams
++    ?.filter((m) => {
++      return !m.team.isOrganization;
++    })
++    ?.map(({ team }) => team);
++};
+\ No newline at end of file

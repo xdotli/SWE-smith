@@ -1,0 +1,65 @@
+diff --git a/packages/hoppscotch-backend/src/team/team.service.spec.ts b/packages/hoppscotch-backend/src/team/team.service.spec.ts
+index 44954535001..5fa2e2ffd4f 100644
+--- a/packages/hoppscotch-backend/src/team/team.service.spec.ts
++++ b/packages/hoppscotch-backend/src/team/team.service.spec.ts
+@@ -361,8 +361,8 @@ describe('renameTeam', () => {
+     ).resolves.toEqualLeft(TEAM_INVALID_ID);
+   });
+ 
+-  test('rejects for new team name length < 6 with TEAM_NAME_INVALID', () => {
+-    const newTeamName = 'smol';
++  test('rejects for new team name empty with TEAM_NAME_INVALID', () => {
++    const newTeamName = '';
+ 
+     // Prisma doesn't care about the team name length, so it will resolve
+     mockPrisma.team.update.mockResolvedValue({
+@@ -668,8 +668,8 @@ describe('createTeam', () => {
+     ).resolves.toEqualRight(expect.objectContaining(team));
+   });
+ 
+-  test('rejects for team name length < 6 with TEAM_NAME_INVALID', () => {
+-    const newName = 'smol';
++  test('rejects for team name empty with TEAM_NAME_INVALID', () => {
++    const newName = '';
+ 
+     // Prisma doesn't care
+     mockPrisma.team.create.mockResolvedValue({
+diff --git a/packages/hoppscotch-backend/src/team/team.service.ts b/packages/hoppscotch-backend/src/team/team.service.ts
+index 96d3112e7a0..11ea9613fdf 100644
+--- a/packages/hoppscotch-backend/src/team/team.service.ts
++++ b/packages/hoppscotch-backend/src/team/team.service.ts
+@@ -124,7 +124,7 @@ export class TeamService implements UserDataHandler, OnModuleInit {
+   }
+ 
+   validateTeamName(title: string): E.Left<string> | E.Right<boolean> {
+-    if (!title || title.length < 6) return E.left(TEAM_NAME_INVALID);
++    if (!title || title.trim() === '') return E.left(TEAM_NAME_INVALID);
+     return E.right(true);
+   }
+ 
+diff --git a/packages/hoppscotch-common/locales/en.json b/packages/hoppscotch-common/locales/en.json
+index e5527b1caa4..7c4c60cfc53 100644
+--- a/packages/hoppscotch-common/locales/en.json
++++ b/packages/hoppscotch-common/locales/en.json
+@@ -1521,7 +1521,7 @@
+     "member_role_updated": "User roles updated",
+     "members": "Members",
+     "more_members": "+{count} more",
+-    "name_length_insufficient": "Workspace name should be at least 6 characters long",
++    "name_length_insufficient": "Workspace name should not be empty",
+     "name_updated": "Workspace name updated",
+     "new": "New Workspace",
+     "new_created": "New workspace created",
+diff --git a/packages/hoppscotch-common/src/helpers/backend/types/TeamName.ts b/packages/hoppscotch-common/src/helpers/backend/types/TeamName.ts
+index bbcdb6c0af8..26182eca31b 100644
+--- a/packages/hoppscotch-common/src/helpers/backend/types/TeamName.ts
++++ b/packages/hoppscotch-common/src/helpers/backend/types/TeamName.ts
+@@ -6,7 +6,7 @@ interface TeamNameBrand {
+ 
+ export const TeamNameCodec = t.brand(
+   t.string,
+-  (x): x is t.Branded<string, TeamNameBrand> => x.trim().length >= 6,
++  (x): x is t.Branded<string, TeamNameBrand> => x.trim() !== "",
+   "TeamName"
+ )
+ 

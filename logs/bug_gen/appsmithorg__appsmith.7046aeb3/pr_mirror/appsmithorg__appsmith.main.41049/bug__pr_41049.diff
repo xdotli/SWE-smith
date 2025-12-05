@@ -1,0 +1,1364 @@
+diff --git a/app/client/src/ce/workers/Evaluation/evaluationUtils.ts b/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
+index ddfce31..5ef608d 100644
+--- a/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
++++ b/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
+@@ -45,7 +45,7 @@ export enum DataTreeDiffEvent {
+   NEW = "NEW",
+   DELETE = "DELETE",
+   EDIT = "EDIT",
+-  NOOP = "NOOP", // No Operation (don’t do anything)
++  NOOP = "NOOP", // No Operation (don't do anything)
+ }
+ 
+ export interface DataTreeDiff {
+@@ -423,9 +423,7 @@ export function isAppsmithEntity(
+   );
+ }
+ 
+-export function isJSAction(
+-  entity: Partial<DataTreeEntity>,
+-): entity is JSActionEntity {
++export function isJSAction(entity: DataTreeEntity): entity is JSActionEntity {
+   return (
+     typeof entity === "object" &&
+     "ENTITY_TYPE" in entity &&
+@@ -491,745 +489,4 @@ export const makeParentsDependOnChildren = (
+   depMap: DependencyMap,
+   allkeys: Record<string, true>,
+ ): DependencyMap => {
+-  //return depMap;
+-  // Make all parents depend on child
+-  Object.keys(depMap).forEach((key) => {
+-    depMap = makeParentsDependOnChild(depMap, key, allkeys);
+-    depMap[key].forEach((path) => {
+-      depMap = makeParentsDependOnChild(depMap, path, allkeys);
+-    });
+-  });
+-
+-  return depMap;
+-};
+-
+-export const makeParentsDependOnChild = (
+-  depMap: DependencyMap,
+-  child: string,
+-  allkeys: Record<string, true>,
+-): DependencyMap => {
+-  const result: DependencyMap = depMap;
+-  let curKey = child;
+-
+-  if (!allkeys[curKey]) {
+-    logWarn(
+-      `makeParentsDependOnChild - ${curKey} is not present in dataTree.`,
+-      "This might result in a cyclic dependency.",
+-    );
+-  }
+-
+-  let matches: Array<string> | null;
+-
+-  // Note: The `=` is intentional
+-  // Stops looping when match is null
+-  while ((matches = curKey.match(IMMEDIATE_PARENT_REGEX)) !== null) {
+-    const parentKey = matches[1];
+-    // Todo: switch everything to set.
+-    const existing = new Set(result[parentKey] || []);
+-
+-    existing.add(curKey);
+-    result[parentKey] = Array.from(existing);
+-    curKey = parentKey;
+-  }
+-
+-  return result;
+-};
+-
+-// The idea is to find the immediate parents of the property paths
+-// e.g. For Table1.selectedRow.email, the parent is Table1.selectedRow
+-export const getImmediateParentsOfPropertyPaths = (
+-  propertyPaths: Array<string>,
+-): Array<string> => {
+-  // Use a set to ensure that we dont have duplicates
+-  const parents: Set<string> = new Set();
+-
+-  propertyPaths.forEach((path) => {
+-    const matches = path.match(IMMEDIATE_PARENT_REGEX);
+-
+-    if (matches !== null) {
+-      parents.add(matches[1]);
+-    }
+-  });
+-
+-  return Array.from(parents);
+-};
+-
+-export const getAllPaths = (
+-  records: Record<string, unknown> | unknown,
+-  curKey = "",
+-  result: Record<string, true> = {},
+-): Record<string, true> => {
+-  // Add the key if it exists
+-  if (curKey) result[curKey] = true;
+-
+-  if (Array.isArray(records)) {
+-    for (let i = 0; i < records.length; i++) {
+-      const tempKey = curKey ? `${curKey}[${i}]` : `${i}`;
+-
+-      getAllPaths(records[i], tempKey, result);
+-    }
+-  } else if (isTrueObject(records)) {
+-    for (const key of Object.keys(records)) {
+-      const tempKey = curKey ? `${curKey}.${key}` : `${key}`;
+-
+-      getAllPaths(records[key], tempKey, result);
+-    }
+-  }
+-
+-  return result;
+-};
+-export const getAllPathsBasedOnDiffPaths = (
+-  records: Record<string, unknown> | unknown,
+-  diff: DataTreeDiff[],
+-  // this argument would be mutable
+-  previousResult: Record<string, true> = {},
+-): Record<string, true> => {
+-  const newResult = previousResult;
+-
+-  diff.forEach((curr) => {
+-    const { event, payload } = curr;
+-
+-    if (event === DataTreeDiffEvent.DELETE) {
+-      delete newResult[payload.propertyPath];
+-    }
+-
+-    if (event === DataTreeDiffEvent.NEW || event === DataTreeDiffEvent.EDIT) {
+-      const newDataSegments = get(records, payload.propertyPath);
+-
+-      // directly mutates on the result so we don't have to merge it back to the result
+-      getAllPaths(newDataSegments, payload.propertyPath, newResult);
+-    }
+-  });
+-
+-  return newResult;
+-};
+-export const trimDependantChangePaths = (
+-  changePaths: Set<string>,
+-  dependencyMap: DependencyMap,
+-): Array<string> => {
+-  const trimmedPaths = [];
+-
+-  for (const path of changePaths) {
+-    let foundADependant = false;
+-
+-    if (path in dependencyMap) {
+-      const dependants = dependencyMap[path];
+-
+-      for (const dependantPath of dependants) {
+-        if (changePaths.has(dependantPath)) {
+-          foundADependant = true;
+-          break;
+-        }
+-      }
+-    }
+-
+-    if (!foundADependant) {
+-      trimmedPaths.push(path);
+-    }
+-  }
+-
+-  return trimmedPaths;
+-};
+-
+-export function getSafeToRenderDataTree(
+-  tree: DataTree,
+-  widgetTypeConfigMap: WidgetTypeConfigMap,
+-  configTree: ConfigTree,
+-) {
+-  return Object.keys(tree).reduce((tree, entityKey: string) => {
+-    const entity = tree[entityKey];
+-
+-    if (!isWidget(entity)) {
+-      return tree;
+-    }
+-
+-    const entityConfig = configTree[entityKey] as WidgetEntityConfig;
+-
+-    const safeToRenderEntity = { ...entity };
+-
+-    // Set user input values to their parsed values
+-    Object.entries(entityConfig.validationPaths).forEach(
+-      ([property, validation]) => {
+-        const value = _.get(entity, property);
+-        // Pass it through parse
+-        const { parsed } = validateWidgetProperty(
+-          validation,
+-          value,
+-          entityConfig,
+-          property,
+-        );
+-
+-        _.set(safeToRenderEntity, property, parsed);
+-      },
+-    );
+-    // Set derived values to undefined or else they would go as bindings
+-    Object.keys(
+-      widgetTypeConfigMap[entityConfig.type].derivedProperties,
+-    ).forEach((property) => {
+-      _.set(safeToRenderEntity, property, undefined);
+-    });
+-
+-    return { ...tree, [entityKey]: safeToRenderEntity };
+-  }, tree);
+-}
+-
+-export const addErrorToEntityProperty = ({
+-  configTree,
+-  errors,
+-  evalProps,
+-  fullPropertyPath,
+-}: {
+-  errors: EvaluationError[];
+-  fullPropertyPath: string;
+-  evalProps: EvalProps;
+-  configTree: ConfigTree;
+-}) => {
+-  const { entityName, propertyPath } =
+-    getEntityNameAndPropertyPath(fullPropertyPath);
+-  const isPrivateEntityPath =
+-    getAllPrivateWidgetsInDataTree(configTree)[entityName];
+-  const logBlackList = get(configTree, `${entityName}.logBlackList`, {});
+-
+-  if (propertyPath && !(propertyPath in logBlackList) && !isPrivateEntityPath) {
+-    const errorPath = `${entityName}.${EVAL_ERROR_PATH}['${propertyPath}']`;
+-    const existingErrors = get(evalProps, errorPath, []) as EvaluationError[];
+-
+-    set(evalProps, errorPath, existingErrors.concat(errors));
+-  }
+-};
+-
+-export const resetValidationErrorsForEntityProperty = ({
+-  evalProps,
+-  fullPropertyPath,
+-}: {
+-  fullPropertyPath: string;
+-  evalProps: EvalProps;
+-}) => {
+-  const { entityName, propertyPath } =
+-    getEntityNameAndPropertyPath(fullPropertyPath);
+-
+-  if (propertyPath) {
+-    const errorPath = `${entityName}.${EVAL_ERROR_PATH}['${propertyPath}']`;
+-    const existingErrorsExceptValidation = (
+-      _.get(evalProps, errorPath, []) as EvaluationError[]
+-    ).filter(
+-      (error) => error.errorType !== PropertyEvaluationErrorType.VALIDATION,
+-    );
+-
+-    _.set(evalProps, errorPath, existingErrorsExceptValidation);
+-  }
+-};
+-
+-// For the times when you need to know if something truly an object like { a: 1, b: 2}
+-// typeof, lodash.isObject and others will return false positives for things like array, null, etc
+-export const isTrueObject = (
+-  item: unknown,
+-): item is Record<string, unknown> => {
+-  return Object.prototype.toString.call(item) === "[object Object]";
+-};
+-
+-/**
+- * This function finds the datatype of the given value.
+- * typeof, lodash and others will return false positives for things like array, wrapper objects, etc
+- * @param value
+- * @returns datatype of the received value as string
+- */
+-export const findDatatype = (value: unknown) => {
+-  return Object.prototype.toString.call(value).slice(8, -1).toLowerCase();
+-};
+-
+-export const isDynamicLeaf = (
+-  unEvalTree: DataTree,
+-  propertyPath: string,
+-  configTree: ConfigTree,
+-) => {
+-  const [entityName, ...propPathEls] = _.toPath(propertyPath);
+-
+-  // Framework feature: Top level items are never leaves
+-  if (entityName === propertyPath) return false;
+-
+-  // Ignore if this was a delete op
+-  if (!unEvalTree.hasOwnProperty(entityName)) return false;
+-
+-  const entityConfig = configTree[entityName];
+-  const entity = unEvalTree[entityName];
+-
+-  if (!isWidgetActionOrJsObject(entity)) return false;
+-
+-  const relativePropertyPath = convertPathToString(propPathEls);
+-
+-  return (
+-    (!isEmpty(entityConfig.reactivePaths) &&
+-      relativePropertyPath in entityConfig.reactivePaths) ||
+-    (isWidget(entityConfig) &&
+-      relativePropertyPath in entityConfig?.triggerPaths)
+-  );
+-};
+-
+-export const addWidgetPropertyDependencies = ({
+-  widgetConfig,
+-  widgetName,
+-}: {
+-  widgetConfig: WidgetEntityConfig;
+-  widgetName: string;
+-}) => {
+-  const dependencies: DependencyMap = {};
+-
+-  Object.entries(widgetConfig.propertyOverrideDependency).forEach(
+-    ([overriddenPropertyKey, overridingPropertyKeyMap]) => {
+-      const existingDependenciesSet = new Set(
+-        dependencies[`${widgetName}.${overriddenPropertyKey}`] || [],
+-      );
+-
+-      // add meta dependency
+-      overridingPropertyKeyMap.META &&
+-        existingDependenciesSet.add(
+-          `${widgetName}.${overridingPropertyKeyMap.META}`,
+-        );
+-      // add default dependency
+-      overridingPropertyKeyMap.DEFAULT &&
+-        existingDependenciesSet.add(
+-          `${widgetName}.${overridingPropertyKeyMap.DEFAULT}`,
+-        );
+-
+-      dependencies[`${widgetName}.${overriddenPropertyKey}`] = [
+-        ...existingDependenciesSet,
+-      ];
+-    },
+-  );
+-
+-  return dependencies;
+-};
+-
+-export const isPrivateEntityPath = (
+-  privateWidgets: PrivateWidgets,
+-  fullPropertyPath: string,
+-) => {
+-  const entityName = fullPropertyPath.split(".")[0];
+-
+-  if (Object.keys(privateWidgets).indexOf(entityName) !== -1) {
+-    return true;
+-  }
+-
+-  return false;
+-};
+-
+-export const getAllPrivateWidgetsInDataTree = (
+-  configTree: ConfigTree,
+-): PrivateWidgets => {
+-  let privateWidgets: PrivateWidgets = {};
+-
+-  Object.keys(configTree).forEach((entityName) => {
+-    const entityConfig = configTree[entityName] as WidgetEntityConfig;
+-
+-    if (isWidget(entityConfig) && !_.isEmpty(entityConfig.privateWidgets)) {
+-      privateWidgets = { ...privateWidgets, ...entityConfig.privateWidgets };
+-    }
+-  });
+-
+-  return privateWidgets;
+-};
+-
+-export const getDataTreeWithoutPrivateWidgets = (
+-  dataTree: DataTree,
+-  configTree: ConfigTree,
+-): DataTree => {
+-  const privateWidgets = getAllPrivateWidgetsInDataTree(configTree);
+-  const privateWidgetNames = Object.keys(privateWidgets);
+-  const treeWithoutPrivateWidgets = _.omit(dataTree, privateWidgetNames);
+-
+-  return treeWithoutPrivateWidgets;
+-};
+-
+-const getDataTreeWithoutSuppressedAutoComplete = (
+-  dataTree: DataTree,
+-): DataTree => {
+-  const entityIds = Object.keys(dataTree).filter((entityName) => {
+-    const entity = dataTree[entityName];
+-
+-    return (
+-      isWidget(entity) && shouldSuppressAutoComplete(entity as WidgetEntity)
+-    );
+-  });
+-
+-  return _.omit(dataTree, entityIds);
+-};
+-
+-export const getDataTreeForAutocomplete = (
+-  dataTree: DataTree,
+-  configTree: ConfigTree,
+-): DataTree => {
+-  const treeWithoutPrivateWidgets = getDataTreeWithoutPrivateWidgets(
+-    dataTree,
+-    configTree,
+-  );
+-  const treeWithoutSuppressedAutoComplete =
+-    getDataTreeWithoutSuppressedAutoComplete(treeWithoutPrivateWidgets);
+-
+-  return treeWithoutSuppressedAutoComplete;
+-};
+-
+-/**
+- *  overrideWidgetProperties method has logic to update overriddenPropertyPaths when overridingPropertyPaths are evaluated.
+- *
+- *  when we evaluate widget's overridingPropertyPaths for example defaultText of input widget,
+- *  we override the values like text and meta.text in dataTree, these values are called as overriddenPropertyPaths
+- *
+- * @param {{
+- *   entity: WidgetEntity;
+- *   propertyPath: string;
+- *   value: unknown;
+- *   currentTree: DataTree;
+- *   evalMetaUpdates: EvalMetaUpdates;
+- * }} params
+- * @return {*}
+- */
+-export const overrideWidgetProperties = (params: {
+-  entity: WidgetEntity;
+-  propertyPath: string;
+-  value: unknown;
+-  currentTree: DataTree;
+-  configTree: ConfigTree;
+-  evalMetaUpdates: EvalMetaUpdates;
+-  fullPropertyPath: string;
+-  isNewWidget: boolean;
+-  shouldUpdateGlobalContext?: boolean;
+-  overriddenProperties?: string[];
+-  safeTree?: DataTree;
+-}) => {
+-  const {
+-    configTree,
+-    currentTree,
+-    entity,
+-    evalMetaUpdates,
+-    fullPropertyPath,
+-    isNewWidget,
+-    overriddenProperties,
+-    propertyPath,
+-    safeTree,
+-    shouldUpdateGlobalContext,
+-    value,
+-  } = params;
+-  const { entityName } = getEntityNameAndPropertyPath(fullPropertyPath);
+-
+-  const configEntity = configTree[entityName] as WidgetEntityConfig;
+-
+-  if (propertyPath in configEntity.overridingPropertyPaths) {
+-    const clonedValue = klona(value);
+-    const overridingPropertyPaths =
+-      configEntity.overridingPropertyPaths[propertyPath];
+-
+-    const pathsNotToOverride = widgetPathsNotToOverride(
+-      isNewWidget,
+-      propertyPath,
+-      configEntity,
+-    );
+-
+-    overridingPropertyPaths.forEach((overriddenPropertyPath) => {
+-      const overriddenPropertyPathArray = overriddenPropertyPath.split(".");
+-
+-      if (pathsNotToOverride.includes(overriddenPropertyPath)) return;
+-
+-      const fullPath = [entityName, ...overriddenPropertyPathArray];
+-
+-      _.set(currentTree, fullPath, clonedValue);
+-
+-      if (safeTree) _.set(safeTree, fullPath, klona(value));
+-
+-      if (shouldUpdateGlobalContext) {
+-        _.set(self, fullPath, clonedValue);
+-      }
+-
+-      overriddenProperties?.push(overriddenPropertyPath);
+-
+-      // evalMetaUpdates has all updates from property which overrides meta values.
+-      if (
+-        propertyPath.split(".")[0] !== "meta" &&
+-        overriddenPropertyPathArray[0] === "meta"
+-      ) {
+-        const metaPropertyPath = overriddenPropertyPathArray.slice(1);
+-
+-        evalMetaUpdates.push({
+-          widgetId: entity.widgetId,
+-          metaPropertyPath,
+-          value: clonedValue,
+-        });
+-      }
+-    });
+-  } else if (
+-    propertyPath in configEntity.propertyOverrideDependency &&
+-    value === undefined
+-  ) {
+-    // When a reset a widget its meta value becomes undefined, ideally they should reset to default value.
+-    // below we handle logic to reset meta values to default values.
+-    const propertyOverridingKeyMap =
+-      configEntity.propertyOverrideDependency[propertyPath];
+-
+-    if (propertyOverridingKeyMap.DEFAULT) {
+-      const defaultValue = entity[propertyOverridingKeyMap.DEFAULT];
+-
+-      if (defaultValue !== undefined) {
+-        const clonedDefaultValue = klona(defaultValue);
+-        const fullPath = [entityName, ...propertyPath.split(".")];
+-
+-        _.set(currentTree, fullPath, clonedDefaultValue);
+-
+-        if (safeTree) _.set(safeTree, fullPath, klona(defaultValue));
+-
+-        if (shouldUpdateGlobalContext) {
+-          _.set(self, fullPath, clonedDefaultValue);
+-        }
+-
+-        return {
+-          overwriteParsedValue: true,
+-          newValue: clonedDefaultValue,
+-        };
+-      }
+-    }
+-  }
+-};
+-
+-export const isATriggerPath = (
+-  entityConfig: DataTreeEntityConfig,
+-  propertyPath: string,
+-) => {
+-  return (
+-    isWidget(entityConfig) && isPathDynamicTrigger(entityConfig, propertyPath)
+-  );
+-};
+-
+-// Checks if entity newly got added to the unevalTree
+-export const isNewEntity = (updates: Set<string>, entityName: string) => {
+-  return updates.has(entityName);
+-};
+-
+-const widgetPathsNotToOverride = (
+-  isNewWidget: boolean,
+-  propertyPath: string,
+-  entityConfig: WidgetEntityConfig,
+-) => {
+-  let pathsNotToOverride: string[] = [];
+-  const overriddenPropertyPaths =
+-    entityConfig.overridingPropertyPaths[propertyPath];
+-
+-  // Check if widget has pre-existing meta values (although newly added to the unevalTree)
+-  if (isNewWidget && entityConfig.isMetaPropDirty) {
+-    const overriddenMetaPaths = overriddenPropertyPaths.filter(
+-      (path) => path.split(".")[0] === "meta",
+-    );
+-
+-    // If widget is newly added but has pre-existing meta values, this meta values take precedence and should not be overridden
+-    pathsNotToOverride = [...overriddenMetaPaths];
+-    // paths which these meta values override should also not get overridden
+-    overriddenMetaPaths.forEach((path) => {
+-      if (entityConfig.overridingPropertyPaths.hasOwnProperty(path)) {
+-        pathsNotToOverride = [
+-          ...pathsNotToOverride,
+-          ...entityConfig.overridingPropertyPaths[path],
+-        ];
+-      }
+-    });
+-  }
+-
+-  return pathsNotToOverride;
+-};
+-
+-const isWidgetDefaultPropertyPath = (
+-  widget: WidgetEntityConfig,
+-  propertyPath: string,
+-) => {
+-  for (const property of Object.keys(widget.propertyOverrideDependency)) {
+-    const overrideDependency = widget.propertyOverrideDependency[property];
+-
+-    if (overrideDependency.DEFAULT === propertyPath) return true;
+-  }
+-
+-  return false;
+-};
+-
+-const isMetaWidgetTemplate = (widget: WidgetEntity) => {
+-  return !!widget.siblingMetaWidgets;
+-};
+-
+-// When a default value changes in a template(widgets used to generate other widgets), meta values of metaWidgets not present in the unevalTree become stale
+-export function getStaleMetaStateIds(args: {
+-  entity: WidgetEntity;
+-  entityConfig: WidgetEntityConfig;
+-  propertyPath: string;
+-  isNewWidget: boolean;
+-  metaWidgets: string[];
+-}) {
+-  const { entity, entityConfig, isNewWidget, metaWidgets, propertyPath } = args;
+-
+-  return !isNewWidget &&
+-    isWidgetDefaultPropertyPath(entityConfig, propertyPath) &&
+-    isMetaWidgetTemplate(entity)
+-    ? difference(entity.siblingMetaWidgets, metaWidgets)
+-    : [];
+-}
+-
+-export function convertJSFunctionsToString(
+-  jscollections: Record<string, JSActionEntity>,
+-  configTree: ConfigTree,
+-) {
+-  const collections = klona(jscollections);
+-
+-  Object.keys(collections).forEach((collectionName) => {
+-    const jsCollection = collections[collectionName];
+-    const jsCollectionConfig = configTree[
+-      collectionName
+-    ] as JSActionEntityConfig;
+-    const jsFunctions = jsCollectionConfig.meta;
+-
+-    for (const funcName in jsFunctions) {
+-      if (jsCollection[funcName] instanceof String) {
+-        if (has(jsCollection, [funcName, "data"])) {
+-          set(jsCollection, [`${funcName}.data`], {});
+-        }
+-
+-        set(jsCollection, funcName, jsCollection[funcName].toString());
+-      }
+-    }
+-  });
+-
+-  return collections;
+-}
+-
+-export const isAPathDynamicBindingPath = (
+-  entity: DataTreeEntity,
+-  entityConfig: DataTreeEntityConfig,
+-  propertyPath: string,
+-) => {
+-  return (
+-    isWidgetActionOrJsObject(entity) &&
+-    isPathADynamicBinding(entityConfig, propertyPath)
+-  );
+-};
+-
+-export const isNotEntity = (entity: DataTreeEntity) => {
+-  return !isAction(entity) && !isWidget(entity) && !isJSAction(entity);
+-};
+-
+-export const isEntityAction = (entity: DataTreeEntity) => {
+-  return isAction(entity);
+-};
+-
+-export const isPropertyAnEntityAction = (
+-  entity: DataTreeEntity,
+-  propertyPath: string,
+-  entityConfig: DataTreeEntityConfig,
+-) => {
+-  if (!isJSAction(entity)) return false;
+-
+-  const { actionNames } = entityConfig as JSActionEntityConfig;
+-
+-  return actionNames.has(propertyPath);
+-};
+-
+-export const convertMicroDiffToDeepDiff = (
+-  microDiffDifferences: Difference[],
+-): Diff<unknown, unknown>[] =>
+-  microDiffDifferences.map((microDifference) => {
+-    const { path, type } = microDifference;
+-
+-    //convert microDiff format to deepDiff format
+-    if (type === "CREATE") {
+-      return {
+-        kind: "N",
+-        path,
+-        rhs: microDifference.value,
+-      };
+-    }
+-
+-    if (type === "REMOVE") {
+-      return {
+-        kind: "D",
+-        path,
+-        lhs: microDifference.oldValue,
+-      };
+-    }
+-
+-    return {
+-      kind: "E",
+-      path,
+-      lhs: microDifference.oldValue,
+-      rhs: microDifference.value,
+-    };
+-  });
+-
+-export function getExternalChangedDependencies(
+-  property: string,
+-  dependencies: Record<string, string[]>,
+-  valuechanged: Record<string, boolean>,
+-  entityName: string,
+-  visited = new Set<string>(),
+-): boolean {
+-  if (visited.has(property)) return false;
+-
+-  visited.add(property);
+-
+-  const deps = dependencies[property];
+-
+-  if (!deps || deps.length === 0) return false;
+-
+-  for (const dep of deps) {
+-    if (!dep.startsWith(entityName + ".")) {
+-      // External dependency
+-      if (valuechanged[dep]) return true;
+-    } else {
+-      // Internal dependency, recurse
+-      if (
+-        getExternalChangedDependencies(
+-          dep,
+-          dependencies,
+-          valuechanged,
+-          entityName,
+-          visited,
+-        )
+-      ) {
+-        return true;
+-      }
+-    }
+-  }
+-
+-  return false;
+-}
+-
+-export const isDataPath = (
+-  entity: DataTreeEntity | Partial<DataTreeEntityConfig>,
+-  fullPropertyPath: string,
+-) => {
+-  if (isWidget(entity)) {
+-    return false;
+-  }
+-
+-  const { propertyPath } = getEntityNameAndPropertyPath(fullPropertyPath);
+-
+-  if (isAction(entity) && propertyPath === "data") {
+-    return true;
+-  }
+-
+-  if (isJSAction(entity)) {
+-    // Check if propertyPath matches <function>.data (not just 'data')
+-    if (propertyPath.endsWith(".data") && propertyPath !== "data") {
+-      return true;
+-    }
+-  }
+-
+-  return false;
+-};
+-
+-/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+-export function isJSModuleInstance(entity: DataTreeEntity) {
+-  return false;
+-}
+-
+-export const entityTypeCheckForPathDynamicTrigger = (
+-  entityConfig: DataTreeEntityConfig,
+-) => {
+-  return (
+-    "ENTITY_TYPE" in entityConfig &&
+-    (entityConfig.ENTITY_TYPE === "ACTION" ||
+-      entityConfig.ENTITY_TYPE === "JSACTION")
+-  );
+-};
++  //
+\ No newline at end of file
+diff --git a/app/client/src/entities/DependencyMap/DependencyMapUtils.ts b/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
+index 4138159..ee93482 100644
+--- a/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
++++ b/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
+@@ -4,15 +4,9 @@ import {
+   entityTypeCheckForPathDynamicTrigger,
+   getEntityNameAndPropertyPath,
+   IMMEDIATE_PARENT_REGEX,
+-  isActionConfig,
+-  isDataPath,
+-  isJSActionConfig,
+-  isWidget,
+ } from "ee/workers/Evaluation/evaluationUtils";
+ import type { ConfigTree } from "entities/DataTree/dataTreeTypes";
+ import { isPathDynamicTrigger } from "utils/DynamicBindingUtils";
+-import { WorkerEnv } from "workers/Evaluation/handlers/workerEnv";
+-import { ActionRunBehaviour } from "PluginActionEditor/types/PluginActionTypes";
+ 
+ type SortDependencies =
+   | {
+@@ -29,9 +23,6 @@ export class DependencyMapUtils {
+   ): SortDependencies {
+     const dependencyTree: Array<[string, string | undefined]> = [];
+     const dependencies = dependencyMap.rawDependencies;
+-    const featureFlags = WorkerEnv.getFeatureFlags();
+-    const isReactiveActionsEnabled =
+-      featureFlags.release_reactive_actions_enabled;
+ 
+     for (const [node, deps] of dependencies.entries()) {
+       if (deps.size) {
+@@ -47,27 +38,12 @@ export class DependencyMapUtils {
+         .reverse()
+         .filter((edge) => !!edge);
+ 
+-      if (configTree && isReactiveActionsEnabled) {
++      if (configTree) {
+         this.detectReactiveDependencyMisuse(dependencyMap, configTree);
+       }
+ 
+       return { success: true, sortedDependencies };
+     } catch (error) {
+-      // Add 1 second delay using setTimeout
+-      if (
+-        error instanceof Error &&
+-        error.message.includes("Reactive dependency misuse")
+-      ) {
+-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+-        // @ts-ignore
+-        return {
+-          success: false,
+-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-          cyclicNode: (error as any).node,
+-          error,
+-        };
+-      }
+-
+       // Cyclic dependency found. Extract node
+       const cyclicNodes = (error as Error).message.match(
+         new RegExp('Cyclic dependency, node was:"(.*)"'),
+@@ -169,122 +145,91 @@ export class DependencyMapUtils {
+     return false;
+   }
+ 
++  static isDataPath(path: string) {
++    return path.endsWith(".data");
++  }
++
+   static detectReactiveDependencyMisuse(
+     dependencyMap: DependencyMap,
+     configTree: ConfigTree,
+   ) {
+     const dependencies = dependencyMap.rawDependencies;
+ 
+-    for (const node of dependencies.keys()) {
+-      const { entityName: nodeName } = getEntityNameAndPropertyPath(node);
+-      const nodeConfig = configTree[nodeName];
+-
+-      const isJSActionEntity = isJSActionConfig(nodeConfig);
+-      const isActionEntity = isActionConfig(nodeConfig);
+-
+-      if (isJSActionEntity) {
+-        // Only continue if at least one function is automatic
+-        const hasAutomaticFunc = Object.values(nodeConfig.meta).some(
+-          (jsFunction) =>
+-            jsFunction.runBehaviour === ActionRunBehaviour.AUTOMATIC,
+-        );
+-
+-        if (!hasAutomaticFunc) continue;
+-      } else if (isActionEntity) {
+-        // Only continue if runBehaviour is AUTOMATIC
+-        if (nodeConfig.runBehaviour !== ActionRunBehaviour.AUTOMATIC) continue;
+-      } else {
+-        // If not a JSAction, or Action, skip
+-        continue;
+-      }
+-
+-      // For each entity, check if both .run and a .data path are present
+-      let hasRun = false;
+-      let hasData = false;
+-      let dataPath = "";
+-      let runPath = "";
+-
+-      const transitiveDeps = this.getAllTransitiveDependencies(
+-        dependencyMap,
+-        node,
+-        configTree,
+-      );
+-
+-      for (const dep of transitiveDeps) {
+-        const { entityName: depName } = getEntityNameAndPropertyPath(dep);
+-        const entity = configTree[depName];
+-
+-        // to show cyclic dependency errors only for Action calls and not JSObject.body or JSObject
+-        if (entity && entity.ENTITY_TYPE) {
+-          if (this.isTriggerPath(dep, configTree)) {
+-            hasRun = true;
+-            runPath = dep;
+-          }
++    // Helper function to get all transitive dependencies
++    const getAllTransitiveDependencies = (node: string): Set<string> => {
++      const allDeps = new Set<string>();
++      const queue = [node];
+ 
+-          // using the isDataPath function from evalUtils to calculate data paths based on entity type
+-          if (isDataPath(entity, dep)) {
+-            hasData = true;
+-            dataPath = dep;
+-          }
++      while (queue.length > 0) {
++        const current = queue.shift()!;
++        const deps = dependencyMap.getDirectDependencies(current) || [];
+ 
+-          if (
+-            hasRun &&
+-            hasData &&
+-            runPath.split(".")[0] === dataPath.split(".")[0]
+-          ) {
+-            throw Object.assign(
+-              new Error(
+-                `Reactive dependency misuse: '${node}' depends on both trigger path '${runPath}' and data path '${dataPath}' from the same entity. This can cause unexpected reactivity.`,
+-              ),
+-              { node, triggerPath: runPath, dataPath },
+-            );
++        for (const dep of deps) {
++          if (!allDeps.has(dep)) {
++            allDeps.add(dep);
++            queue.push(dep);
+           }
+         }
+       }
+-    }
+-  }
+ 
+-  /**
+-   * Returns all transitive dependencies (direct and indirect, no duplicates) for a given node.
+-   */
+-  static getAllTransitiveDependencies(
+-    dependencyMap: DependencyMap,
+-    node: string,
+-    configTree: ConfigTree,
+-  ): string[] {
+-    const dependencies = dependencyMap.rawDependencies;
+-    const visited = new Set<string>();
++      return allDeps;
++    };
+ 
+-    function traverse(current: string) {
+-      const { entityName } = getEntityNameAndPropertyPath(current);
+-      const entityConfig = configTree[entityName];
++    for (const [node, deps] of dependencies.entries()) {
++      // Get all dependencies including transitive ones
++      const allDeps = new Set<string>();
++      const queue = Array.from(deps);
+ 
+-      if (!entityConfig) return;
++      while (queue.length > 0) {
++        const dep = queue.shift()!;
+ 
+-      if (isWidget(entityConfig)) {
+-        return;
+-      }
++        if (!allDeps.has(dep)) {
++          allDeps.add(dep);
++          const depDeps = dependencyMap.getDirectDependencies(dep) || [];
+ 
+-      // to not calculate transitive dependencies for JSObject.body and JSObject
+-      if (
+-        isJSActionConfig(entityConfig) &&
+-        (current.includes(".body") || !current.includes("."))
+-      ) {
+-        return;
++          queue.push(...depDeps);
++        }
+       }
+ 
+-      const directDeps = dependencies.get(current) || new Set<string>();
+-
+-      for (const dep of directDeps) {
+-        if (!visited.has(dep)) {
+-          visited.add(dep);
+-          traverse(dep);
++      // Separate dependencies into trigger paths and data paths
++      const triggerPaths = Array.from(deps).filter((dep) =>
++        this.isTriggerPath(dep, configTree),
++      );
++      const dataPaths = Array.from(deps).filter((dep) => this.isDataPath(dep));
++
++      // For each trigger path, check if there's a data path from the same entity
++      for (const triggerPath of triggerPaths) {
++        const triggerEntity = triggerPath.split(".")[0];
++
++        // Find data paths from the same entity
++        const sameEntityDataPaths = dataPaths.filter((dataPath) => {
++          const dataEntity = dataPath.split(".")[0];
++
++          return dataEntity === triggerEntity;
++        });
++
++        if (sameEntityDataPaths.length > 0) {
++          // Check if any of these data paths depend on the trigger path (directly or indirectly)
++          for (const dataPath of sameEntityDataPaths) {
++            const dataPathTransitiveDeps =
++              getAllTransitiveDependencies(dataPath);
++
++            if (dataPathTransitiveDeps.has(triggerPath)) {
++              const error = new Error(
++                `Reactive dependency misuse: '${node}' depends on both trigger path '${triggerPath}' and data path '${dataPath}' from the same entity, and '${dataPath}' depends on '${triggerPath}' (directly or indirectly). This can cause unexpected reactivity.`,
++              );
++
++              // Add custom properties
++              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
++              // @ts-ignore
++              // eslint-disable-next-line @typescript-eslint/no-explicit-any
++              (error as any).node = node;
++
++              throw error;
++            }
++          }
+         }
+       }
+     }
+-
+-    traverse(node);
+-
+-    return Array.from(visited);
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts b/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts
+deleted file mode 100644
+index 74fa30c..0000000
+--- a/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts
++++ /dev/null
+@@ -1,337 +0,0 @@
+-import DependencyMap from "../index";
+-import { DependencyMapUtils } from "../DependencyMapUtils";
+-import { PluginType } from "entities/Plugin";
+-import {
+-  ENTITY_TYPE,
+-  type DataTreeEntityConfig,
+-  type MetaArgs,
+-} from "ee/entities/DataTree/types";
+-import type { ActionRunBehaviourType } from "PluginActionEditor/types/PluginActionTypes";
+-
+-describe("detectReactiveDependencyMisuse", () => {
+-  function makeConfigTreeWithAction(
+-    entityName: string,
+-    runBehaviour: ActionRunBehaviourType = "AUTOMATIC",
+-  ): DataTreeEntityConfig {
+-    return {
+-      ENTITY_TYPE: ENTITY_TYPE.ACTION,
+-      dynamicTriggerPathList: [{ key: "run" }],
+-      dynamicBindingPathList: [],
+-      bindingPaths: {},
+-      reactivePaths: {},
+-      dependencyMap: {},
+-      logBlackList: {},
+-      pluginType: PluginType.API,
+-      pluginId: "mockPluginId",
+-      actionId: "mockActionId",
+-      name: entityName,
+-      runBehaviour,
+-    };
+-  }
+-
+-  function makeConfigTreeWithJSAction(
+-    entityName: string,
+-    meta: Record<string, MetaArgs> = {},
+-  ): DataTreeEntityConfig {
+-    return {
+-      ENTITY_TYPE: ENTITY_TYPE.JSACTION,
+-      meta,
+-      dynamicBindingPathList: [],
+-      actionNames: new Set(["myFun1", "myFun2"]),
+-      bindingPaths: {},
+-      reactivePaths: {},
+-      dependencyMap: {},
+-      pluginType: PluginType.JS,
+-      name: entityName,
+-      actionId: "mockJSActionId",
+-      dynamicTriggerPathList: [],
+-      variables: [],
+-    };
+-  }
+-
+-  function makeConfigTreeWithWidget(entityName: string): DataTreeEntityConfig {
+-    return {
+-      ENTITY_TYPE: ENTITY_TYPE.WIDGET,
+-      bindingPaths: {},
+-      reactivePaths: {},
+-      triggerPaths: {},
+-      validationPaths: {},
+-      logBlackList: {},
+-      propertyOverrideDependency: {},
+-      overridingPropertyPaths: {},
+-      privateWidgets: {},
+-      widgetId: "mockWidgetId",
+-      defaultMetaProps: [],
+-      type: "MOCK_WIDGET_TYPE",
+-      dynamicBindingPathList: [],
+-      name: entityName,
+-    };
+-  }
+-
+-  it("does not throw for Widget entity", () => {
+-    const dependencyMap = new DependencyMap();
+-
+-    dependencyMap.addNodes({
+-      Widget1: true,
+-      "Widget1.run": true,
+-      "Widget1.data": true,
+-    });
+-    dependencyMap.addDependency("Widget1", ["Widget1.run", "Widget1.data"]);
+-    const configTree = {
+-      Widget1: makeConfigTreeWithWidget("Widget1"),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).not.toThrow();
+-  });
+-
+-  it("does not throw for MANUAL ACTION entity", () => {
+-    const dependencyMap = new DependencyMap();
+-
+-    dependencyMap.addNodes({
+-      "JSObject1.myFun1": true,
+-      "Query3.run": true,
+-      "Query3.data": true,
+-    });
+-    dependencyMap.addDependency("JSObject1.myFun1", [
+-      "Query3.run",
+-      "Query3.data",
+-    ]);
+-    const configTree = {
+-      Query3: makeConfigTreeWithAction("Query3", "MANUAL"),
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).not.toThrow();
+-  });
+-
+-  it("does not throw for JSAction entity with no AUTOMATIC function", () => {
+-    const dependencyMap = new DependencyMap();
+-
+-    dependencyMap.addNodes({
+-      "JSObject1.myFun1": true,
+-      "JSObject1.myFun2": true,
+-      "Query2.run": true,
+-      "Query2.data": true,
+-    });
+-    // JSObject1.myFun2 depends on Query2.run
+-    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
+-    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
+-    dependencyMap.addDependency("JSObject1.myFun1", [
+-      "JSObject1.myFun2",
+-      "Query2.data",
+-    ]);
+-
+-    // meta has no AUTOMATIC runBehaviour
+-    const configTree = {
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-      Query2: makeConfigTreeWithAction("Query2", "AUTOMATIC"),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).not.toThrow();
+-  });
+-
+-  it("does not throw if a node depends only on .run or only on .data for AUTOMATIC ACTION", () => {
+-    const configTree = {
+-      Api1: makeConfigTreeWithAction("Api1", "AUTOMATIC"),
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-      JSObject2: makeConfigTreeWithJSAction("JSObject2", {
+-        myFun1: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-    };
+-
+-    // Only .run
+-    const depMapRun = new DependencyMap();
+-
+-    depMapRun.addNodes({ "JSObject1.myFun1": true, "Api1.run": true });
+-    depMapRun.addDependency("JSObject1.myFun1", ["Api1.run"]);
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(depMapRun, configTree);
+-    }).not.toThrow();
+-
+-    // Only .data
+-    const depMapData = new DependencyMap();
+-
+-    depMapData.addNodes({ "JSObject2.myFun1": true, "Api1.data": true });
+-    depMapData.addDependency("JSObject2.myFun1", ["Api1.data"]);
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(depMapData, configTree);
+-    }).not.toThrow();
+-  });
+-
+-  it("throws if a node depends on both .run and .data of the same AUTOMATIC ACTION entity", () => {
+-    const dependencyMap = new DependencyMap();
+-
+-    // Add nodes
+-    dependencyMap.addNodes({
+-      "JSObject1.myFun1": true,
+-      "Query1.run": true,
+-      "Query1.data": true,
+-    });
+-    // JSObject1.myFun1 depends on both Query1.run and Query1.data
+-    dependencyMap.addDependency("JSObject1.myFun1", [
+-      "Query1.run",
+-      "Query1.data",
+-    ]);
+-    const configTree = {
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-      Query1: makeConfigTreeWithAction("Query1", "AUTOMATIC"),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).toThrow(/Reactive dependency misuse/);
+-  });
+-
+-  it("throws if a node depends on both .run and .data of the same AUTOMATIC ACTION entity via transitive dependency", () => {
+-    const dependencyMap = new DependencyMap();
+-
+-    dependencyMap.addNodes({
+-      "JSObject1.myFun1": true,
+-      "JSObject1.myFun2": true,
+-      "Query2.run": true,
+-      "Query2.data": true,
+-    });
+-    // JSObject1.myFun2 depends on Query2.run
+-    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
+-    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
+-    dependencyMap.addDependency("JSObject1.myFun1", [
+-      "JSObject1.myFun2",
+-      "Query2.data",
+-    ]);
+-    const configTree = {
+-      Query2: makeConfigTreeWithAction("Query2", "AUTOMATIC"),
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).toThrow(/Reactive dependency misuse/);
+-  });
+-
+-  it("throws for JSAction entity with at least one AUTOMATIC function", () => {
+-    // meta has one AUTOMATIC runBehaviour
+-    const dependencyMap = new DependencyMap();
+-
+-    dependencyMap.addNodes({
+-      "JSObject1.myFun1": true,
+-      "JSObject1.myFun2": true,
+-      "Query2.run": true,
+-      "Query2.data": true,
+-    });
+-    // JSObject1.myFun2 depends on Query2.run
+-    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
+-    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
+-    dependencyMap.addDependency("JSObject1.myFun1", [
+-      "JSObject1.myFun2",
+-      "Query2.data",
+-    ]);
+-    const configTree = {
+-      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
+-        myFun1: {
+-          runBehaviour: "AUTOMATIC",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-        myFun2: {
+-          runBehaviour: "MANUAL",
+-          arguments: [],
+-          confirmBeforeExecute: false,
+-        },
+-      }),
+-      Query2: makeConfigTreeWithAction("Query2", "MANUAL"),
+-    };
+-
+-    expect(() => {
+-      DependencyMapUtils.detectReactiveDependencyMisuse(
+-        dependencyMap,
+-        configTree,
+-      );
+-    }).toThrow(/Reactive dependency misuse/);
+-  });
+-});

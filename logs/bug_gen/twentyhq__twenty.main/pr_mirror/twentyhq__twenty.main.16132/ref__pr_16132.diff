@@ -1,0 +1,340 @@
+diff --git a/packages/twenty-server/src/engine/api/common/common-result-getters/common-result-getters.service.ts b/packages/twenty-server/src/engine/api/common/common-result-getters/common-result-getters.service.ts
+index 1d5981020252f..437ede452fc31 100644
+--- a/packages/twenty-server/src/engine/api/common/common-result-getters/common-result-getters.service.ts
++++ b/packages/twenty-server/src/engine/api/common/common-result-getters/common-result-getters.service.ts
+@@ -18,7 +18,10 @@ import { FileService } from 'src/engine/core-modules/file/services/file.service'
+ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+ import { findFlatEntityByIdInFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps-or-throw.util';
+ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+-import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
++import {
++  buildFieldMapsFromFlatObjectMetadata,
++  type FieldMapsForObject,
++} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+ import { isFlatFieldMetadataOfType } from 'src/engine/metadata-modules/flat-field-metadata/utils/is-flat-field-metadata-of-type.util';
+ import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ 
+@@ -54,6 +57,11 @@ export class CommonResultGettersService {
+     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+     workspaceId: string,
+   ) {
++    const fieldMaps = buildFieldMapsFromFlatObjectMetadata(
++      flatFieldMetadataMaps,
++      flatObjectMetadata,
++    );
++
+     return await Promise.all(
+       recordArray.map(
+         async (record: ObjectRecord) =>
+@@ -63,6 +71,7 @@ export class CommonResultGettersService {
+             flatObjectMetadataMaps,
+             flatFieldMetadataMaps,
+             workspaceId,
++            fieldMaps,
+           ),
+       ),
+     );
+@@ -74,13 +83,18 @@ export class CommonResultGettersService {
+     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+     workspaceId: string,
++    fieldMapsForObject?: FieldMapsForObject,
+   ): Promise<ObjectRecord> {
+     const handler = this.getHandler(flatObjectMetadata.nameSingular);
+ 
+-    const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+-      flatFieldMetadataMaps,
+-      flatObjectMetadata,
+-    );
++    const fieldMaps =
++      fieldMapsForObject ??
++      buildFieldMapsFromFlatObjectMetadata(
++        flatFieldMetadataMaps,
++        flatObjectMetadata,
++      );
++
++    const { fieldIdByName } = fieldMaps;
+ 
+     const relationFields = Object.keys(record)
+       .map(
+diff --git a/packages/twenty-server/src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations-v2.helper.ts b/packages/twenty-server/src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations-v2.helper.ts
+index 7b22692a4c90f..f4f6017ee0172 100644
+--- a/packages/twenty-server/src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations-v2.helper.ts
++++ b/packages/twenty-server/src/engine/api/graphql/graphql-query-runner/helpers/process-nested-relations-v2.helper.ts
+@@ -17,7 +17,10 @@ import { type AuthContext } from 'src/engine/core-modules/auth/types/auth-contex
+ import { FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+ import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+ import { FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+-import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
++import {
++  buildFieldMapsFromFlatObjectMetadata,
++  type FieldMapsForObject,
++} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+ import { FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ import { type WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
+ import { type WorkspaceSelectQueryBuilder } from 'src/engine/twenty-orm/repository/workspace-select-query-builder';
+@@ -112,13 +115,13 @@ export class ProcessNestedRelationsV2Helper {
+     rolePermissionConfig?: RolePermissionConfig;
+     selectedFields: Record<string, unknown>;
+   }): Promise<void> {
+-    const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
++    const fieldMaps = buildFieldMapsFromFlatObjectMetadata(
+       flatFieldMetadataMaps,
+       parentObjectMetadataItem,
+     );
+ 
+     const sourceFieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+-      flatEntityId: fieldIdByName[sourceFieldName],
++      flatEntityId: fieldMaps.fieldIdByName[sourceFieldName],
+       flatEntityMaps: flatFieldMetadataMaps,
+     });
+ 
+@@ -154,6 +157,7 @@ export class ProcessNestedRelationsV2Helper {
+         flatFieldMetadataMaps,
+         parentObjectMetadataItem,
+         sourceFieldName,
++        fieldMaps,
+       });
+ 
+     const targetObjectRepository = workspaceDataSource.getRepository(
+@@ -250,19 +254,16 @@ export class ProcessNestedRelationsV2Helper {
+     flatFieldMetadataMaps,
+     parentObjectMetadataItem,
+     sourceFieldName,
++    fieldMaps,
+   }: {
+     flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
+     parentObjectMetadataItem: FlatObjectMetadata;
+     sourceFieldName: string;
++    fieldMaps: FieldMapsForObject;
+   }) {
+-    const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+-      flatFieldMetadataMaps,
+-      parentObjectMetadataItem,
+-    );
+-
+     const targetFieldMetadata = findFlatEntityByIdInFlatEntityMaps({
+-      flatEntityId: fieldIdByName[sourceFieldName],
++      flatEntityId: fieldMaps.fieldIdByName[sourceFieldName],
+       flatEntityMaps: flatFieldMetadataMaps,
+     });
+ 
+diff --git a/packages/twenty-server/src/engine/twenty-orm/entity-manager/workspace-entity-manager.spec.ts b/packages/twenty-server/src/engine/twenty-orm/entity-manager/workspace-entity-manager.spec.ts
+index c9a6f077e92dc..671b9c73728e8 100644
+--- a/packages/twenty-server/src/engine/twenty-orm/entity-manager/workspace-entity-manager.spec.ts
++++ b/packages/twenty-server/src/engine/twenty-orm/entity-manager/workspace-entity-manager.spec.ts
+@@ -13,6 +13,7 @@ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-m
+ import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ import { type WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
+ import { validateOperationIsPermittedOrThrow } from 'src/engine/twenty-orm/repository/permissions.utils';
++import { getObjectMetadataFromEntityTarget } from 'src/engine/twenty-orm/utils/get-object-metadata-from-entity-target.util';
+ 
+ import { WorkspaceEntityManager } from './workspace-entity-manager';
+ 
+@@ -23,7 +24,7 @@ jest.mock('src/engine/twenty-orm/repository/permissions.utils', () => ({
+ jest.mock(
+   'src/engine/twenty-orm/utils/get-object-metadata-from-entity-target.util',
+   () => ({
+-    getObjectMetadataFromEntityTarget: jest.fn().mockReturnValue({}),
++    getObjectMetadataFromEntityTarget: jest.fn(),
+   }),
+ );
+ 
+@@ -117,6 +118,10 @@ describe('WorkspaceEntityManager', () => {
+       updatedAt: new Date(),
+     };
+ 
++    (getObjectMetadataFromEntityTarget as jest.Mock).mockReturnValue(
++      mockFlatObjectMetadata,
++    );
++
+     const mockFlatFieldMetadata: FlatFieldMetadata = {
+       id: 'field-id',
+       type: 'TEXT' as FieldMetadataType,
+diff --git a/packages/twenty-server/src/engine/twenty-orm/utils/compute-relation-connect-query-configs.util.ts b/packages/twenty-server/src/engine/twenty-orm/utils/compute-relation-connect-query-configs.util.ts
+index 908e27975e1e2..b0fa4b7eec3a7 100644
+--- a/packages/twenty-server/src/engine/twenty-orm/utils/compute-relation-connect-query-configs.util.ts
++++ b/packages/twenty-server/src/engine/twenty-orm/utils/compute-relation-connect-query-configs.util.ts
+@@ -9,7 +9,10 @@ import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/work
+ import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
+ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+-import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
++import {
++  buildFieldMapsFromFlatObjectMetadata,
++  type FieldMapsForObject,
++} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+ import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
+ import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ import { type ConnectObject } from 'src/engine/twenty-orm/entity-manager/types/query-deep-partial-entity-with-nested-relation-fields.type';
+@@ -36,6 +39,11 @@ export const computeRelationConnectQueryConfigs = (
+ ) => {
+   const allConnectQueryConfigs: Record<string, RelationConnectQueryConfig> = {};
+ 
++  const fieldMaps = buildFieldMapsFromFlatObjectMetadata(
++    flatFieldMetadataMaps,
++    flatObjectMetadata,
++  );
++
+   for (const [entityIndex, entity] of entities.entries()) {
+     const nestedRelationConnectFields =
+       relationConnectQueryFieldsByEntityIndex[entityIndex];
+@@ -57,6 +65,7 @@ export const computeRelationConnectQueryConfigs = (
+         flatFieldMetadataMaps,
+         flatIndexMaps,
+         entity,
++        fieldMaps,
+       );
+ 
+       const connectQueryConfig = allConnectQueryConfigs[connectFieldName];
+@@ -132,17 +141,14 @@ const computeRecordToConnectCondition = (
+   flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
+   flatIndexMaps: FlatEntityMaps<FlatIndexMetadata>,
+   entity: Record<string, unknown>,
++  fieldMaps: FieldMapsForObject,
+ ): {
+   recordToConnectCondition: UniqueConstraintCondition;
+   uniqueConstraintFields: FlatFieldMetadata<FieldMetadataType>[];
+   targetObjectNameSingular: string;
+ } => {
+-  const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+-    flatFieldMetadataMaps,
+-    flatObjectMetadata,
+-  );
+-
+-  const field = flatFieldMetadataMaps.byId[fieldIdByName[connectFieldName]];
++  const field =
++    flatFieldMetadataMaps.byId[fieldMaps.fieldIdByName[connectFieldName]];
+ 
+   if (
+     !isDefined(field) ||
+diff --git a/packages/twenty-server/src/engine/twenty-orm/utils/format-data.util.ts b/packages/twenty-server/src/engine/twenty-orm/utils/format-data.util.ts
+index fe15bc2454682..156788a126990 100644
+--- a/packages/twenty-server/src/engine/twenty-orm/utils/format-data.util.ts
++++ b/packages/twenty-server/src/engine/twenty-orm/utils/format-data.util.ts
+@@ -7,7 +7,10 @@ import { capitalize } from 'twenty-shared/utils';
+ import { isCompositeFieldMetadataType } from 'src/engine/metadata-modules/field-metadata/utils/is-composite-field-metadata-type.util';
+ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+-import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
++import {
++  buildFieldMapsFromFlatObjectMetadata,
++  type FieldMapsForObject,
++} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+ import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ import { type CompositeFieldMetadataType } from 'src/engine/metadata-modules/workspace-migration/factories/composite-column-action.factory';
+ 
+@@ -15,22 +18,26 @@ export function formatData<T>(
+   data: T,
+   flatObjectMetadata: FlatObjectMetadata,
+   flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
++  fieldMapsForObject?: FieldMapsForObject,
+ ): T {
+   if (!data) {
+     return data;
+   }
+ 
++  const fieldMaps =
++    fieldMapsForObject ??
++    buildFieldMapsFromFlatObjectMetadata(
++      flatFieldMetadataMaps,
++      flatObjectMetadata,
++    );
++
+   if (Array.isArray(data)) {
+     return data.map((item) =>
+-      formatData(item, flatObjectMetadata, flatFieldMetadataMaps),
++      formatData(item, flatObjectMetadata, flatFieldMetadataMaps, fieldMaps),
+     ) as T;
+   }
+ 
+-  const { fieldIdByName, fieldIdByJoinColumnName } =
+-    buildFieldMapsFromFlatObjectMetadata(
+-      flatFieldMetadataMaps,
+-      flatObjectMetadata,
+-    );
++  const { fieldIdByName, fieldIdByJoinColumnName } = fieldMaps;
+ 
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   const newData: Record<string, any> = {};
+diff --git a/packages/twenty-server/src/engine/twenty-orm/utils/format-result.util.ts b/packages/twenty-server/src/engine/twenty-orm/utils/format-result.util.ts
+index c04f9a15316dd..210050b24c87d 100644
+--- a/packages/twenty-server/src/engine/twenty-orm/utils/format-result.util.ts
++++ b/packages/twenty-server/src/engine/twenty-orm/utils/format-result.util.ts
+@@ -16,7 +16,10 @@ import { getFlatFieldsFromFlatObjectMetadata } from 'src/engine/api/graphql/work
+ import { computeCompositeColumnName } from 'src/engine/metadata-modules/field-metadata/utils/compute-column-name.util';
+ import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+ import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+-import { buildFieldMapsFromFlatObjectMetadata } from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
++import {
++  buildFieldMapsFromFlatObjectMetadata,
++  type FieldMapsForObject,
++} from 'src/engine/metadata-modules/flat-field-metadata/utils/build-field-maps-from-flat-object-metadata.util';
+ import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+ import { getCompositeFieldMetadataCollection } from 'src/engine/twenty-orm/utils/get-composite-field-metadata-collection';
+ import { isFieldMetadataEntityOfType } from 'src/engine/utils/is-field-metadata-of-type.util';
+@@ -27,23 +30,25 @@ export function formatResult<T>(
+   flatObjectMetadata: FlatObjectMetadata | undefined,
+   flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>,
+   flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>,
++  fieldMapsForObject?: FieldMapsForObject,
+ ): T {
+   if (!isDefined(data)) {
+     return data;
+   }
+ 
+-  if (Array.isArray(data)) {
+-    return data.map((item) =>
+-      formatResult(
+-        item,
+-        flatObjectMetadata,
+-        flatObjectMetadataMaps,
+-        flatFieldMetadataMaps,
+-      ),
+-    ) as T;
+-  }
+-
+   if (!isPlainObject(data)) {
++    if (Array.isArray(data)) {
++      return data.map((item) =>
++        formatResult(
++          item,
++          flatObjectMetadata,
++          flatObjectMetadataMaps,
++          flatFieldMetadataMaps,
++          fieldMapsForObject,
++        ),
++      ) as T;
++    }
++
+     return data;
+   }
+ 
+@@ -51,10 +56,14 @@ export function formatResult<T>(
+     throw new Error('Object metadata is missing');
+   }
+ 
+-  const { fieldIdByName } = buildFieldMapsFromFlatObjectMetadata(
+-    flatFieldMetadataMaps,
+-    flatObjectMetadata,
+-  );
++  const fieldMaps =
++    fieldMapsForObject ??
++    buildFieldMapsFromFlatObjectMetadata(
++      flatFieldMetadataMaps,
++      flatObjectMetadata,
++    );
++
++  const { fieldIdByName } = fieldMaps;
+ 
+   const compositeFieldMetadataMap = getCompositeFieldMetadataMap(
+     flatObjectMetadata,
+@@ -86,6 +95,7 @@ export function formatResult<T>(
+           flatObjectMetadata,
+           flatObjectMetadataMaps,
+           flatFieldMetadataMaps,
++          fieldMaps,
+         );
+       } else if (fieldMetadata) {
+         // @ts-expect-error legacy noImplicitAny

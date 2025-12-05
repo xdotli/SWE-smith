@@ -1,0 +1,20 @@
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-messages-import.service.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-messages-import.service.ts
+index cc6bdf79..1870aa5e 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-messages-import.service.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/services/messaging-messages-import.service.ts
+@@ -59,7 +59,7 @@ export class MessagingMessagesImportService {
+     try {
+       if (
+         messageChannel.syncStage !==
+-        MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED
++        MessageChannelSyncStage.MESSAGES_IMPORT_PENDING
+       ) {
+         return;
+       }
+@@ -223,4 +223,4 @@ export class MessagingMessagesImportService {
+       messageChannelId: messageChannel.id,
+     });
+   }
+-}
++}
+\ No newline at end of file

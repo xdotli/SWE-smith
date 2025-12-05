@@ -1,0 +1,296 @@
+diff --git a/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts b/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
+index fe056d7..691afa7 100644
+--- a/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
++++ b/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
+@@ -382,185 +382,4 @@ describe.each([
+                             app_source: 'hog_function',
+                             app_source_id: erroringFunction.id,
+                             count: 1,
+-                            metric_kind: 'other',
+-                            metric_name: 'filtering_failed',
+-                            team_id: 2,
+-                            timestamp: expect.any(String),
+-                        },
+-                    },
+-                    {
+-                        topic: 'log_entries_test',
+-                        value: {
+-                            message:
+-                                'Error filtering event b3a1fe86-b10c-43cc-acaf-d208977608d0: Invalid HogQL bytecode, stack is empty, can not pop',
+-                        },
+-                    },
+-                ])
+-            })
+-        })
+-    })
+-})
+-
+-describe('hog flow processing', () => {
+-    let processor: CdpEventsConsumer | CdpInternalEventsConsumer
+-    let hub: Hub
+-    let team: Team
+-
+-    const insertHogFlow = async (hogFlow: HogFlow) => {
+-        const teamId = hogFlow.team_id ?? team.id
+-
+-        const item = await _insertHogFlow(hub.postgres, hogFlow)
+-        // Trigger the reload that django would do
+-        processor['hogFunctionManager']['onHogFunctionsReloaded'](teamId, [item.id])
+-        return item
+-    }
+-
+-    beforeEach(async () => {
+-        await resetTestDatabase()
+-        hub = await createHub()
+-        team = await getFirstTeam(hub)
+-        processor = new CdpEventsConsumer(hub)
+-
+-        // NOTE: We don't want to actually connect to Kafka for these tests as it is slow and we are testing the core logic only
+-        processor['kafkaConsumer'] = {
+-            connect: jest.fn(),
+-            disconnect: jest.fn(),
+-            isHealthy: jest.fn(),
+-        } as any
+-
+-        processor['cyclotronJobQueue'] = {
+-            queueInvocations: jest.fn(),
+-            startAsProducer: jest.fn(() => Promise.resolve()),
+-            stop: jest.fn(),
+-        } as unknown as jest.Mocked<CyclotronJobQueue>
+-
+-        await processor.start()
+-    })
+-
+-    afterEach(async () => {
+-        jest.setTimeout(10000)
+-        await processor.stop()
+-        await closeHub(hub)
+-    })
+-
+-    afterAll(() => {
+-        jest.useRealTimers()
+-    })
+-
+-    describe('createHogFlowInvocations', () => {
+-        let globals: HogFunctionInvocationGlobals
+-
+-        beforeEach(() => {
+-            globals = createHogExecutionGlobals({
+-                project: {
+-                    id: team.id,
+-                } as any,
+-                event: {
+-                    uuid: 'b3a1fe86-b10c-43cc-acaf-d208977608d0',
+-                    event: '$pageview',
+-                    properties: {
+-                        $current_url: 'https://posthog.com',
+-                        $lib_version: '1.0.0',
+-                    },
+-                } as any,
+-            })
+-        })
+-
+-        it('should not create hog flow invocations with no filters', async () => {
+-            const hogFlow = new FixtureHogFlowBuilder().withTeamId(team.id).build()
+-            hogFlow.trigger = {} as any
+-            await insertHogFlow(hogFlow)
+-
+-            const invocations = await processor['createHogFlowInvocations']([globals])
+-            expect(invocations).toHaveLength(0)
+-        })
+-
+-        it('should not create hog flow invocations with webhook triggers', async () => {
+-            const hogFlow = new FixtureHogFlowBuilder()
+-                .withTeamId(team.id)
+-                .withSimpleWorkflow({
+-                    trigger: {
+-                        type: 'webhook',
+-                        template_id: 'test',
+-                        inputs: {},
+-                    },
+-                })
+-                .build()
+-            await insertHogFlow(hogFlow)
+-
+-            const invocations = await processor['createHogFlowInvocations']([globals])
+-            expect(invocations).toHaveLength(0)
+-        })
+-
+-        it('should create hog flow invocations with matching filters', async () => {
+-            const hogFlow = await insertHogFlow(
+-                new FixtureHogFlowBuilder()
+-                    .withTeamId(team.id)
+-                    .withSimpleWorkflow({
+-                        trigger: {
+-                            type: 'event',
+-                            filters: HOG_FILTERS_EXAMPLES.pageview_or_autocapture_filter.filters ?? {},
+-                        },
+-                    })
+-                    .build()
+-            )
+-
+-            const noInvocations = await processor['createHogFlowInvocations']([
+-                {
+-                    ...globals,
+-                    event: {
+-                        ...globals.event,
+-                        event: 'not-a-pageview',
+-                    },
+-                },
+-            ])
+-
+-            expect(noInvocations).toHaveLength(0)
+-
+-            const invocations = await processor['createHogFlowInvocations']([globals])
+-            expect(invocations).toHaveLength(1)
+-            expect(invocations[0]).toMatchObject({
+-                functionId: hogFlow.id,
+-                hogFlow: {
+-                    id: hogFlow.id,
+-                },
+-                id: expect.any(String),
+-                queue: 'hogflow',
+-                queuePriority: 1,
+-                state: {
+-                    event: globals.event,
+-                    actionStepCount: 0,
+-                },
+-                teamId: 2,
+-            })
+-        })
+-
+-        it('should not produce billable_invocation metrics for hog flow invocations', async () => {
+-            await insertHogFlow(
+-                new FixtureHogFlowBuilder()
+-                    .withTeamId(team.id)
+-                    .withSimpleWorkflow({
+-                        trigger: {
+-                            type: 'event',
+-                            filters: HOG_FILTERS_EXAMPLES.pageview_or_autocapture_filter.filters ?? {},
+-                        },
+-                    })
+-                    .build()
+-            )
+-
+-            await processor['createHogFlowInvocations']([globals])
+-
+-            const producedMetrics =
+-                mockProducerObserver.getProducedKafkaMessagesForTopic('clickhouse_app_metrics2_test')
+-            expect(producedMetrics).not.toEqual(
+-                expect.arrayContaining([
+-                    expect.objectContaining({
+-                        value: expect.objectContaining({
+-                            metric_name: 'billable_invocation',
+-                        }),
+-                    }),
+-                ])
+-            )
+-        })
+-    })
+-})
++                            metric_kind: 'other
+\ No newline at end of file
+diff --git a/plugin-server/src/cdp/consumers/cdp-events.consumer.ts b/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
+index 5236d50..15d0e4f 100644
+--- a/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
++++ b/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
+@@ -352,97 +352,4 @@ export class CdpEventsConsumer extends CdpConsumerBase {
+         })
+ 
+         // Now we can filter by masking configs
+-        const { masked, notMasked: notMaskedInvocations } = await this.hogMasker.filterByMasking(validInvocations)
+-
+-        this.hogFunctionMonitoringService.queueAppMetrics(
+-            masked.map((item) => ({
+-                team_id: item.teamId,
+-                app_source_id: item.functionId,
+-                metric_kind: 'other',
+-                metric_name: 'masked',
+-                count: 1,
+-            })),
+-            'hog_flow'
+-        )
+-
+-        const triggeredInvocationsMetrics: MinimalAppMetric[] = []
+-
+-        notMaskedInvocations.forEach((item) => {
+-            triggeredInvocationsMetrics.push({
+-                team_id: item.teamId,
+-                app_source_id: item.functionId,
+-                metric_kind: 'other',
+-                metric_name: 'triggered',
+-                count: 1,
+-            })
+-        })
+-
+-        this.hogFunctionMonitoringService.queueAppMetrics(triggeredInvocationsMetrics, 'hog_flow')
+-
+-        return notMaskedInvocations
+-    }
+-
+-    @instrumented('cdpConsumer.handleEachBatch.parseKafkaMessages')
+-    public async _parseKafkaBatch(messages: Message[]): Promise<HogFunctionInvocationGlobals[]> {
+-        const events: HogFunctionInvocationGlobals[] = []
+-
+-        await Promise.all(
+-            messages.map(async (message) => {
+-                try {
+-                    const clickHouseEvent = parseJSON(message.value!.toString()) as RawClickHouseEvent
+-
+-                    const [teamHogFunctions, teamHogFlows, team] = await Promise.all([
+-                        this.hogFunctionManager.getHogFunctionsForTeam(clickHouseEvent.team_id, this.hogTypes),
+-                        this.hogFlowManager.getHogFlowsForTeam(clickHouseEvent.team_id),
+-                        this.hub.teamManager.getTeam(clickHouseEvent.team_id),
+-                    ])
+-
+-                    if ((!teamHogFunctions.length && !teamHogFlows.length) || !team) {
+-                        return
+-                    }
+-
+-                    events.push(convertToHogFunctionInvocationGlobals(clickHouseEvent, team, this.hub.SITE_URL))
+-                } catch (e) {
+-                    logger.error('Error parsing message', e)
+-                    counterParseError.labels({ error: e.message }).inc()
+-                }
+-            })
+-        )
+-
+-        return events
+-    }
+-
+-    public async start(): Promise<void> {
+-        await super.start()
+-        // Make sure we are ready to produce to cyclotron first
+-        await this.cyclotronJobQueue.startAsProducer()
+-        // Start consuming messages
+-        await this.kafkaConsumer.connect(async (messages) => {
+-            logger.info('🔁', `${this.name} - handling batch`, {
+-                size: messages.length,
+-            })
+-
+-            return await instrumentFn('cdpConsumer.handleEachBatch', async () => {
+-                const invocationGlobals = await this._parseKafkaBatch(messages)
+-                const { backgroundTask } = await this.processBatch(invocationGlobals)
+-
+-                return { backgroundTask }
+-            })
+-        })
+-    }
+-
+-    public async stop(): Promise<void> {
+-        logger.info('💤', 'Stopping consumer...')
+-        await this.kafkaConsumer.disconnect()
+-        logger.info('💤', 'Stopping cyclotron job queue...')
+-        await this.cyclotronJobQueue.stop()
+-        logger.info('💤', 'Stopping consumer...')
+-        // IMPORTANT: super always comes last
+-        await super.stop()
+-        logger.info('💤', 'Consumer stopped!')
+-    }
+-
+-    public isHealthy(): HealthCheckResult {
+-        return this.kafkaConsumer.isHealthy()
+-    }
+-}
++        const { masked, notMasked: notMaskedInvocations } = await this.hogMasker.filterByMasking(
+\ No newline at end of file

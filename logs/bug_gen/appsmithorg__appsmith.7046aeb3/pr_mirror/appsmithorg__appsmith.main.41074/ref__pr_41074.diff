@@ -1,0 +1,193 @@
+diff --git a/app/client/src/actions/pageActions.tsx b/app/client/src/actions/pageActions.tsx
+index 47aa7f95dda..f776940728c 100644
+--- a/app/client/src/actions/pageActions.tsx
++++ b/app/client/src/actions/pageActions.tsx
+@@ -31,6 +31,7 @@ import type { ApiResponse } from "api/ApiResponses";
+ import type { EvaluationReduxAction } from "./EvaluationReduxActionTypes";
+ import { appsmithTelemetry } from "instrumentation";
+ import type { NavigateToAnotherPagePayload } from "sagas/ActionExecution/NavigateActionSaga/types";
++import type { Path } from "history";
+ 
+ export interface FetchPageListPayload {
+   applicationId: string;
+@@ -699,7 +700,7 @@ export const setupPublishedPage = (
+ });
+ 
+ export const navigateToAnotherPage = (
+-  payload: NavigateToAnotherPagePayload,
++  payload: NavigateToAnotherPagePayload | Path,
+ ) => ({
+   type: ReduxActionTypes.NAVIGATE_TO_ANOTHER_PAGE,
+   payload,
+diff --git a/app/client/src/pages/AppIDE/components/PageList/PageEntity.tsx b/app/client/src/pages/AppIDE/components/PageList/PageEntity.tsx
+index fb71d77ffc7..2d0ac0ab02e 100644
+--- a/app/client/src/pages/AppIDE/components/PageList/PageEntity.tsx
++++ b/app/client/src/pages/AppIDE/components/PageList/PageEntity.tsx
+@@ -15,11 +15,10 @@ import {
+ import { PERMISSION_TYPE, isPermitted } from "ee/utils/permissionHelpers";
+ import { getCurrentApplication } from "ee/selectors/applicationSelectors";
+ import type { DefaultRootState } from "react-redux";
+-import { updatePageAction } from "actions/pageActions";
++import { navigateToAnotherPage, updatePageAction } from "actions/pageActions";
+ import { useGetPageFocusUrl } from "./hooks/useGetPageFocusUrl";
+ import AnalyticsUtil from "ee/utils/AnalyticsUtil";
+ import { toggleInOnboardingWidgetSelection } from "actions/onboardingActions";
+-import history, { NavigationMethod } from "utils/history";
+ import { EntityItem } from "@appsmith/ads";
+ import { useNameEditorState } from "IDE/hooks/useNameEditorState";
+ import { useValidateEntityName } from "IDE";
+@@ -90,9 +89,7 @@ export const PageEntity = ({
+       toUrl: navigateToUrl,
+     });
+     dispatch(toggleInOnboardingWidgetSelection(true));
+-    history.push(navigateToUrl, {
+-      invokedBy: NavigationMethod.EntityExplorer,
+-    });
++    dispatch(navigateToAnotherPage(navigateToUrl));
+ 
+     if (onClick) {
+       onClick();
+diff --git a/app/client/src/sagas/ActionExecution/PluginActionSaga.ts b/app/client/src/sagas/ActionExecution/PluginActionSaga.ts
+index b9856cf37b7..9d748bb7bc2 100644
+--- a/app/client/src/sagas/ActionExecution/PluginActionSaga.ts
++++ b/app/client/src/sagas/ActionExecution/PluginActionSaga.ts
+@@ -1702,14 +1702,18 @@ export function* executePageUnloadActionsSaga() {
+   const span = startRootSpan("executePageUnloadActionsSaga");
+ 
+   try {
+-    const pageActions: Action[] = yield select(getLayoutOnUnloadActions);
+-    const actionCount = pageActions.length;
++    const pageOnUnloadActions: Action[] = yield select(
++      getLayoutOnUnloadActions,
++    );
++    const actionCount = pageOnUnloadActions.length;
+ 
+     setAttributesToSpan(span, { numActions: actionCount });
+ 
+     // Execute unload actions in parallel batches
+     yield all(
+-      pageActions.map((action) => call(executeOnPageUnloadJSAction, action)),
++      pageOnUnloadActions.map((action) =>
++        call(executeOnPageUnloadJSAction, action),
++      ),
+     );
+ 
+     // Publish success event after all actions are executed
+diff --git a/app/client/src/selectors/__tests__/editorSelectors/pluginActionSelectors.test.ts b/app/client/src/selectors/__tests__/editorSelectors/pluginActionSelectors.test.ts
+new file mode 100644
+index 00000000000..31ddc869a9f
+--- /dev/null
++++ b/app/client/src/selectors/__tests__/editorSelectors/pluginActionSelectors.test.ts
+@@ -0,0 +1,71 @@
++import type { DefaultRootState } from "react-redux";
++import { getLayoutOnUnloadActions } from "selectors/editorSelectors";
++
++describe("getLayoutOnUnloadActions", () => {
++  it("should filter actions by current page ID", () => {
++    const state = {
++      entities: {
++        pageList: { currentPageId: "page1" },
++        jsActions: [
++          {
++            isLoading: false,
++            config: {
++              id: "collection1",
++              pageId: "page1",
++              actions: [
++                {
++                  id: "action1",
++                  pageId: "page1",
++                  runBehaviour: "ON_PAGE_UNLOAD",
++                  name: "myFun1",
++                  fullyQualifiedName: "JSObject1.myFun1",
++                  collectionId: "collection1",
++                },
++                {
++                  id: "action3",
++                  pageId: "page1",
++                  runBehaviour: "ON_PAGE_LOAD",
++                  name: "myFun2",
++                  fullyQualifiedName: "JSObject1.myFun2",
++                  collectionId: "collection1",
++                },
++              ],
++            },
++          },
++          {
++            isLoading: false,
++            config: {
++              id: "collection2",
++              pageId: "page2",
++              actions: [
++                {
++                  id: "action2",
++                  pageId: "page2",
++                  runBehaviour: "ON_PAGE_UNLOAD",
++                  name: "myFun1",
++                  fullyQualifiedName: "JSObject2.myFun1",
++                  collectionId: "collection2",
++                },
++              ],
++            },
++          },
++        ],
++      },
++    };
++
++    const result = getLayoutOnUnloadActions(
++      state as unknown as DefaultRootState,
++    );
++
++    expect(result).toEqual([
++      {
++        id: "action1",
++        pageId: "page1",
++        runBehaviour: "ON_PAGE_UNLOAD",
++        name: "myFun1",
++        fullyQualifiedName: "JSObject1.myFun1",
++        collectionId: "collection1",
++      },
++    ]);
++  });
++});
+diff --git a/app/client/src/selectors/editorSelectors.tsx b/app/client/src/selectors/editorSelectors.tsx
+index b220b6ab771..28614887208 100644
+--- a/app/client/src/selectors/editorSelectors.tsx
++++ b/app/client/src/selectors/editorSelectors.tsx
+@@ -125,16 +125,21 @@ export const getPageSavingError = (state: DefaultRootState) => {
+   return state.ui.editor.loadingStates.savingError;
+ };
+ 
++export const getCurrentPageId = (state: DefaultRootState) =>
++  state.entities.pageList.currentPageId;
++
+ export const getLayoutOnLoadActions = (state: DefaultRootState) =>
+   state.ui.editor.pageActions || [];
+ 
+ export const getLayoutOnUnloadActions = createSelector(
++  getCurrentPageId,
+   getAllJSCollectionActions,
+-  (jsActions) => {
+-    return jsActions.filter((action) => {
+-      return action.runBehaviour === ActionRunBehaviour.ON_PAGE_UNLOAD;
+-    });
+-  },
++  (currentPageId, jsActions) =>
++    jsActions.filter(
++      (action) =>
++        action.runBehaviour === ActionRunBehaviour.ON_PAGE_UNLOAD &&
++        action.pageId === currentPageId,
++    ),
+ );
+ 
+ export const getLayoutOnLoadIssues = (state: DefaultRootState) => {
+@@ -167,9 +172,6 @@ export const getPageByBaseId = (basePageId: string) =>
+     pages.find((page) => page.basePageId === basePageId),
+   );
+ 
+-export const getCurrentPageId = (state: DefaultRootState) =>
+-  state.entities.pageList.currentPageId;
+-
+ export const getCurrentBasePageId = (state: DefaultRootState) =>
+   state.entities.pageList.currentBasePageId;
+ 

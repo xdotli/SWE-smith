@@ -1,0 +1,128 @@
+diff --git a/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts b/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
+index 9004f8dfa1763..757be6c1b91f1 100644
+--- a/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
++++ b/frontend/src/lib/components/TopBarSettingsButton/topBarSettingsButtonLogic.test.ts
+@@ -86,7 +86,7 @@ describe('topBarSettingsButtonLogic', () => {
+         it('returns other setting section IDs regardless of CRM feature flag state', async () => {
+             router.actions.push(urls.persons())
+             featureFlagLogic.actions.setFeatureFlags([], {
+-                [FEATURE_FLAGS.CRM_ITERATION_ONE]: false,
++                [FEATURE_FLAGS.CUSTOMER_ANALYTICS]: false,
+             })
+ 
+             await expectLogic(logic).toMatchValues({
+@@ -94,7 +94,7 @@ describe('topBarSettingsButtonLogic', () => {
+             })
+ 
+             featureFlagLogic.actions.setFeatureFlags([], {
+-                [FEATURE_FLAGS.CRM_ITERATION_ONE]: true,
++                [FEATURE_FLAGS.CUSTOMER_ANALYTICS]: true,
+             })
+ 
+             await expectLogic(logic).toMatchValues({
+diff --git a/frontend/src/lib/constants.tsx b/frontend/src/lib/constants.tsx
+index b459816585d09..c4433c567dc8c 100644
+--- a/frontend/src/lib/constants.tsx
++++ b/frontend/src/lib/constants.tsx
+@@ -237,10 +237,9 @@ export const FEATURE_FLAGS = {
+     ENDPOINTS: 'embedded-analytics', // owner: @sakce #team-clickhouse
+     SUPPORT_FORM_IN_ONBOARDING: 'support-form-in-onboarding', // owner: @joshsny
+     CRM_ITERATION_ONE: 'crm-iteration-one', // owner: @arthurdedeus #team-customer-analytics
+-    CRM_USAGE_METRICS: 'crm-usage-metrics', // owner: @arthurdedeus #team-customer-analytics
+     TOGGLE_PROPERTY_ARRAYS: 'toggle-property-arrays', // owner: @arthurdedeus #team-customer-analytics
+     DWH_JOIN_TABLE_PREVIEW: 'dwh-join-table-preview', // owner: @arthurdedeus #team-customer-analytics
+-    CUSTOMER_ANALYTICS: 'customer-analytics', // owner: @arthurdedeus #team-customer-analytics
++    CUSTOMER_ANALYTICS: 'customer-analytics-roadmap', // owner: @arthurdedeus #team-customer-analytics
+     SETTINGS_SESSIONS_V2_JOIN: 'settings-sessions-v2-join', // owner: @robbie-c #team-web-analytics
+     SESSIONS_EXPLORER: 'sessions-explorer', // owner: @jabahamondes #team-web-analytics
+     SAVE_INSIGHT_TASK: 'save-insight-task', // owner: @joshsny
+diff --git a/frontend/src/queries/nodes/DataTable/DataTable.tsx b/frontend/src/queries/nodes/DataTable/DataTable.tsx
+index 013cc86d5bf95..2f99a9ad1faf5 100644
+--- a/frontend/src/queries/nodes/DataTable/DataTable.tsx
++++ b/frontend/src/queries/nodes/DataTable/DataTable.tsx
+@@ -174,6 +174,7 @@ export function DataTable({
+ 
+     const canUseWebAnalyticsPreAggregatedTables = useFeatureFlag('SETTINGS_WEB_ANALYTICS_PRE_AGGREGATED_TABLES')
+     const hasCrmIterationOneEnabled = useFeatureFlag('CRM_ITERATION_ONE')
++    const hasCustomerAnalyticsEnabled = useFeatureFlag('CRM_ITERATION_ONE')
+     const usedWebAnalyticsPreAggregatedTables =
+         canUseWebAnalyticsPreAggregatedTables &&
+         response &&
+@@ -734,7 +735,8 @@ export function DataTable({
+     ].filter((x) => !!x)
+ 
+     const secondRowRight = [
+-        sourceFeatures.has(QueryFeature.linkDataButton) && hasCrmIterationOneEnabled ? (
++        sourceFeatures.has(QueryFeature.linkDataButton) &&
++        (hasCrmIterationOneEnabled || hasCustomerAnalyticsEnabled) ? (
+             <ViewLinkButton tableName="groups" />
+         ) : null,
+         (showColumnConfigurator || showPersistentColumnConfigurator) &&
+diff --git a/frontend/src/scenes/groups/Group.tsx b/frontend/src/scenes/groups/Group.tsx
+index 92be4f42acd96..148c29e54ceab 100644
+--- a/frontend/src/scenes/groups/Group.tsx
++++ b/frontend/src/scenes/groups/Group.tsx
+@@ -121,7 +121,7 @@ export function Group({ tabId }: { tabId?: string }): JSX.Element {
+                         label: <span data-attr="groups-overview-tab">Overview</span>,
+                         content: <GroupOverview groupData={groupData} />,
+                     },
+-                    ...(featureFlags[FEATURE_FLAGS.CRM_ITERATION_ONE] && groupData.notebook
++                    ...(featureFlags[FEATURE_FLAGS.CUSTOMER_ANALYTICS] && groupData.notebook
+                         ? [
+                               {
+                                   key: GroupsTabType.NOTES,
+diff --git a/frontend/src/scenes/groups/Groups.tsx b/frontend/src/scenes/groups/Groups.tsx
+index c4a4b5370c8a9..a83a6343156c6 100644
+--- a/frontend/src/scenes/groups/Groups.tsx
++++ b/frontend/src/scenes/groups/Groups.tsx
+@@ -46,7 +46,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+ 
+     const { groupsAccessStatus } = useValues(groupsAccessLogic)
+     const { aggregationLabel } = useValues(groupsModel)
+-    const hasCrmIterationOneEnabled = useFeatureFlag('CRM_ITERATION_ONE')
++    const hasCustomerAnalyticsEnabled = useFeatureFlag('CUSTOMER_ANALYTICS')
+ 
+     if (groupTypeIndex === undefined) {
+         throw new Error('groupTypeIndex is undefined')
+@@ -79,7 +79,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+         },
+     } as QueryContext['columns']
+     let hiddenColumns = [] as string[]
+-    if (hasCrmIterationOneEnabled) {
++    if (hasCustomerAnalyticsEnabled) {
+         columns = getCRMColumns(groupTypeName, groupTypeIndex)
+         hiddenColumns.push('key')
+     }
+@@ -95,7 +95,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+                     type: 'cohort',
+                 }}
+                 actions={
+-                    hasCrmIterationOneEnabled ? (
++                    hasCustomerAnalyticsEnabled ? (
+                         <LemonButton
+                             type="primary"
+                             size="small"
+@@ -135,7 +135,7 @@ export function GroupsScene({ tabId }: { tabId?: string } = {}): JSX.Element {
+                 dataAttr="groups-table"
+             />
+ 
+-            {hasCrmIterationOneEnabled && (
++            {hasCustomerAnalyticsEnabled && (
+                 <LemonModal
+                     isOpen={saveGroupViewModalOpen}
+                     onClose={() => setSaveGroupViewModalOpen(false)}
+diff --git a/frontend/src/scenes/groups/groupsNewLogic.ts b/frontend/src/scenes/groups/groupsNewLogic.ts
+index 035f7a3134995..15cf699b4d92a 100644
+--- a/frontend/src/scenes/groups/groupsNewLogic.ts
++++ b/frontend/src/scenes/groups/groupsNewLogic.ts
+@@ -213,8 +213,8 @@ export const groupsNewLogic = kea<groupsNewLogicType>([
+     })),
+ 
+     afterMount(({ props, values }) => {
+-        // Redirect if the CRM feature flag is not enabled
+-        if (!values.featureFlags[FEATURE_FLAGS.CRM_ITERATION_ONE]) {
++        // Redirect if customer analytics is not enabled
++        if (!values.featureFlags[FEATURE_FLAGS.CUSTOMER_ANALYTICS]) {
+             router.actions.push(urls.groups(props.groupTypeIndex))
+         }
+     }),

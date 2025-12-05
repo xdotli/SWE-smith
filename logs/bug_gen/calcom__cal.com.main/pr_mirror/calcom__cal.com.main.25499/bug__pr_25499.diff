@@ -1,0 +1,284 @@
+diff --git a/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx b/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
+index be21fbd..0405af6 100644
+--- a/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
++++ b/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
+@@ -452,8 +452,7 @@ describe("TestFormDialog", () => {
+       fireEvent.click(screen.getByText("submit"));
+ 
+       // Verify the URL shows the substituted value, not the variable
+-      expect(screen.getByTestId("test-routing-result")).toHaveTextContent("/team/Sales%20Team/meeting");
+-      expect(screen.getByTestId("test-routing-result")).not.toHaveTextContent("/team/sales-team/meeting");
++      expect(screen.getByTestId("test-routing-result")).toHaveTextContent("/team/sales-team/meeting");
+       expect(screen.getByTestId("test-routing-result")).not.toHaveTextContent("{name}");
+     });
+ 
+@@ -462,27 +461,4 @@ describe("TestFormDialog", () => {
+       mockMatchingRoute({
+         action: {
+           type: "externalRedirectUrl",
+-          value: "https://example.com/user/{name}",
+-        },
+-      });
+-
+-      render(
+-        <TestFormRenderer
+-          isMobile={true}
+-          testForm={mockRegularTeamForm}
+-          isTestPreviewOpen={true}
+-          setIsTestPreviewOpen={() => {
+-            return;
+-          }}
+-        />
+-      );
+-
+-      fireEvent.change(screen.getByTestId("form-field-name"), { target: { value: "John Doe" } });
+-      fireEvent.click(screen.getByText("submit"));
+-
+-      // Verify the URL shows the variable as-is, without substitution
+-      expect(screen.getByTestId("test-routing-result")).toHaveTextContent("https://example.com/user/{name}");
+-      expect(screen.getByTestId("test-routing-result")).not.toHaveTextContent("john-doe");
+-    });
+-  });
+-});
++          value: "
+\ No newline at end of file
+diff --git a/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts b/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
+index 7d62794..ee6fc26 100644
+--- a/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
++++ b/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
+@@ -91,49 +91,4 @@ describe("getAbsoluteEventTypeRedirectUrl", () => {
+       })
+     ).toThrow("eventTypeRedirectUrl must have username or teamSlug");
+   });
+-
+-  it("should use '&' separator when redirect URL already contains query parameters", () => {
+-    const result = getAbsoluteEventTypeRedirectUrl({
+-      ...defaultParams,
+-      eventTypeRedirectUrl: "user/event?existing=param",
+-      allURLSearchParams: new URLSearchParams("foo=bar"),
+-    });
+-    expect(result).toBe("https://user.cal.com/user/event?existing=param&foo=bar");
+-  });
+-
+-  it("should merge with '&' when redirect URL already contains multiple query parameters", () => {
+-    const result = getAbsoluteEventTypeRedirectUrl({
+-      ...defaultParams,
+-      eventTypeRedirectUrl: "user/event?existing1=param1&existing2=param2",
+-      allURLSearchParams: new URLSearchParams("foo=bar"),
+-    });
+-    expect(result).toBe("https://user.cal.com/user/event?existing1=param1&existing2=param2&foo=bar");
+-  });
+-
+-  it("should merge with '&' when no URL search params are present", () => {
+-    const result = getAbsoluteEventTypeRedirectUrl({
+-      ...defaultParams,
+-      eventTypeRedirectUrl: "user/event?existing=param",
+-      allURLSearchParams: new URLSearchParams(),
+-    });
+-    expect(result).toBe("https://user.cal.com/user/event?existing=param&");
+-  });
+-
+-  it("should merge when redirect URL ends with '/'", () => {
+-    const result = getAbsoluteEventTypeRedirectUrl({
+-      ...defaultParams,
+-      eventTypeRedirectUrl: "user/event/",
+-      allURLSearchParams: new URLSearchParams("foo=bar"),
+-    });
+-    expect(result).toBe("https://user.cal.com/user/event/?foo=bar");
+-  });
+-
+-  it("should be able to merge when redirect URL ends with '?'", () => {
+-    const result = getAbsoluteEventTypeRedirectUrl({
+-      ...defaultParams,
+-      eventTypeRedirectUrl: "user/event?",
+-      allURLSearchParams: new URLSearchParams("foo=bar"),
+-    });
+-    expect(result).toBe("https://user.cal.com/user/event?&foo=bar");
+-  });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts b/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
+index 69f2f17..efa33d0 100644
+--- a/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
++++ b/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
+@@ -86,8 +86,7 @@ export function getAbsoluteEventTypeRedirectUrl({
+   if (teamSlugInRedirectUrl && form.nonOrgTeamslug) {
+     const isEventTypeRedirectToOldTeamSlug = teamSlugInRedirectUrl === form.nonOrgTeamslug;
+     if (isEventTypeRedirectToOldTeamSlug) {
+-      const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
+-      return `${WEBAPP_URL}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
++      return `${WEBAPP_URL}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
+     }
+   }
+ 
+@@ -96,8 +95,7 @@ export function getAbsoluteEventTypeRedirectUrl({
+     const isEventTypeRedirectToOldUser =
+       !hasSameProfileUsername && usernameInRedirectUrl === form.nonOrgUsername;
+     if (isEventTypeRedirectToOldUser) {
+-      const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
+-      return `${WEBAPP_URL}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
++      return `${WEBAPP_URL}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
+     }
+   }
+ 
+@@ -108,12 +106,11 @@ export function getAbsoluteEventTypeRedirectUrl({
+     ? form.teamOrigin
+     : form.userOrigin;
+ 
+-  const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
+-  return `${origin}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
++  return `${origin}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
+ }
+ 
+ export function getAbsoluteEventTypeRedirectUrlWithEmbedSupport(
+   args: Ensure<Parameters<typeof getAbsoluteEventTypeRedirectUrl>[0], "isEmbed">
+ ) {
+   return getAbsoluteEventTypeRedirectUrl({ ...args });
+-}
++}
+\ No newline at end of file
+diff --git a/packages/app-store/routing-forms/lib/substituteVariables.test.ts b/packages/app-store/routing-forms/lib/substituteVariables.test.ts
+index b944a65..3c4d442 100644
+--- a/packages/app-store/routing-forms/lib/substituteVariables.test.ts
++++ b/packages/app-store/routing-forms/lib/substituteVariables.test.ts
+@@ -60,7 +60,7 @@ describe("substituteVariables", () => {
+ 
+     const result = substituteVariables(routeValue, response, fields);
+ 
+-    expect(result).toBe("/team/Sales%20Team/meeting");
++    expect(result).toBe("/team/sales-team/meeting");
+     expect(result).not.toBe("/team/sales-123/meeting");
+     expect(result).not.toBe("/team/department/meeting");
+   });
+@@ -78,10 +78,10 @@ describe("substituteVariables", () => {
+ 
+     const result = substituteVariables(routeValue, response, fields);
+ 
+-    expect(result).toBe("/Engineering/Backend%20Team/book");
++    expect(result).toBe("/engineering/backend-team/book");
+   });
+ 
+-  it("should handle special characters in labels by encoding them", () => {
++  it("should handle special characters in labels by slugifying them", () => {
+     const fields = [
+       createSelectField("field1", "department", "Department", [{ id: "hr_dept", label: "HR & Recruitment" }]),
+     ];
+@@ -89,7 +89,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "hr_dept", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/meeting/HR%20%26%20Recruitment");
++    expect(result).toBe("/meeting/hr-recruitment");
+   });
+ 
+   it("should handle case-insensitive variable matching", () => {
+@@ -102,7 +102,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "support-001", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/team/Customer%20Support/schedule");
++    expect(result).toBe("/team/customer-support/schedule");
+   });
+ 
+   it("should not substitute variables that don't have matching fields", () => {
+@@ -125,7 +125,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field3", ["high", "urgent"], "Priority Level");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/priorities/High%2CUrgent");
++    expect(result).toBe("/priorities/high-urgent");
+   });
+ 
+   it("should handle numeric labels", () => {
+@@ -136,7 +136,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "room-id-123", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/room/Room%20404");
++    expect(result).toBe("/room/room-404");
+   });
+ 
+   it("should not modify the URL if no variables are present", () => {
+@@ -158,7 +158,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "marketing-789", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/event/Marketing%20%26%20PR?type=meeting&priority=high");
++    expect(result).toBe("/event/marketing-pr?type=meeting&priority=high");
+   });
+ 
+   it("should substitute text field values directly", () => {
+@@ -167,7 +167,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "John Doe", "Username");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/user/John%20Doe/profile");
++    expect(result).toBe("/user/john-doe/profile");
+   });
+ 
+   it("should handle number field values", () => {
+@@ -195,7 +195,7 @@ describe("substituteVariables", () => {
+     };
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/Tower%20A/floor/404/Engineering");
++    expect(result).toBe("/tower-a/floor/404/engineering");
+   });
+ 
+   it("should handle text fields with special characters", () => {
+@@ -204,7 +204,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "Cal.com Platform & API", "Project Name");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/project/Cal.com%20Platform%20%26%20API/board");
++    expect(result).toBe("/project/cal.com-platform-api/board");
+   });
+ 
+   it("should handle empty text field values", () => {
+@@ -224,6 +224,6 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "Bug Report Summary", "Description");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/ticket/Bug%20Report%20Summary");
++    expect(result).toBe("/ticket/bug-report-summary");
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/app-store/routing-forms/lib/substituteVariables.ts b/packages/app-store/routing-forms/lib/substituteVariables.ts
+index 8f2857f..2755e4e 100644
+--- a/packages/app-store/routing-forms/lib/substituteVariables.ts
++++ b/packages/app-store/routing-forms/lib/substituteVariables.ts
+@@ -1,3 +1,5 @@
++import slugify from "@calcom/lib/slugify";
++
+ import type { FormResponse, NonRouterRoute, Field } from "../types/types";
+ import getFieldIdentifier from "./getFieldIdentifier";
+ import { getHumanReadableFieldResponseValue } from "./responseData/getHumanReadableFieldResponseValue";
+@@ -16,7 +18,7 @@ export const substituteVariables = (
+   response: FormResponse,
+   fields: Field[]
+ ) => {
+-  const regex = /\{([^}]+)\}/g;
++  const regex = /\{([^\}]+)\}/g;
+   const variables: string[] = routeValue.match(regex)?.map((match: string) => match.slice(1, -1)) || [];
+ 
+   let eventTypeUrl = routeValue;
+@@ -33,12 +35,12 @@ export const substituteVariables = (
+           field,
+           value: response[key].value,
+         });
+-        // ['abc', 'def'] ----toString---> 'abc,def' ----encode---> 'abc%2Cdef'
+-        const valueToSubstitute = encodeURIComponent(humanReadableValues.toString());
++        // ['abc', 'def'] ----toString---> 'abc,def' ----slugify---> 'abc-def'
++        const valueToSubstitute = slugify(humanReadableValues.toString());
+         eventTypeUrl = eventTypeUrl.replace(`{${variable}}`, valueToSubstitute);
+       }
+     }
+   });
+ 
+   return eventTypeUrl;
+-};
++};
+\ No newline at end of file

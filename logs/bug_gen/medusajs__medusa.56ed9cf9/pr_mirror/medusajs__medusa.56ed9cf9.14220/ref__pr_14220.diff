@@ -1,0 +1,41 @@
+diff --git a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+index 50fa4ca54bded..d20590060114f 100644
+--- a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
++++ b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+@@ -99,6 +99,23 @@ describe.skip("S3 File Plugin", () => {
+     })
+   })
+ 
++  it("uploads a file with special URL characters in the name", async () => {
++    const fileContent = await fs.readFile(fixtureImagePath)
++    const fixtureAsBinary = fileContent.toString("base64")
++
++    const resp = await s3Service.upload({
++      filename: "cat?photo.jpg",
++      mimeType: "image/jpeg",
++      content: fixtureAsBinary,
++      access: "private",
++    })
++
++    expect(resp).toEqual({
++      key: expect.stringMatching(/tests\/catphoto.*\.jpg/),
++      url: expect.stringMatching(/https:\/\/.*\/cat%3Fphoto.*\.jpg/),
++    })
++  })
++
+   it("gets a presigned upload URL and uploads a file successfully", async () => {
+     const fileContent = await fs.readFile(fixtureImagePath)
+     const fixtureAsBinary = fileContent.toString("binary")
+diff --git a/packages/modules/providers/file-s3/src/services/s3-file.ts b/packages/modules/providers/file-s3/src/services/s3-file.ts
+index ef3b8be1352f2..f617a722f8058 100644
+--- a/packages/modules/providers/file-s3/src/services/s3-file.ts
++++ b/packages/modules/providers/file-s3/src/services/s3-file.ts
+@@ -160,7 +160,7 @@ export class S3FileService extends AbstractFileProviderService {
+     }
+ 
+     return {
+-      url: `${this.config_.fileUrl}/${encodeURI(fileKey)}`,
++      url: `${this.config_.fileUrl}/${encodeURIComponent(fileKey)}`,
+       key: fileKey,
+     }
+   }

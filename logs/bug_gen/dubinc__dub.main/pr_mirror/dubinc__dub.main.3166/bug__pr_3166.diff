@@ -1,0 +1,66 @@
+diff --git a/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts b/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
+index cda1d85..c0d7135 100644
+--- a/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
++++ b/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
+@@ -1,17 +1,12 @@
+ import { detectDuplicatePayoutMethodFraud } from "@/lib/api/fraud/detect-duplicate-payout-method-fraud";
+-import { qstash } from "@/lib/cron";
+ import { stripe } from "@/lib/stripe";
+ import { sendBatchEmail, sendEmail } from "@dub/email";
+ import ConnectedPayoutMethod from "@dub/email/templates/connected-payout-method";
+ import DuplicatePayoutMethod from "@dub/email/templates/duplicate-payout-method";
+ import { prisma } from "@dub/prisma";
+-import { APP_DOMAIN_WITH_NGROK, log } from "@dub/utils";
++import { log } from "@dub/utils";
+ import Stripe from "stripe";
+ 
+-const queue = qstash.queue({
+-  queueName: "withdraw-stripe-balance",
+-});
+-
+ export async function accountUpdated(event: Stripe.Event) {
+   const account = event.data.object as Stripe.Account;
+ 
+@@ -132,26 +127,5 @@ export async function accountUpdated(event: Stripe.Event) {
+     }
+   }
+ 
+-  // Retry payouts that got stuck when the account was restricted (e.g: payout sent but paused
+-  // due to verification requirements). Once payouts are re-enabled, queue them for processing.
+-  const pendingPayouts = await prisma.payout.count({
+-    where: {
+-      partnerId: partner.id,
+-      status: "sent",
+-      mode: "internal",
+-    },
+-  });
+-
+-  if (pendingPayouts > 0) {
+-    await queue.enqueueJSON({
+-      url: `${APP_DOMAIN_WITH_NGROK}/api/cron/payouts/balance-available`,
+-      deduplicationId: event.id,
+-      method: "POST",
+-      body: {
+-        stripeAccount: partner.stripeConnectId,
+-      },
+-    });
+-  }
+-
+   return `Updated partner ${partner.email} (${partner.stripeConnectId}) with country ${country}, payoutsEnabledAt set, payoutMethodHash ${defaultExternalAccount.fingerprint}`;
+-}
++}
+\ No newline at end of file
+diff --git a/apps/web/tests/fraud/index.test.ts b/apps/web/tests/fraud/index.test.ts
+index d784a54..85376b6 100644
+--- a/apps/web/tests/fraud/index.test.ts
++++ b/apps/web/tests/fraud/index.test.ts
+@@ -252,6 +252,6 @@ async function waitForFraudEvent({
+ 
+       return data[0];
+     },
+-    { retries: 10, interval: 600 },
++    { retries: 10, interval: 300 },
+   );
+-}
++}
+\ No newline at end of file

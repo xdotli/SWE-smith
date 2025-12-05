@@ -1,0 +1,314 @@
+diff --git a/packages/twenty-front/src/pages/settings/accounts/SettingsAccountsConfiguration.tsx b/packages/twenty-front/src/pages/settings/accounts/SettingsAccountsConfiguration.tsx
+index e6126b87..c940bd4e 100644
+--- a/packages/twenty-front/src/pages/settings/accounts/SettingsAccountsConfiguration.tsx
++++ b/packages/twenty-front/src/pages/settings/accounts/SettingsAccountsConfiguration.tsx
+@@ -99,32 +99,31 @@ export const SettingsAccountsConfiguration = () => {
+     });
+   };
+ 
+-  const showEmailStep =
+-    currentStep === SettingsAccountsConfigurationStep.Email &&
+-    isDefined(messageChannel);
+-
+-  if (showEmailStep) {
+-    return (
+-      <SettingsAccountsConfigurationStepEmail
+-        messageChannel={messageChannel}
+-        hasNextStep={isDefined(calendarChannel)}
+-        isSubmitting={isSubmitting}
+-        onNext={handleNext}
+-        onAddAccount={handleAddAccount}
+-      />
+-    );
+-  }
+-
+-  if (!isDefined(calendarChannel)) {
+-    return null;
++  switch (currentStep) {
++    case SettingsAccountsConfigurationStep.Email:
++      if (!isDefined(messageChannel)) {
++        return null;
++      }
++      return (
++        <SettingsAccountsConfigurationStepEmail
++          messageChannel={messageChannel}
++          hasNextStep={isDefined(calendarChannel)}
++          isSubmitting={isSubmitting}
++          onNext={handleNext}
++          onAddAccount={handleAddAccount}
++        />
++      );
++    case SettingsAccountsConfigurationStep.Calendar:
++      if (!isDefined(calendarChannel)) {
++        return null;
++      }
++      return (
++        <SettingsAccountsConfigurationStepCalendar
++          calendarChannel={calendarChannel}
++          messageChannel={messageChannel}
++          isSubmitting={isSubmitting}
++          onAddAccount={handleAddAccount}
++        />
++      );
+   }
+-
+-  return (
+-    <SettingsAccountsConfigurationStepCalendar
+-      calendarChannel={calendarChannel}
+-      messageChannel={messageChannel}
+-      isSubmitting={isSubmitting}
+-      onAddAccount={handleAddAccount}
+-    />
+-  );
+-};
++};
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection.service.ts b/packages/twenty-server/src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection.service.ts
+index a71b9d68..2f32962c 100644
+--- a/packages/twenty-server/src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/imap-smtp-caldav-connection/services/imap-smtp-caldav-connection.service.ts
+@@ -139,7 +139,7 @@ export class ImapSmtpCaldavService {
+       }
+ 
+       throw new UserInputError(`CALDAV connection failed: ${error.message}`, {
+-        userFriendlyMessage: msg`Invalid CALDAV credentials. Please check your username and password.`,
++        userFriendlyMessage: msg`Invalid credentials. Please check your username and password.`,
+       });
+     }
+ 
+@@ -190,4 +190,4 @@ export class ImapSmtpCaldavService {
+ 
+     return connectedAccount;
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/drivers/caldav/lib/caldav.client.ts b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/drivers/caldav/lib/caldav.client.ts
+index 6299f857..495d3644 100644
+--- a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/drivers/caldav/lib/caldav.client.ts
++++ b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/drivers/caldav/lib/caldav.client.ts
+@@ -84,7 +84,7 @@ export class CalDAVClient {
+     if (!this.hasFileExtension(url)) return 'ics';
+     const fileName = url.substring(url.lastIndexOf('/') + 1);
+ 
+-    return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
++    return fileName.substring(fileName.lastIndexOf('.') + 1);
+   }
+ 
+   private isValidFormat(url: string): boolean {
+@@ -490,4 +490,4 @@ export class CalDAVClient {
+       return true;
+     }
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/services/calendar-account-authentication.service.ts b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/services/calendar-account-authentication.service.ts
+index b941469f..351ea29d 100644
+--- a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/services/calendar-account-authentication.service.ts
++++ b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/services/calendar-account-authentication.service.ts
+@@ -33,7 +33,7 @@ export class CalendarAccountAuthenticationService {
+   }: ValidateAndRefreshConnectedAccountAuthenticationParams): Promise<ConnectedAccountTokens> {
+     if (
+       connectedAccount.provider === ConnectedAccountProvider.IMAP_SMTP_CALDAV &&
+-      isDefined(connectedAccount.connectionParameters?.CALDAV)
++      isDefined(connectedAccount.connectionParameters?.SMTP)
+     ) {
+       await this.validateCalDavCredentialsForConnectedAccount({
+         connectedAccount,
+@@ -95,4 +95,4 @@ export class CalendarAccountAuthenticationService {
+       }
+     }
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.spec.ts b/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.spec.ts
+index f4cdc512..e2c7073a 100644
+--- a/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.spec.ts
++++ b/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.spec.ts
+@@ -261,7 +261,7 @@ describe('ImapSmtpCalDavAPIService', () => {
+       expect(mockCalendarQueueService.add).not.toHaveBeenCalled();
+     });
+ 
+-    it('should only create calendar channel when only CALDAV is configured', async () => {
++    it('should create both channels when only CALDAV is configured but disable message sync', async () => {
+       const caldavOnlyInput = {
+         ...baseInput,
+         connectionParameters: {
+@@ -282,6 +282,7 @@ describe('ImapSmtpCalDavAPIService', () => {
+       const expectedCalendarChannel = {
+         id: 'mocked-uuid',
+         connectedAccountId: 'mocked-uuid',
++
+         handle: 'test@example.com',
+       };
+ 
+@@ -291,7 +292,21 @@ describe('ImapSmtpCalDavAPIService', () => {
+ 
+       await service.processAccount(caldavOnlyInput);
+ 
+-      expect(mockMessageChannelRepository.save).not.toHaveBeenCalled();
++      expect(mockMessageChannelRepository.save).toHaveBeenCalledWith(
++        {
++          id: 'mocked-uuid',
++          connectedAccountId: 'mocked-uuid',
++          type: MessageChannelType.EMAIL,
++          handle: 'test@example.com',
++          isSyncEnabled: false,
++          syncStatus: MessageChannelSyncStatus.NOT_SYNCED,
++          syncStage: MessageChannelSyncStage.PENDING_CONFIGURATION,
++          pendingGroupEmailsAction: MessageChannelPendingGroupEmailsAction.NONE,
++          syncCursor: '',
++          syncStageStartedAt: null,
++        },
++        {},
++      );
+       expect(mockCalendarChannelRepository.save).toHaveBeenCalled();
+ 
+       expect(mockMessageQueueService.add).not.toHaveBeenCalled();
+@@ -403,83 +418,4 @@ describe('ImapSmtpCalDavAPIService', () => {
+       expect(mockMessageChannelRepository.save).toHaveBeenCalled();
+       expect(mockCalendarChannelRepository.save).toHaveBeenCalled();
+       expect(mockMessageQueueService.add).not.toHaveBeenCalled();
+-      expect(mockCalendarQueueService.add).not.toHaveBeenCalled();
+-    });
+-
+-    it('should handle account found by handle when connectedAccountId is not provided', async () => {
+-      const existingAccount = {
+-        id: 'existing-account-id',
+-        handle: 'test@example.com',
+-        accountOwnerId: 'workspace-member-id',
+-        provider: ConnectedAccountProvider.IMAP_SMTP_CALDAV,
+-      } as ConnectedAccountWorkspaceEntity;
+-
+-      mockConnectedAccountRepository.findOne.mockResolvedValueOnce(
+-        existingAccount,
+-      );
+-
+-      mockMessageChannelRepository.findOne.mockResolvedValue(null);
+-      mockCalendarChannelRepository.findOne.mockResolvedValue(null);
+-
+-      await service.processAccount(baseInput);
+-
+-      expect(mockConnectedAccountRepository.findOne).toHaveBeenCalledWith({
+-        where: {
+-          handle: 'test@example.com',
+-          accountOwnerId: 'workspace-member-id',
+-        },
+-      });
+-
+-      expect(mockConnectedAccountRepository.save).toHaveBeenCalledWith(
+-        {
+-          id: 'existing-account-id',
+-          handle: 'test@example.com',
+-          provider: ConnectedAccountProvider.IMAP_SMTP_CALDAV,
+-          connectionParameters: baseInput.connectionParameters,
+-          accountOwnerId: 'workspace-member-id',
+-        },
+-        {},
+-      );
+-    });
+-
+-    it('should not enqueue sync jobs when channels are disabled', async () => {
+-      const disabledInput = {
+-        ...baseInput,
+-        connectionParameters: {
+-          SMTP: {
+-            host: 'smtp.example.com',
+-            port: 587,
+-            secure: true,
+-            username: 'test@example.com',
+-            password: 'password',
+-          },
+-        } as EmailAccountConnectionParameters,
+-      };
+-
+-      mockConnectedAccountRepository.findOne.mockResolvedValue(null);
+-      mockMessageChannelRepository.findOne.mockResolvedValue(null);
+-      mockCalendarChannelRepository.findOne.mockResolvedValue(null);
+-
+-      await service.processAccount(disabledInput);
+-
+-      expect(mockMessageQueueService.add).not.toHaveBeenCalled();
+-      expect(mockCalendarQueueService.add).not.toHaveBeenCalled();
+-    });
+-
+-    it('should handle transaction correctly', async () => {
+-      mockConnectedAccountRepository.findOne.mockResolvedValue(null);
+-      mockMessageChannelRepository.findOne.mockResolvedValue(null);
+-      mockCalendarChannelRepository.findOne.mockResolvedValue(null);
+-      mockMessageChannelRepository.save.mockResolvedValue({
+-        id: 'mocked-uuid',
+-        connectedAccountId: 'mocked-uuid',
+-      });
+-
+-      await service.processAccount(baseInput);
+-
+-      expect(mockWorkspaceDataSource.transaction).toHaveBeenCalledWith(
+-        expect.any(Function),
+-      );
+-    });
+-  });
+-});
++      expect(mockCalendarQueueService.add).not.
+\ No newline at end of file
+diff --git a/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.ts b/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.ts
+index b726bf96..dc0d3d0b 100644
+--- a/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.ts
++++ b/packages/twenty-server/src/modules/connected-account/services/imap-smtp-caldav-apis.service.ts
+@@ -138,29 +138,25 @@ export class ImapSmtpCalDavAPIService {
+     accountId: string,
+     messageChannelRepository: WorkspaceRepository<MessageChannelWorkspaceEntity>,
+   ): Promise<MessageChannelWorkspaceEntity | null> {
+-    const shouldCreateMessageChannel = Boolean(input.connectionParameters.IMAP);
+-
+-    if (shouldCreateMessageChannel) {
+-      const newMessageChannel = await messageChannelRepository.save(
+-        {
+-          id: v4(),
+-          connectedAccountId: accountId,
+-          type: MessageChannelType.EMAIL,
+-          handle: input.handle,
+-          isSyncEnabled: true,
+-          syncStatus: MessageChannelSyncStatus.NOT_SYNCED,
+-          syncStage: MessageChannelSyncStage.PENDING_CONFIGURATION,
+-          pendingGroupEmailsAction: MessageChannelPendingGroupEmailsAction.NONE,
+-          syncCursor: '',
+-          syncStageStartedAt: null,
+-        },
+-        {},
+-      );
+-
+-      return newMessageChannel;
+-    }
++    const shouldEnableSync = Boolean(input.connectionParameters.IMAP);
++
++    const newMessageChannel = await messageChannelRepository.save(
++      {
++        id: v4(),
++        connectedAccountId: accountId,
++        type: MessageChannelType.EMAIL,
++        handle: input.handle,
++        isSyncEnabled: shouldEnableSync,
++        syncStatus: MessageChannelSyncStatus.NOT_SYNCED,
++        syncStage: MessageChannelSyncStage.PENDING_CONFIGURATION,
++        pendingGroupEmailsAction: MessageChannelPendingGroupEmailsAction.NONE,
++        syncCursor: '',
++        syncStageStartedAt: null,
++      },
++      {},
++    );
+ 
+-    return null;
++    return shouldEnableSync ? newMessageChannel : null;
+   }
+ 
+   private async setupCalendarChannels(
+@@ -196,4 +192,4 @@ export class ImapSmtpCalDavAPIService {
+ 
+     return null;
+   }
+-}
++}
+\ No newline at end of file

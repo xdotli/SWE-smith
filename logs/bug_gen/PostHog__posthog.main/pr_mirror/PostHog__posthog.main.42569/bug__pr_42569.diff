@@ -1,0 +1,613 @@
+diff --git a/frontend/src/lib/components/DateFilter/DateFilter.test.tsx b/frontend/src/lib/components/DateFilter/DateFilter.test.tsx
+index b05a8b6..cf51311 100644
+--- a/frontend/src/lib/components/DateFilter/DateFilter.test.tsx
++++ b/frontend/src/lib/components/DateFilter/DateFilter.test.tsx
+@@ -53,41 +53,4 @@ describe('DateFilter', () => {
+ 
+         await waitFor(() => expect(onChange).toHaveBeenCalledWith('-5d', '', false))
+     })
+-})
+-
+-describe('DateFilter with allowFixedRangeWithTime', () => {
+-    let onChange = jest.fn()
+-    beforeEach(() => {
+-        initKeaTests()
+-        onChange = jest.fn()
+-        render(
+-            <Provider>
+-                <DateFilter onChange={onChange} dateOptions={dateMapping} allowFixedRangeWithTime />
+-            </Provider>
+-        )
+-    })
+-
+-    afterEach(() => {
+-        cleanup()
+-    })
+-
+-    it('shows custom fixed date range with time option', async () => {
+-        const dateFilter = screen.getByTestId('date-filter')
+-        userEvent.click(dateFilter)
+-
+-        expect(screen.getByText(/custom fixed date range with time/i)).toBeInTheDocument()
+-        expect(screen.getByText(/custom fixed date range…$/i)).toBeInTheDocument()
+-    })
+-
+-    it('opens the time range picker when clicking custom fixed date range with time', async () => {
+-        const dateFilter = screen.getByTestId('date-filter')
+-        userEvent.click(dateFilter)
+-
+-        const timeRangeOption = screen.getByText(/custom fixed date range with time/i)
+-        userEvent.click(timeRangeOption)
+-
+-        await waitFor(() => {
+-            expect(screen.getByText(/select a date and time range/i)).toBeInTheDocument()
+-        })
+-    })
+-})
++})
+\ No newline at end of file
+diff --git a/frontend/src/lib/components/DateFilter/DateFilter.tsx b/frontend/src/lib/components/DateFilter/DateFilter.tsx
+index 5ec8dfa..9b07342 100644
+--- a/frontend/src/lib/components/DateFilter/DateFilter.tsx
++++ b/frontend/src/lib/components/DateFilter/DateFilter.tsx
+@@ -24,7 +24,6 @@ import { ResolvedDateRangeResponse } from '~/queries/schema/schema-general'
+ import { DateMappingOption, PropertyOperator } from '~/types'
+ 
+ import { PropertyFilterDatePicker } from '../PropertyFilters/components/PropertyFilterDatePicker'
+-import { FixedRangeWithTimePicker } from './FixedRangeWithTimePicker'
+ import { RollingDateRangeFilter } from './RollingDateRangeFilter'
+ import { dateFilterLogic } from './dateFilterLogic'
+ import { DateOption } from './rollingDateRangeFilterLogic'
+@@ -55,7 +54,6 @@ interface RawDateFilterProps extends DateFilterProps {
+     max?: number | null
+     allowedRollingDateOptions?: DateOption[]
+     allowTimePrecision?: boolean
+-    allowFixedRangeWithTime?: boolean
+     /**
+      * Granularity is picked based on the dateFrom value
+      * but can be overridden to force a specific granularity.
+@@ -84,7 +82,6 @@ export function DateFilter({
+     isFixedDateMode = false,
+     allowedRollingDateOptions,
+     allowTimePrecision = false,
+-    allowFixedRangeWithTime = false,
+     placeholder,
+     fullWidth = false,
+     forceGranularity,
+@@ -108,7 +105,6 @@ export function DateFilter({
+     const {
+         open,
+         openFixedRange,
+-        openFixedRangeWithTime,
+         openDateToNow,
+         openFixedDate,
+         close,
+@@ -125,7 +121,6 @@ export function DateFilter({
+         rangeDateTo,
+         label,
+         isFixedRange,
+-        isFixedRangeWithTime,
+         isDateToNow,
+         isFixedDate,
+         isRollingDateRange,
+@@ -151,13 +146,6 @@ export function DateFilter({
+                 onClose={open}
+                 months={2}
+             />
+-        ) : view === DateFilterView.FixedRangeWithTime ? (
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={rangeDateFrom}
+-                rangeDateTo={rangeDateTo}
+-                setDate={setDate}
+-                onClose={open}
+-            />
+         ) : view === DateFilterView.DateToNow ? (
+             <LemonCalendarSelect
+                 value={rangeDateFrom ?? dayjs()}
+@@ -258,14 +246,9 @@ export function DateFilter({
+                         <LemonButton onClick={openDateToNow} active={isDateToNow} fullWidth>
+                             From custom date until now…
+                         </LemonButton>
+-                        <LemonButton onClick={openFixedRange} active={isFixedRange && !isFixedRangeWithTime} fullWidth>
++                        <LemonButton onClick={openFixedRange} active={isFixedRange} fullWidth>
+                             Custom fixed date range…
+                         </LemonButton>
+-                        {allowFixedRangeWithTime && (
+-                            <LemonButton onClick={openFixedRangeWithTime} active={isFixedRangeWithTime} fullWidth>
+-                                Custom fixed date range with time…
+-                            </LemonButton>
+-                        )}
+                     </>
+                 )}
+                 {showExplicitDateToggle && (
+@@ -326,4 +309,4 @@ export function DateFilter({
+             </LemonButton>
+         </Popover>
+     )
+-}
++}
+\ No newline at end of file
+diff --git a/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.test.tsx b/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.test.tsx
+deleted file mode 100644
+index 8913638..0000000
+--- a/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.test.tsx
++++ /dev/null
+@@ -1,127 +0,0 @@
+-import '@testing-library/jest-dom'
+-import { render, screen, within } from '@testing-library/react'
+-import userEvent from '@testing-library/user-event'
+-
+-import { dayjs } from 'lib/dayjs'
+-
+-import { FixedRangeWithTimePicker } from './FixedRangeWithTimePicker'
+-
+-describe('FixedRangeWithTimePicker', () => {
+-    const setDate = jest.fn()
+-    const onClose = jest.fn()
+-
+-    beforeEach(() => {
+-        jest.clearAllMocks()
+-    })
+-
+-    it('renders header', () => {
+-        render(<FixedRangeWithTimePicker rangeDateFrom={null} rangeDateTo={null} setDate={setDate} onClose={onClose} />)
+-
+-        expect(screen.getByText(/select a date and time range/i)).toBeInTheDocument()
+-    })
+-
+-    it('renders Start and End buttons', () => {
+-        render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T10:00:00')}
+-                rangeDateTo={dayjs('2024-01-15T11:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        expect(screen.getAllByText(/start:/i).length).toBeGreaterThan(0)
+-        expect(screen.getAllByText(/end:/i).length).toBeGreaterThan(0)
+-    })
+-
+-    it('calls onClose when close button is clicked', () => {
+-        const { container } = render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T10:00:00')}
+-                rangeDateTo={dayjs('2024-01-15T11:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        const closeButton = container.querySelector('[aria-label="close"]') as HTMLElement
+-        expect(closeButton).toBeTruthy()
+-        userEvent.click(closeButton)
+-        expect(onClose).toHaveBeenCalled()
+-    })
+-
+-    it('calls setDate with ISO format when Apply is clicked', () => {
+-        const { container } = render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T10:00:00')}
+-                rangeDateTo={dayjs('2024-01-15T11:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        const footer = container.querySelector('[data-attr="lemon-calendar-range-with-time-footer"]') as HTMLElement
+-        userEvent.click(within(footer).getByText(/apply/i))
+-        expect(setDate).toHaveBeenCalledWith('2024-01-15T10:00:00', '2024-01-15T11:00:00', false, true)
+-    })
+-
+-    it('swaps dates on Apply if start is after end', () => {
+-        const { container } = render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T14:00:00')}
+-                rangeDateTo={dayjs('2024-01-15T10:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        const footer = container.querySelector('[data-attr="lemon-calendar-range-with-time-footer"]') as HTMLElement
+-        userEvent.click(within(footer).getByText(/apply/i))
+-        expect(setDate).toHaveBeenCalledWith('2024-01-15T10:00:00', '2024-01-15T14:00:00', false, true)
+-    })
+-
+-    it('preserves PM time when initialized with PM', () => {
+-        const { container } = render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T14:30:00')}
+-                rangeDateTo={dayjs('2024-01-15T16:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        const footer = container.querySelector('[data-attr="lemon-calendar-range-with-time-footer"]') as HTMLElement
+-        userEvent.click(within(footer).getByText(/apply/i))
+-        expect(setDate).toHaveBeenCalledWith('2024-01-15T14:30:00', '2024-01-15T16:00:00', false, true)
+-    })
+-
+-    it('adjusts end time when start hour is changed to be after end', () => {
+-        const { container } = render(
+-            <FixedRangeWithTimePicker
+-                rangeDateFrom={dayjs('2024-01-15T10:00:00')}
+-                rangeDateTo={dayjs('2024-01-15T11:00:00')}
+-                setDate={setDate}
+-                onClose={onClose}
+-            />
+-        )
+-
+-        // Click on hour 12 (PM) - this should be after the end time of 11:00 AM
+-        const hourButton = container.querySelector('[data-attr="12-h"]') as HTMLElement
+-        expect(hourButton).toBeTruthy()
+-        userEvent.click(hourButton)
+-
+-        // Click PM to make it 12 PM (noon)
+-        const pmButton = container.querySelector('[data-attr="pm-a"]') as HTMLElement
+-        expect(pmButton).toBeTruthy()
+-        userEvent.click(pmButton)
+-
+-        // Apply and verify end was adjusted (start 12:00 PM, end should be 1:00 PM)
+-        const footer = container.querySelector('[data-attr="lemon-calendar-range-with-time-footer"]') as HTMLElement
+-        userEvent.click(within(footer).getByText(/apply/i))
+-
+-        // The handleApply swaps if needed, so result should be valid
+-        expect(setDate).toHaveBeenCalled()
+-        const [from, to] = setDate.mock.calls[0]
+-        expect(dayjs(from).isBefore(dayjs(to))).toBe(true)
+-    })
+-})
+diff --git a/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.tsx b/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.tsx
+deleted file mode 100644
+index bb8af28..0000000
+--- a/frontend/src/lib/components/DateFilter/FixedRangeWithTimePicker.tsx
++++ /dev/null
+@@ -1,147 +0,0 @@
+-import { useState } from 'react'
+-
+-import { IconX } from '@posthog/icons'
+-import { LemonButton } from '@posthog/lemon-ui'
+-
+-import { dayjs } from 'lib/dayjs'
+-import { LemonCalendar } from 'lib/lemon-ui/LemonCalendar/LemonCalendar'
+-
+-export interface FixedRangeWithTimePickerProps {
+-    rangeDateFrom: dayjs.Dayjs | null
+-    rangeDateTo: dayjs.Dayjs | null
+-    setDate: (dateFrom: string | null, dateTo: string | null, keepPopoverOpen: boolean, explicitDate: boolean) => void
+-    onClose: () => void
+-}
+-
+-export function FixedRangeWithTimePicker({
+-    rangeDateFrom,
+-    rangeDateTo,
+-    setDate,
+-    onClose,
+-}: FixedRangeWithTimePickerProps): JSX.Element {
+-    const [selectingStart, setSelectingStart] = useState(true)
+-    const [localFrom, setLocalFrom] = useState<dayjs.Dayjs | null>(rangeDateFrom)
+-    const [localTo, setLocalTo] = useState<dayjs.Dayjs | null>(rangeDateTo)
+-
+-    const handleApply = (): void => {
+-        if (localFrom && localTo) {
+-            const [from, to] = localFrom.isBefore(localTo) ? [localFrom, localTo] : [localTo, localFrom]
+-            setDate(from.format('YYYY-MM-DDTHH:mm:ss'), to.format('YYYY-MM-DDTHH:mm:ss'), false, true)
+-        }
+-    }
+-
+-    return (
+-        <div className="LemonCalendarRangeWithTime" data-attr="lemon-calendar-range-with-time">
+-            <div className="flex justify-between border-b p-2 pb-4">
+-                <h3 className="text-base mb-0">Select a date and time range</h3>
+-                <LemonButton icon={<IconX />} size="small" noPadding onClick={onClose} aria-label="close" />
+-            </div>
+-            <div className="flex gap-2 p-2 border-b">
+-                <LemonButton
+-                    type={selectingStart ? 'primary' : 'secondary'}
+-                    size="small"
+-                    onClick={() => setSelectingStart(true)}
+-                >
+-                    Start: {localFrom ? localFrom.format('MMM D, YYYY h:mm A') : 'Not set'}
+-                </LemonButton>
+-                <LemonButton
+-                    type={!selectingStart ? 'primary' : 'secondary'}
+-                    size="small"
+-                    onClick={() => setSelectingStart(false)}
+-                >
+-                    End: {localTo ? localTo.format('MMM D, YYYY h:mm A') : 'Not set'}
+-                </LemonButton>
+-            </div>
+-            <div className="p-2">
+-                <LemonCalendar
+-                    onDateClick={(date) => {
+-                        if (date) {
+-                            const currentValue = selectingStart ? localFrom : localTo
+-                            const newDate = date
+-                                .hour(currentValue?.hour() ?? dayjs().hour())
+-                                .minute(currentValue?.minute() ?? dayjs().minute())
+-
+-                            if (selectingStart) {
+-                                setLocalFrom(newDate)
+-                                // Auto-set end to 1 hour later if not set or if new start is after current end
+-                                if (!localTo || newDate.isAfter(localTo)) {
+-                                    setLocalTo(newDate.add(1, 'hour'))
+-                                }
+-                            } else {
+-                                // If end date is before start, swap them
+-                                if (localFrom && newDate.isBefore(localFrom)) {
+-                                    setLocalTo(localFrom)
+-                                    setLocalFrom(newDate)
+-                                } else {
+-                                    setLocalTo(newDate)
+-                                }
+-                            }
+-                        }
+-                    }}
+-                    leftmostMonth={(selectingStart ? localFrom : localTo)?.startOf('month')}
+-                    getLemonButtonProps={({ date, props }) => {
+-                        const currentValue = selectingStart ? localFrom : localTo
+-                        if (date.isSame(currentValue, 'd')) {
+-                            return { ...props, status: 'default', type: 'primary' }
+-                        }
+-                        return props
+-                    }}
+-                    getLemonButtonTimeProps={(timeProps) => {
+-                        const currentValue = selectingStart ? localFrom : localTo
+-                        const selected = currentValue ? currentValue.format(timeProps.unit) : null
+-
+-                        return {
+-                            active: selected === String(timeProps.value),
+-                            className: 'rounded-none',
+-                            'data-attr': `${timeProps.value}-${timeProps.unit}`,
+-                            onClick: () => {
+-                                if (currentValue) {
+-                                    let newDate = currentValue
+-                                    if (timeProps.unit === 'h') {
+-                                        const isPM = currentValue.format('a') === 'pm'
+-                                        newDate = currentValue.hour(
+-                                            isPM && timeProps.value !== 12
+-                                                ? Number(timeProps.value) + 12
+-                                                : !isPM && timeProps.value === 12
+-                                                  ? 0
+-                                                  : Number(timeProps.value)
+-                                        )
+-                                    } else if (timeProps.unit === 'm') {
+-                                        newDate = currentValue.minute(Number(timeProps.value))
+-                                    } else if (timeProps.unit === 'a') {
+-                                        const currentHour = currentValue.hour()
+-                                        if (timeProps.value === 'am' && currentHour >= 12) {
+-                                            newDate = currentValue.subtract(12, 'hour')
+-                                        } else if (timeProps.value === 'pm' && currentHour < 12) {
+-                                            newDate = currentValue.add(12, 'hour')
+-                                        }
+-                                    }
+-                                    if (selectingStart) {
+-                                        setLocalFrom(newDate)
+-                                        if (localTo && newDate.isAfter(localTo)) {
+-                                            setLocalTo(newDate.add(1, 'hour'))
+-                                        }
+-                                    } else {
+-                                        setLocalTo(newDate)
+-                                        if (localFrom && newDate.isBefore(localFrom)) {
+-                                            setLocalFrom(newDate.subtract(1, 'hour'))
+-                                        }
+-                                    }
+-                                }
+-                            },
+-                        }
+-                    }}
+-                    granularity="minute"
+-                />
+-            </div>
+-            <div className="flex justify-end gap-2 border-t p-2 pt-4" data-attr="lemon-calendar-range-with-time-footer">
+-                <LemonButton type="secondary" onClick={onClose}>
+-                    Cancel
+-                </LemonButton>
+-                <LemonButton type="primary" disabled={!localFrom || !localTo} onClick={handleApply}>
+-                    Apply
+-                </LemonButton>
+-            </div>
+-        </div>
+-    )
+-}
+diff --git a/frontend/src/lib/components/DateFilter/dateFilterLogic.test.ts b/frontend/src/lib/components/DateFilter/dateFilterLogic.test.ts
+index dd811b8..dd52b14 100644
+--- a/frontend/src/lib/components/DateFilter/dateFilterLogic.test.ts
++++ b/frontend/src/lib/components/DateFilter/dateFilterLogic.test.ts
+@@ -41,11 +41,6 @@ describe('dateFilterLogic', () => {
+             isVisible: true,
+             view: DateFilterView.FixedRange,
+         })
+-        logic.actions.openFixedRangeWithTime()
+-        await expectLogic(logic).toMatchValues({
+-            isVisible: true,
+-            view: DateFilterView.FixedRangeWithTime,
+-        })
+         logic.actions.openDateToNow()
+         await expectLogic(logic).toMatchValues({
+             isVisible: true,
+@@ -58,86 +53,6 @@ describe('dateFilterLogic', () => {
+         })
+     })
+ 
+-    it('isFixedRangeWithTime is true when both dates have time precision', async () => {
+-        props = {
+-            key: 'test-time-precision',
+-            onChange,
+-            dateFrom: '2024-01-15T10:30:00',
+-            dateTo: '2024-01-16T14:45:00',
+-            dateOptions: dateMapping,
+-            isDateFormatted: false,
+-        }
+-        const withTimePrecision = dateFilterLogic(props)
+-        withTimePrecision.mount()
+-
+-        await expectLogic(withTimePrecision).toMatchValues({
+-            isFixedRange: true,
+-            isFixedRangeWithTime: true,
+-            dateFromHasTimePrecision: true,
+-            dateToHasTimePrecision: true,
+-        })
+-    })
+-
+-    it('isFixedRangeWithTime is false when dates have no time precision', async () => {
+-        props = {
+-            key: 'test-no-time-precision',
+-            onChange,
+-            dateFrom: '2024-01-15',
+-            dateTo: '2024-01-16',
+-            dateOptions: dateMapping,
+-            isDateFormatted: false,
+-        }
+-        const withoutTimePrecision = dateFilterLogic(props)
+-        withoutTimePrecision.mount()
+-
+-        await expectLogic(withoutTimePrecision).toMatchValues({
+-            isFixedRange: true,
+-            isFixedRangeWithTime: false,
+-            dateFromHasTimePrecision: false,
+-            dateToHasTimePrecision: false,
+-        })
+-    })
+-
+-    it('isFixedRangeWithTime is true when only dateFrom has time precision', async () => {
+-        props = {
+-            key: 'test-from-time-precision',
+-            onChange,
+-            dateFrom: '2024-01-15T10:30:00',
+-            dateTo: '2024-01-16',
+-            dateOptions: dateMapping,
+-            isDateFormatted: false,
+-        }
+-        const withFromTimePrecision = dateFilterLogic(props)
+-        withFromTimePrecision.mount()
+-
+-        await expectLogic(withFromTimePrecision).toMatchValues({
+-            isFixedRange: true,
+-            isFixedRangeWithTime: true,
+-            dateFromHasTimePrecision: true,
+-            dateToHasTimePrecision: false,
+-        })
+-    })
+-
+-    it('isFixedRangeWithTime is true when only dateTo has time precision', async () => {
+-        props = {
+-            key: 'test-to-time-precision',
+-            onChange,
+-            dateFrom: '2024-01-15',
+-            dateTo: '2024-01-16T14:45:00',
+-            dateOptions: dateMapping,
+-            isDateFormatted: false,
+-        }
+-        const withToTimePrecision = dateFilterLogic(props)
+-        withToTimePrecision.mount()
+-
+-        await expectLogic(withToTimePrecision).toMatchValues({
+-            isFixedRange: true,
+-            isFixedRangeWithTime: true,
+-            dateFromHasTimePrecision: false,
+-            dateToHasTimePrecision: true,
+-        })
+-    })
+-
+     it('can set the date range', async () => {
+         props = {
+             key: 'test',
+@@ -191,4 +106,4 @@ describe('dateFilterLogic', () => {
+         })
+         expect(onChange).not.toHaveBeenCalled()
+     })
+-})
++})
+\ No newline at end of file
+diff --git a/frontend/src/lib/components/DateFilter/dateFilterLogic.ts b/frontend/src/lib/components/DateFilter/dateFilterLogic.ts
+index a669ec4..4818688 100644
+--- a/frontend/src/lib/components/DateFilter/dateFilterLogic.ts
++++ b/frontend/src/lib/components/DateFilter/dateFilterLogic.ts
+@@ -28,7 +28,6 @@ export const dateFilterLogic = kea<dateFilterLogicType>([
+     actions({
+         open: true,
+         openFixedRange: true,
+-        openFixedRangeWithTime: true,
+         openDateToNow: true,
+         openFixedDate: true,
+         close: true,
+@@ -54,7 +53,6 @@ export const dateFilterLogic = kea<dateFilterLogicType>([
+             {
+                 open: () => DateFilterView.QuickList,
+                 openFixedRange: () => DateFilterView.FixedRange,
+-                openFixedRangeWithTime: () => DateFilterView.FixedRangeWithTime,
+                 openDateToNow: () => DateFilterView.DateToNow,
+                 openFixedDate: () => DateFilterView.FixedDate,
+             },
+@@ -64,7 +62,6 @@ export const dateFilterLogic = kea<dateFilterLogicType>([
+             {
+                 open: () => true,
+                 openFixedRange: () => true,
+-                openFixedRangeWithTime: () => true,
+                 openDateToNow: () => true,
+                 openFixedDate: () => true,
+                 setDate: (_, { keepPopoverOpen }) => keepPopoverOpen,
+@@ -112,11 +109,6 @@ export const dateFilterLogic = kea<dateFilterLogicType>([
+             (s) => [s.dateFrom, s.dateTo],
+             (dateFrom, dateTo) => !!(dateFrom && dateTo && dayjs(dateFrom).isValid() && dayjs(dateTo).isValid()),
+         ],
+-        isFixedRangeWithTime: [
+-            (s) => [s.isFixedRange, s.dateFromHasTimePrecision, s.dateToHasTimePrecision],
+-            (isFixedRange, dateFromHasTimePrecision, dateToHasTimePrecision) =>
+-                isFixedRange && (dateFromHasTimePrecision || dateToHasTimePrecision),
+-        ],
+         isDateToNow: [
+             (s) => [s.dateFrom, s.dateTo, (_, p) => p.isFixedDateMode],
+             (dateFrom, dateTo, isFixedDateMode) =>
+@@ -221,4 +213,4 @@ export const dateFilterLogic = kea<dateFilterLogicType>([
+             props.onChange?.(values.dateFrom, values.dateTo, explicitDate)
+         },
+     })),
+-])
++])
+\ No newline at end of file
+diff --git a/frontend/src/lib/components/DateFilter/types.ts b/frontend/src/lib/components/DateFilter/types.ts
+index 8ae0f75..513e2c3 100644
+--- a/frontend/src/lib/components/DateFilter/types.ts
++++ b/frontend/src/lib/components/DateFilter/types.ts
+@@ -6,7 +6,6 @@ export enum DateFilterView {
+     QuickList = 'QuickList',
+     DateToNow = 'DateToNow',
+     FixedRange = 'FixedRange',
+-    FixedRangeWithTime = 'FixedRangeWithTime',
+     FixedDate = 'FixedDate',
+ }
+ 
+@@ -20,11 +19,10 @@ export type DateFilterLogicProps = {
+     isFixedDateMode?: boolean
+     placeholder?: string
+     allowTimePrecision?: boolean
+-    allowFixedRangeWithTime?: boolean
+     explicitDate?: boolean
+ }
+ 
+ export const CUSTOM_OPTION_KEY = 'Custom'
+ export const SELECT_FIXED_VALUE_PLACEHOLDER = 'Select a value'
+ export const NO_OVERRIDE_RANGE_PLACEHOLDER = 'No date range override'
+-export const CUSTOM_OPTION_DESCRIPTION = 'Use the original date ranges of insights'
++export const CUSTOM_OPTION_DESCRIPTION = 'Use the original date ranges of insights'
+\ No newline at end of file
+diff --git a/products/logs/frontend/filters/DateRangeFilter.tsx b/products/logs/frontend/filters/DateRangeFilter.tsx
+index fe263d3..6c035a6 100644
+--- a/products/logs/frontend/filters/DateRangeFilter.tsx
++++ b/products/logs/frontend/filters/DateRangeFilter.tsx
+@@ -67,8 +67,7 @@ export const DateRangeFilter = (): JSX.Element => {
+                 setDateRange({ date_from: changedDateFrom, date_to: changedDateTo })
+             }}
+             allowTimePrecision
+-            allowFixedRangeWithTime
+             allowedRollingDateOptions={['minutes', 'hours', 'days', 'weeks', 'months']}
+         />
+     )
+-}
++}
+\ No newline at end of file

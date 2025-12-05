@@ -1,0 +1,11 @@
+[
+  {
+    "instance_id": "colinhacks__zod.main.5473",
+    "repo": "colinhacks__zod.main",
+    "base_commit": "a43295dd4c3b8a425f9ea93d55790a1347368993",
+    "patch": "diff --git a/packages/zod/src/v4/core/util.ts b/packages/zod/src/v4/core/util.ts\nindex b067a34dbd..948a02c8b2 100644\n--- a/packages/zod/src/v4/core/util.ts\n+++ b/packages/zod/src/v4/core/util.ts\n@@ -199,7 +199,7 @@ export function assertNotEqual<A, B>(val: AssertNotEqual<A, B>): AssertNotEqual<\n export function assertIs<T>(_arg: T): void {}\n \n export function assertNever(_x: never): never {\n-  throw new Error(\"Unexpected value in exhaustive check\");\n+  throw new Error();\n }\n export function assert<T>(_: any): asserts _ is T {}\n \n",
+    "problem_statement": "The assertNever function should throw an error with a descriptive message when called with an unexpected value during exhaustive type checking. Currently it throws a generic Error() without any message, making debugging difficult.",
+    "FAIL_TO_PASS": [],
+    "PASS_TO_PASS": []
+  }
+]

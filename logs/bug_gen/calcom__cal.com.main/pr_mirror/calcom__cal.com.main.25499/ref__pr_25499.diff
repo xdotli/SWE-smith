@@ -1,0 +1,238 @@
+diff --git a/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx b/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
+index 28042573367e66..be21fbd2390510 100644
+--- a/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
++++ b/apps/web/components/apps/routing-forms/TestFormDialog.test.tsx
+@@ -452,7 +452,8 @@ describe("TestFormDialog", () => {
+       fireEvent.click(screen.getByText("submit"));
+ 
+       // Verify the URL shows the substituted value, not the variable
+-      expect(screen.getByTestId("test-routing-result")).toHaveTextContent("/team/sales-team/meeting");
++      expect(screen.getByTestId("test-routing-result")).toHaveTextContent("/team/Sales%20Team/meeting");
++      expect(screen.getByTestId("test-routing-result")).not.toHaveTextContent("/team/sales-team/meeting");
+       expect(screen.getByTestId("test-routing-result")).not.toHaveTextContent("{name}");
+     });
+ 
+diff --git a/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts b/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
+index 950d546f862c98..7d627943ac7e92 100644
+--- a/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
++++ b/packages/app-store/routing-forms/__tests__/getEventTypeRedirectUrl.test.ts
+@@ -91,4 +91,49 @@ describe("getAbsoluteEventTypeRedirectUrl", () => {
+       })
+     ).toThrow("eventTypeRedirectUrl must have username or teamSlug");
+   });
++
++  it("should use '&' separator when redirect URL already contains query parameters", () => {
++    const result = getAbsoluteEventTypeRedirectUrl({
++      ...defaultParams,
++      eventTypeRedirectUrl: "user/event?existing=param",
++      allURLSearchParams: new URLSearchParams("foo=bar"),
++    });
++    expect(result).toBe("https://user.cal.com/user/event?existing=param&foo=bar");
++  });
++
++  it("should merge with '&' when redirect URL already contains multiple query parameters", () => {
++    const result = getAbsoluteEventTypeRedirectUrl({
++      ...defaultParams,
++      eventTypeRedirectUrl: "user/event?existing1=param1&existing2=param2",
++      allURLSearchParams: new URLSearchParams("foo=bar"),
++    });
++    expect(result).toBe("https://user.cal.com/user/event?existing1=param1&existing2=param2&foo=bar");
++  });
++
++  it("should merge with '&' when no URL search params are present", () => {
++    const result = getAbsoluteEventTypeRedirectUrl({
++      ...defaultParams,
++      eventTypeRedirectUrl: "user/event?existing=param",
++      allURLSearchParams: new URLSearchParams(),
++    });
++    expect(result).toBe("https://user.cal.com/user/event?existing=param&");
++  });
++
++  it("should merge when redirect URL ends with '/'", () => {
++    const result = getAbsoluteEventTypeRedirectUrl({
++      ...defaultParams,
++      eventTypeRedirectUrl: "user/event/",
++      allURLSearchParams: new URLSearchParams("foo=bar"),
++    });
++    expect(result).toBe("https://user.cal.com/user/event/?foo=bar");
++  });
++
++  it("should be able to merge when redirect URL ends with '?'", () => {
++    const result = getAbsoluteEventTypeRedirectUrl({
++      ...defaultParams,
++      eventTypeRedirectUrl: "user/event?",
++      allURLSearchParams: new URLSearchParams("foo=bar"),
++    });
++    expect(result).toBe("https://user.cal.com/user/event?&foo=bar");
++  });
+ });
+diff --git a/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts b/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
+index 5719553530a2ac..69f2f171761484 100644
+--- a/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
++++ b/packages/app-store/routing-forms/getEventTypeRedirectUrl.ts
+@@ -86,7 +86,8 @@ export function getAbsoluteEventTypeRedirectUrl({
+   if (teamSlugInRedirectUrl && form.nonOrgTeamslug) {
+     const isEventTypeRedirectToOldTeamSlug = teamSlugInRedirectUrl === form.nonOrgTeamslug;
+     if (isEventTypeRedirectToOldTeamSlug) {
+-      return `${WEBAPP_URL}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
++      const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
++      return `${WEBAPP_URL}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
+     }
+   }
+ 
+@@ -95,7 +96,8 @@ export function getAbsoluteEventTypeRedirectUrl({
+     const isEventTypeRedirectToOldUser =
+       !hasSameProfileUsername && usernameInRedirectUrl === form.nonOrgUsername;
+     if (isEventTypeRedirectToOldUser) {
+-      return `${WEBAPP_URL}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
++      const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
++      return `${WEBAPP_URL}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
+     }
+   }
+ 
+@@ -106,7 +108,8 @@ export function getAbsoluteEventTypeRedirectUrl({
+     ? form.teamOrigin
+     : form.userOrigin;
+ 
+-  return `${origin}/${eventTypeRedirectUrl}?${allURLSearchParams}`;
++  const joiner = eventTypeRedirectUrl.includes("?") ? "&" : "?";
++  return `${origin}/${eventTypeRedirectUrl}${joiner}${allURLSearchParams}`;
+ }
+ 
+ export function getAbsoluteEventTypeRedirectUrlWithEmbedSupport(
+diff --git a/packages/app-store/routing-forms/lib/substituteVariables.test.ts b/packages/app-store/routing-forms/lib/substituteVariables.test.ts
+index c4caff09bea427..b944a652228bd0 100644
+--- a/packages/app-store/routing-forms/lib/substituteVariables.test.ts
++++ b/packages/app-store/routing-forms/lib/substituteVariables.test.ts
+@@ -60,7 +60,7 @@ describe("substituteVariables", () => {
+ 
+     const result = substituteVariables(routeValue, response, fields);
+ 
+-    expect(result).toBe("/team/sales-team/meeting");
++    expect(result).toBe("/team/Sales%20Team/meeting");
+     expect(result).not.toBe("/team/sales-123/meeting");
+     expect(result).not.toBe("/team/department/meeting");
+   });
+@@ -78,10 +78,10 @@ describe("substituteVariables", () => {
+ 
+     const result = substituteVariables(routeValue, response, fields);
+ 
+-    expect(result).toBe("/engineering/backend-team/book");
++    expect(result).toBe("/Engineering/Backend%20Team/book");
+   });
+ 
+-  it("should handle special characters in labels by slugifying them", () => {
++  it("should handle special characters in labels by encoding them", () => {
+     const fields = [
+       createSelectField("field1", "department", "Department", [{ id: "hr_dept", label: "HR & Recruitment" }]),
+     ];
+@@ -89,7 +89,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "hr_dept", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/meeting/hr-recruitment");
++    expect(result).toBe("/meeting/HR%20%26%20Recruitment");
+   });
+ 
+   it("should handle case-insensitive variable matching", () => {
+@@ -102,7 +102,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "support-001", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/team/customer-support/schedule");
++    expect(result).toBe("/team/Customer%20Support/schedule");
+   });
+ 
+   it("should not substitute variables that don't have matching fields", () => {
+@@ -125,7 +125,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field3", ["high", "urgent"], "Priority Level");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/priorities/high-urgent");
++    expect(result).toBe("/priorities/High%2CUrgent");
+   });
+ 
+   it("should handle numeric labels", () => {
+@@ -136,7 +136,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "room-id-123", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/room/room-404");
++    expect(result).toBe("/room/Room%20404");
+   });
+ 
+   it("should not modify the URL if no variables are present", () => {
+@@ -158,7 +158,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "marketing-789", "Department");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/event/marketing-pr?type=meeting&priority=high");
++    expect(result).toBe("/event/Marketing%20%26%20PR?type=meeting&priority=high");
+   });
+ 
+   it("should substitute text field values directly", () => {
+@@ -167,7 +167,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "John Doe", "Username");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/user/john-doe/profile");
++    expect(result).toBe("/user/John%20Doe/profile");
+   });
+ 
+   it("should handle number field values", () => {
+@@ -195,7 +195,7 @@ describe("substituteVariables", () => {
+     };
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/tower-a/floor/404/engineering");
++    expect(result).toBe("/Tower%20A/floor/404/Engineering");
+   });
+ 
+   it("should handle text fields with special characters", () => {
+@@ -204,7 +204,7 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "Cal.com Platform & API", "Project Name");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/project/cal.com-platform-api/board");
++    expect(result).toBe("/project/Cal.com%20Platform%20%26%20API/board");
+   });
+ 
+   it("should handle empty text field values", () => {
+@@ -224,6 +224,6 @@ describe("substituteVariables", () => {
+     const response = createFormResponse("field1", "Bug Report Summary", "Description");
+ 
+     const result = substituteVariables(routeValue, response, fields);
+-    expect(result).toBe("/ticket/bug-report-summary");
++    expect(result).toBe("/ticket/Bug%20Report%20Summary");
+   });
+ });
+diff --git a/packages/app-store/routing-forms/lib/substituteVariables.ts b/packages/app-store/routing-forms/lib/substituteVariables.ts
+index 580755b851b60e..8f2857fddfe420 100644
+--- a/packages/app-store/routing-forms/lib/substituteVariables.ts
++++ b/packages/app-store/routing-forms/lib/substituteVariables.ts
+@@ -1,5 +1,3 @@
+-import slugify from "@calcom/lib/slugify";
+-
+ import type { FormResponse, NonRouterRoute, Field } from "../types/types";
+ import getFieldIdentifier from "./getFieldIdentifier";
+ import { getHumanReadableFieldResponseValue } from "./responseData/getHumanReadableFieldResponseValue";
+@@ -18,7 +16,7 @@ export const substituteVariables = (
+   response: FormResponse,
+   fields: Field[]
+ ) => {
+-  const regex = /\{([^\}]+)\}/g;
++  const regex = /\{([^}]+)\}/g;
+   const variables: string[] = routeValue.match(regex)?.map((match: string) => match.slice(1, -1)) || [];
+ 
+   let eventTypeUrl = routeValue;
+@@ -35,8 +33,8 @@ export const substituteVariables = (
+           field,
+           value: response[key].value,
+         });
+-        // ['abc', 'def'] ----toString---> 'abc,def' ----slugify---> 'abc-def'
+-        const valueToSubstitute = slugify(humanReadableValues.toString());
++        // ['abc', 'def'] ----toString---> 'abc,def' ----encode---> 'abc%2Cdef'
++        const valueToSubstitute = encodeURIComponent(humanReadableValues.toString());
+         eventTypeUrl = eventTypeUrl.replace(`{${variable}}`, valueToSubstitute);
+       }
+     }

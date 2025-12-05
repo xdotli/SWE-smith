@@ -1,0 +1,441 @@
+diff --git a/plugin-server/src/ingestion/ingestion-e2e.test.ts b/plugin-server/src/ingestion/ingestion-e2e.test.ts
+index 0fd07003fc8d3..453bd3534c20e 100644
+--- a/plugin-server/src/ingestion/ingestion-e2e.test.ts
++++ b/plugin-server/src/ingestion/ingestion-e2e.test.ts
+@@ -784,6 +784,84 @@ describe('Event Pipeline E2E tests', () => {
+         }
+     )
+ 
++    testWithTeamIngester(
++        'allowed geoip properties ($geoip_country_name, $geoip_city_name) trigger person updates alongside blocked geoip properties',
++        {},
++        async (ingester, hub, team) => {
++            const distinctId = new UUIDT().toString()
++            const timestamp = DateTime.now().toMillis()
++
++            // When $geoip_country_name or $geoip_city_name changes, all geoip properties in the batch
++            // should be updated, even the normally-blocked ones like $geoip_latitude
++            await ingester.handleKafkaBatch(
++                createKafkaMessages([
++                    // Event 1: Create person with initial geoip properties
++                    new EventBuilder(team, distinctId)
++                        .withEvent('$pageview')
++                        .withProperties({
++                            $set: {
++                                $geoip_country_name: 'Canada',
++                                $geoip_city_name: 'Toronto',
++                                $geoip_latitude: 43.6532,
++                                $geoip_longitude: -79.3832,
++                            },
++                        })
++                        .withTimestamp(timestamp)
++                        .build(),
++                    // Event 2: Update geoip properties including allowed ones (country/city)
++                    // Since $geoip_country_name changes, all geoip properties should be updated
++                    new EventBuilder(team, distinctId)
++                        .withEvent('$pageview')
++                        .withProperties({
++                            $set: {
++                                $geoip_country_name: 'United States',
++                                $geoip_city_name: 'San Francisco',
++                                $geoip_latitude: 37.7749,
++                                $geoip_longitude: -122.4194,
++                            },
++                        })
++                        .withTimestamp(timestamp + 1)
++                        .build(),
++                ])
++            )
++
++            await waitForExpect(async () => {
++                const events = await fetchEvents(hub, team.id)
++                expect(events.length).toEqual(2)
++
++                // Event 0 (first pageview): Should have initial geoip properties
++                expect(events[0].person_properties).toEqual({
++                    $creator_event_uuid: events[0].uuid,
++                    $geoip_country_name: 'Canada',
++                    $geoip_city_name: 'Toronto',
++                    $geoip_latitude: 43.6532,
++                    $geoip_longitude: -79.3832,
++                })
++
++                // Event 1 (second pageview): Should have UPDATED geoip properties
++                // Because $geoip_country_name is an allowed property, all geoip properties get updated
++                expect(events[1].person_properties).toEqual({
++                    $creator_event_uuid: events[0].uuid,
++                    $geoip_country_name: 'United States',
++                    $geoip_city_name: 'San Francisco',
++                    $geoip_latitude: 37.7749,
++                    $geoip_longitude: -122.4194,
++                })
++
++                // Verify the final state of the person in the database reflects the updates
++                const person = await hub.personRepository.fetchPerson(team.id, distinctId)
++                expect(person).toBeDefined()
++                expect(person!.properties).toEqual({
++                    $creator_event_uuid: events[0].uuid,
++                    $geoip_country_name: 'United States',
++                    $geoip_city_name: 'San Francisco',
++                    $geoip_latitude: 37.7749,
++                    $geoip_longitude: -122.4194,
++                })
++            })
++        }
++    )
++
+     testWithTeamIngester('can handle events with $process_person_profile=false', {}, async (ingester, hub, team) => {
+         const distinctId = new UUIDT().toString()
+         const timestamp = DateTime.now().toMillis()
+diff --git a/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.test.ts b/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.test.ts
+index 4c50a7768ae42..c4e46a8913bff 100644
+--- a/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.test.ts
++++ b/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.test.ts
+@@ -1594,15 +1594,16 @@ describe('BatchWritingPersonStore', () => {
+             expect(mockPersonPropertyKeyUpdateCounter.labels).not.toHaveBeenCalled()
+         })
+ 
+-        it('should skip database write when only $geoip_* properties are updated', async () => {
++        it('should skip database write when only blocked $geoip_* properties are updated', async () => {
+             const mockRepo = createMockRepository()
+             const testPersonStore = new BatchWritingPersonsStore(mockRepo, db.kafkaProducer)
+             const personStoreForBatch = testPersonStore.forBatch() as BatchWritingPersonsStoreForBatch
+ 
+-            // Update person with only geoip properties (existing properties being updated)
++            // Update person with only blocked geoip properties (existing properties being updated)
++            // Note: $geoip_country_name and $geoip_city_name are allowed, but $geoip_latitude is blocked
+             await personStoreForBatch.updatePersonWithPropertiesDiffForUpdate(
+-                { ...person, properties: { $geoip_city_name: 'New York', $geoip_country_code: 'US' } },
+-                { $geoip_city_name: 'San Francisco', $geoip_country_code: 'US' },
++                { ...person, properties: { $geoip_latitude: 40.7128, $geoip_longitude: -74.006 } },
++                { $geoip_latitude: 37.7749, $geoip_longitude: -74.006 },
+                 [],
+                 {},
+                 'test'
+@@ -1622,7 +1623,7 @@ describe('BatchWritingPersonStore', () => {
+             )
+             expect(mockPersonProfileBatchIgnoredPropertiesCounter.labels).toHaveBeenCalledTimes(1)
+             expect(mockPersonProfileBatchIgnoredPropertiesCounter.labels).toHaveBeenCalledWith({
+-                property: '$geoip_city_name',
++                property: '$geoip_latitude',
+             })
+             // personPropertyKeyUpdateCounter should NOT be called for 'ignored' outcomes
+             expect(mockPersonPropertyKeyUpdateCounter.labels).not.toHaveBeenCalled()
+@@ -1781,7 +1782,7 @@ describe('BatchWritingPersonStore', () => {
+                 properties: {
+                     $browser: 'Firefox',
+                     $app_build: '100',
+-                    $geoip_city_name: 'New York',
++                    $geoip_latitude: 40.7128,
+                 },
+             }
+ 
+@@ -1803,10 +1804,10 @@ describe('BatchWritingPersonStore', () => {
+                 'test'
+             )
+ 
+-            // Event 3: Update geoip
++            // Event 3: Update blocked geoip property (latitude is blocked, city_name is allowed)
+             await personStoreForBatch.updatePersonWithPropertiesDiffForUpdate(
+                 personWithFiltered,
+-                { $geoip_city_name: 'Los Angeles' },
++                { $geoip_latitude: 37.7749 },
+                 [],
+                 {},
+                 'test'
+@@ -1832,12 +1833,68 @@ describe('BatchWritingPersonStore', () => {
+                 property: '$app_build',
+             })
+             expect(mockPersonProfileBatchIgnoredPropertiesCounter.labels).toHaveBeenCalledWith({
+-                property: '$geoip_city_name',
++                property: '$geoip_latitude',
+             })
+             // personPropertyKeyUpdateCounter should NOT be called for 'ignored' outcomes
+             expect(mockPersonPropertyKeyUpdateCounter.labels).not.toHaveBeenCalled()
+         })
+ 
++        it('should write to database when allowed geoip property ($geoip_country_name) is updated alongside blocked ones', async () => {
++            const mockRepo = createMockRepository()
++            const testPersonStore = new BatchWritingPersonsStore(mockRepo, db.kafkaProducer)
++            const personStoreForBatch = testPersonStore.forBatch() as BatchWritingPersonsStoreForBatch
++
++            // Person with existing geoip properties
++            const personWithGeoip = {
++                ...person,
++                properties: {
++                    $geoip_country_name: 'Canada',
++                    $geoip_city_name: 'Toronto',
++                    $geoip_latitude: 43.6532,
++                    $geoip_longitude: -79.3832,
++                },
++            }
++
++            // Update all geoip properties including allowed ones (country_name, city_name)
++            // Since $geoip_country_name is allowed, all properties should be updated
++            await personStoreForBatch.updatePersonWithPropertiesDiffForUpdate(
++                personWithGeoip,
++                {
++                    $geoip_country_name: 'United States',
++                    $geoip_city_name: 'San Francisco',
++                    $geoip_latitude: 37.7749,
++                    $geoip_longitude: -122.4194,
++                },
++                [],
++                {},
++                'test'
++            )
++
++            // Flush SHOULD write to database because $geoip_country_name is allowed
++            await personStoreForBatch.flush()
++
++            expect(mockRepo.updatePerson).toHaveBeenCalledTimes(1)
++            expect(mockRepo.updatePerson).toHaveBeenCalledWith(
++                expect.objectContaining({
++                    properties: {
++                        $geoip_country_name: 'United States',
++                        $geoip_city_name: 'San Francisco',
++                        $geoip_latitude: 37.7749,
++                        $geoip_longitude: -122.4194,
++                    },
++                }),
++                expect.anything(),
++                'updatePersonNoAssert'
++            )
++
++            // Verify metrics - should be 'changed' since allowed geoip property triggers write
++            expect(mockPersonProfileBatchUpdateOutcomeCounter.labels).toHaveBeenCalledTimes(1)
++            expect(mockPersonProfileBatchUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'changed' })
++            expect(mockPersonProfileBatchIgnoredPropertiesCounter.labels).not.toHaveBeenCalled()
++            // personPropertyKeyUpdateCounter uses getMetricKey which returns 'geoIP' for all $geoip_* properties
++            expect(mockPersonPropertyKeyUpdateCounter.labels).toHaveBeenCalledWith({ key: 'geoIP' })
++        })
++
+         it('integration: filtered properties then non-filtered property should trigger database write', async () => {
+             const mockRepo = createMockRepository()
+             const testPersonStore = new BatchWritingPersonsStore(mockRepo, db.kafkaProducer)
+diff --git a/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.ts b/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.ts
+index b7573fbf12c31..950dcc22aee0a 100644
+--- a/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.ts
++++ b/plugin-server/src/worker/ingestion/persons/batch-writing-person-store.ts
+@@ -36,8 +36,7 @@ import {
+     personWriteMethodAttemptCounter,
+     totalPersonUpdateLatencyPerBatchHistogram,
+ } from './metrics'
+-import { eventToPersonProperties } from './person-property-utils'
+-import { getMetricKey } from './person-update'
++import { getMetricKey, isFilteredPersonPropertyKey } from './person-update'
+ import { PersonUpdate, fromInternalPerson, toInternalPerson } from './person-update-batch'
+ import { PersonsStore } from './persons-store'
+ import { FlushResult, PersonsStoreForBatch } from './persons-store-for-batch'
+@@ -207,7 +206,7 @@ export class BatchWritingPersonsStoreForBatch implements PersonsStoreForBatch, B
+                 return true
+             }
+ 
+-            const isFiltered = eventToPersonProperties.has(key) || key.startsWith('$geoip_')
++            const isFiltered = isFilteredPersonPropertyKey(key)
+             if (isFiltered) {
+                 ignoredProperties.push(key)
+                 return false
+diff --git a/plugin-server/src/worker/ingestion/persons/person-update.test.ts b/plugin-server/src/worker/ingestion/persons/person-update.test.ts
+index 3e71704a024fa..c55c6e1cd95e3 100644
+--- a/plugin-server/src/worker/ingestion/persons/person-update.test.ts
++++ b/plugin-server/src/worker/ingestion/persons/person-update.test.ts
+@@ -154,7 +154,49 @@ describe('person-update', () => {
+                 }
+             )
+ 
+-            it('should accept $geoip_* property updates at event level (filtering happens at batch level)', () => {
++            it('should accept blocked $geoip_* property updates at event level (filtering happens at batch level)', () => {
++                const event: PluginEvent = {
++                    event: 'pageview',
++                    properties: {
++                        $set: { $geoip_latitude: 37.7749 },
++                    },
++                } as any
++
++                const personProperties = { $geoip_latitude: 40.7128 }
++
++                const result = computeEventPropertyUpdates(event, personProperties)
++
++                expect(result.hasChanges).toBe(true)
++                expect(result.toSet).toEqual({ $geoip_latitude: 37.7749 })
++                expect(result.shouldForceUpdate).toBe(false)
++                // At event level, blocked geoip properties would be marked as ignored
++                expect(mockPersonProfileUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'ignored' })
++                expect(mockPersonProfileIgnoredPropertiesCounter.labels).toHaveBeenCalledWith({
++                    property: '$geoip_latitude',
++                })
++            })
++
++            it('should trigger update when $geoip_country_name changes (allowed geoip property)', () => {
++                const event: PluginEvent = {
++                    event: 'pageview',
++                    properties: {
++                        $set: { $geoip_country_name: 'United States' },
++                    },
++                } as any
++
++                const personProperties = { $geoip_country_name: 'Canada' }
++
++                const result = computeEventPropertyUpdates(event, personProperties)
++
++                expect(result.hasChanges).toBe(true)
++                expect(result.toSet).toEqual({ $geoip_country_name: 'United States' })
++                expect(result.shouldForceUpdate).toBe(false)
++                // $geoip_country_name is allowed so should be marked as changed
++                expect(mockPersonProfileUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'changed' })
++                expect(mockPersonProfileIgnoredPropertiesCounter.labels).not.toHaveBeenCalled()
++            })
++
++            it('should trigger update when $geoip_city_name changes (allowed geoip property)', () => {
+                 const event: PluginEvent = {
+                     event: 'pageview',
+                     properties: {
+@@ -169,11 +211,43 @@ describe('person-update', () => {
+                 expect(result.hasChanges).toBe(true)
+                 expect(result.toSet).toEqual({ $geoip_city_name: 'San Francisco' })
+                 expect(result.shouldForceUpdate).toBe(false)
+-                // At event level, geoip properties would be marked as ignored
+-                expect(mockPersonProfileUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'ignored' })
+-                expect(mockPersonProfileIgnoredPropertiesCounter.labels).toHaveBeenCalledWith({
+-                    property: '$geoip_city_name',
++                // $geoip_city_name is allowed so should be marked as changed
++                expect(mockPersonProfileUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'changed' })
++                expect(mockPersonProfileIgnoredPropertiesCounter.labels).not.toHaveBeenCalled()
++            })
++
++            it('should update all geoip properties when allowed property ($geoip_country_name) changes alongside blocked ones', () => {
++                const event: PluginEvent = {
++                    event: 'pageview',
++                    properties: {
++                        $set: {
++                            $geoip_country_name: 'United States',
++                            $geoip_latitude: 37.7749,
++                            $geoip_longitude: -122.4194,
++                            $geoip_postal_code: '94102',
++                        },
++                    },
++                } as any
++
++                const personProperties = {
++                    $geoip_country_name: 'Canada',
++                    $geoip_latitude: 43.6532,
++                    $geoip_longitude: -79.3832,
++                    $geoip_postal_code: 'M5V',
++                }
++
++                const result = computeEventPropertyUpdates(event, personProperties)
++
++                expect(result.hasChanges).toBe(true)
++                expect(result.toSet).toEqual({
++                    $geoip_country_name: 'United States',
++                    $geoip_latitude: 37.7749,
++                    $geoip_longitude: -122.4194,
++                    $geoip_postal_code: '94102',
+                 })
++                expect(result.shouldForceUpdate).toBe(false)
++                // Since $geoip_country_name is allowed, the update is marked as changed (not ignored)
++                expect(mockPersonProfileUpdateOutcomeCounter.labels).toHaveBeenCalledWith({ outcome: 'changed' })
+             })
+ 
+             it('should accept eventToPersonProperties even when mixed with unchanged custom properties', () => {
+diff --git a/plugin-server/src/worker/ingestion/persons/person-update.ts b/plugin-server/src/worker/ingestion/persons/person-update.ts
+index 8894149a95d0b..9b40787ff1928 100644
+--- a/plugin-server/src/worker/ingestion/persons/person-update.ts
++++ b/plugin-server/src/worker/ingestion/persons/person-update.ts
+@@ -19,6 +19,10 @@ export interface PropertyUpdates {
+ const NO_PERSON_UPDATE_EVENTS = new Set(['$exception', '$$heatmap'])
+ const PERSON_EVENTS = new Set(['$identify', '$create_alias', '$merge_dangerously', '$set'])
+ 
++// GeoIP properties that should still trigger person updates even when other geoip properties are blocked
++// These are commonly used for segmentation and are worth keeping up-to-date
++const ALLOWED_GEOIP_PROPERTIES = new Set(['$geoip_country_name', '$geoip_city_name'])
++
+ // For tracking what property keys cause us to update persons
+ // tracking all properties we add from the event, 'geoip' for '$geoip_*' or '$initial_geoip_*' and 'other' for anything outside of those
+ export function getMetricKey(key: string): string {
+@@ -76,22 +80,32 @@ export function computeEventPropertyUpdates(
+         }
+     })
+ 
++    // First pass: detect if any property would trigger an update
++    // If so, all changed properties in this $set should be updated together
++    let anyPropertyTriggersUpdate = false
++    const changedProperties: Array<[string, unknown]> = []
++
+     Object.entries(properties).forEach(([key, value]) => {
+         if (personProperties[key] !== value) {
++            changedProperties.push([key, value])
+             const isNewProperty = typeof personProperties[key] === 'undefined'
+-            const shouldUpdate = isNewProperty || shouldUpdatePersonIfOnlyChange(event, key, updateAllProperties)
+-
+-            if (shouldUpdate) {
+-                hasChanges = true
+-                hasNonFilteredChanges = true
+-            } else {
+-                hasChanges = true
+-                ignoredProperties.push(key)
++            if (isNewProperty || shouldUpdatePersonIfOnlyChange(event, key, updateAllProperties)) {
++                anyPropertyTriggersUpdate = true
+             }
+-            toSet[key] = value
+         }
+     })
+ 
++    // Second pass: apply changes - if any property triggers update, all do
++    changedProperties.forEach(([key, value]) => {
++        hasChanges = true
++        if (anyPropertyTriggersUpdate) {
++            hasNonFilteredChanges = true
++        } else {
++            ignoredProperties.push(key)
++        }
++        toSet[key] = value
++    })
++
+     unsetProperties.forEach((propertyKey) => {
+         if (propertyKey in personProperties) {
+             if (typeof propertyKey === 'string') {
+@@ -159,6 +173,27 @@ export function applyEventPropertyUpdates(
+     return [updatedPerson, updated]
+ }
+ 
++/**
++ * Determines if a property key should be filtered out from triggering person updates.
++ * These are properties that change frequently but aren't valuable enough to update the person record for.
++ *
++ * This is the single source of truth for property filtering logic, used by both:
++ * - Event-level processing (computeEventPropertyUpdates)
++ * - Batch-level processing (getPersonUpdateOutcome in batch-writing-person-store)
++ */
++export function isFilteredPersonPropertyKey(key: string): boolean {
++    // These are properties we add from the event and some change often, it's useless to update person always
++    if (eventToPersonProperties.has(key)) {
++        return true
++    }
++    // same as above, coming from GeoIP plugin
++    // but allow country and city updates as they're commonly used for segmentation
++    if (key.startsWith('$geoip_')) {
++        return !ALLOWED_GEOIP_PROPERTIES.has(key)
++    }
++    return false
++}
++
+ // Minimize useless person updates by not overriding properties if it's not a person event and we added from the event
+ // They will still show up for PoE as it's not removed from the event, we just don't update the person in PG anymore
+ function shouldUpdatePersonIfOnlyChange(event: PluginEvent, key: string, updateAllProperties: boolean): boolean {
+@@ -170,13 +205,5 @@ function shouldUpdatePersonIfOnlyChange(event: PluginEvent, key: string, updateA
+         // for person events always update everything
+         return true
+     }
+-    // These are properties we add from the event and some change often, it's useless to update person always
+-    if (eventToPersonProperties.has(key)) {
+-        return false
+-    }
+-    // same as above, coming from GeoIP plugin
+-    if (key.startsWith('$geoip_')) {
+-        return false
+-    }
+-    return true
++    return !isFilteredPersonPropertyKey(key)
+ }

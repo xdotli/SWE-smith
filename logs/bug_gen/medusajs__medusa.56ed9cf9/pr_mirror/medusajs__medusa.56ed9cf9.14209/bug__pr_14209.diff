@@ -1,0 +1,58 @@
+diff --git a/.changeset/shiny-hounds-learn.md b/.changeset/shiny-hounds-learn.md
+deleted file mode 100644
+index df370ca6..00000000
+--- a/.changeset/shiny-hounds-learn.md
++++ /dev/null
+@@ -1,5 +0,0 @@
+----
+-"@medusajs/file-s3": patch
+----
+-
+-URL-encode S3 object metadata and returned URL
+diff --git a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+index d2059006..73d7f50e 100644
+--- a/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
++++ b/packages/modules/providers/file-s3/integration-tests/__tests__/services.spec.ts
+@@ -1,5 +1,5 @@
+-import axios from "axios"
+ import fs from "fs/promises"
++import axios from "axios"
+ import { S3FileService } from "../../src/services/s3-file"
+ jest.setTimeout(100000)
+ 
+@@ -221,4 +221,4 @@ describe.skip("S3 File Plugin", () => {
+       { fileKey: cat2.key },
+     ])
+   })
+-})
++})
+\ No newline at end of file
+diff --git a/packages/modules/providers/file-s3/src/services/s3-file.ts b/packages/modules/providers/file-s3/src/services/s3-file.ts
+index f617a722..0f1de364 100644
+--- a/packages/modules/providers/file-s3/src/services/s3-file.ts
++++ b/packages/modules/providers/file-s3/src/services/s3-file.ts
+@@ -148,7 +148,7 @@ export class S3FileService extends AbstractFileProviderService {
+       // Note: We could potentially set the content disposition when uploading,
+       // but storing the original filename as metadata should suffice.
+       Metadata: {
+-        "original-filename": encodeURIComponent(file.filename),
++        "x-amz-meta-original-filename": file.filename,
+       },
+     })
+ 
+@@ -160,7 +160,7 @@ export class S3FileService extends AbstractFileProviderService {
+     }
+ 
+     return {
+-      url: `${this.config_.fileUrl}/${encodeURIComponent(fileKey)}`,
++      url: `${this.config_.fileUrl}/${fileKey}`,
+       key: fileKey,
+     }
+   }
+@@ -288,4 +288,4 @@ export class S3FileService extends AbstractFileProviderService {
+ 
+     return Buffer.from(await response.Body!.transformToByteArray())
+   }
+-}
++}
+\ No newline at end of file

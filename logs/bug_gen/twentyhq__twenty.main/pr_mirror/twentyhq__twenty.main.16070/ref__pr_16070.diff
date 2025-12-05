@@ -1,0 +1,198 @@
+diff --git a/packages/twenty-server/src/engine/core-modules/twenty-config/config-variables.ts b/packages/twenty-server/src/engine/core-modules/twenty-config/config-variables.ts
+index 8904189de5ee1..d72b44186a19f 100644
+--- a/packages/twenty-server/src/engine/core-modules/twenty-config/config-variables.ts
++++ b/packages/twenty-server/src/engine/core-modules/twenty-config/config-variables.ts
+@@ -975,7 +975,7 @@ export class ConfigVariables {
+     type: ConfigVariableType.NUMBER,
+   })
+   @CastToPositiveNumber()
+-  API_RATE_LIMITING_LONG_TTL_IN_MS = 60000;
++  API_RATE_LIMITING_LONG_TTL_IN_MS = 60_000;
+ 
+   @ConfigVariablesMetadata({
+     group: ConfigVariablesGroup.RATE_LIMITING,
+@@ -994,6 +994,42 @@ export class ConfigVariables {
+   })
+   GRAPHQL_MAX_COMPLEXITY = 2000;
+ 
++  @ConfigVariablesMetadata({
++    group: ConfigVariablesGroup.RATE_LIMITING,
++    description:
++      'Time-to-live for workspace-level invitations resending rate limiting in milliseconds',
++    type: ConfigVariableType.NUMBER,
++  })
++  @CastToPositiveNumber()
++  INVITATION_SENDING_BY_WORKSPACE_THROTTLE_TTL_IN_MS = 604_800_000; // 7 days
++
++  @ConfigVariablesMetadata({
++    group: ConfigVariablesGroup.RATE_LIMITING,
++    description:
++      'Maximum number of workspace-level invitations resending allowed in the rate limiting window',
++    type: ConfigVariableType.NUMBER,
++  })
++  @CastToPositiveNumber()
++  INVITATION_SENDING_BY_WORKSPACE_THROTTLE_LIMIT = 500;
++
++  @ConfigVariablesMetadata({
++    group: ConfigVariablesGroup.RATE_LIMITING,
++    description:
++      'Time-to-live for email-level invitations sending rate limiting in milliseconds',
++    type: ConfigVariableType.NUMBER,
++  })
++  @CastToPositiveNumber()
++  INVITATION_SENDING_BY_EMAIL_THROTTLE_TTL_IN_MS = 604_800_000; // 7 days
++
++  @ConfigVariablesMetadata({
++    group: ConfigVariablesGroup.RATE_LIMITING,
++    description:
++      'Maximum number of email-level invitations sending allowed in the rate limiting window',
++    type: ConfigVariableType.NUMBER,
++  })
++  @CastToPositiveNumber()
++  INVITATION_SENDING_BY_EMAIL_THROTTLE_LIMIT = 10;
++
+   @ConfigVariablesMetadata({
+     group: ConfigVariablesGroup.SSL,
+     description: 'Path to the SSL key for enabling HTTPS in local development',
+diff --git a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.spec.ts b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.spec.ts
+index 4661d89b81895..c603b0b98dc84 100644
+--- a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.spec.ts
+@@ -12,6 +12,7 @@ import { EmailService } from 'src/engine/core-modules/email/email.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
+ import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
+ import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
++import { ThrottlerService } from 'src/engine/core-modules/throttler/throttler.service';
+ import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { WorkspaceInvitationException } from 'src/engine/core-modules/workspace-invitation/workspace-invitation.exception';
+@@ -112,6 +113,12 @@ describe('WorkspaceInvitationService', () => {
+               .mockReturnValue('https://signed-url.com/logo.png'),
+           },
+         },
++        {
++          provide: ThrottlerService,
++          useValue: {
++            tokenBucketThrottleOrThrow: jest.fn(),
++          },
++        },
+       ],
+     }).compile();
+ 
+diff --git a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
+index df6932a71d5bd..d6acc364997e1 100644
+--- a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
+@@ -25,6 +25,7 @@ import { EmailService } from 'src/engine/core-modules/email/email.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
+ import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
+ import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
++import { ThrottlerService } from 'src/engine/core-modules/throttler/throttler.service';
+ import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { type SendInvitationsOutput } from 'src/engine/core-modules/workspace-invitation/dtos/send-invitations.output';
+@@ -49,6 +50,7 @@ export class WorkspaceInvitationService {
+     private readonly workspaceDomainsService: WorkspaceDomainsService,
+     private readonly i18nService: I18nService,
+     private readonly fileService: FileService,
++    private readonly throttlerService: ThrottlerService,
+   ) {}
+ 
+   async validatePersonalInvitation({
+@@ -262,6 +264,8 @@ export class WorkspaceInvitationService {
+       };
+     }
+ 
++    await this.throttleInvitationSending(workspace.id, emails);
++
+     const invitationsPr = await Promise.allSettled(
+       emails.map(async (email) => {
+         if (usePersonalInvitation) {
+@@ -421,4 +425,47 @@ export class WorkspaceInvitationService {
+ 
+     return this.appTokenRepository.save(invitationToken);
+   }
++
++  private async throttleInvitationSending(
++    workspaceId: string,
++    emails: string[],
++  ) {
++    try {
++      //limit invitation sending for specific invite emails
++      await Promise.all(
++        emails.map(async (email) => {
++          await this.throttlerService.tokenBucketThrottleOrThrow(
++            `invitation-resending-workspace:throttler:${email}`,
++            1,
++            this.twentyConfigService.get(
++              'INVITATION_SENDING_BY_EMAIL_THROTTLE_LIMIT',
++            ),
++            this.twentyConfigService.get(
++              'INVITATION_SENDING_BY_EMAIL_THROTTLE_TTL_IN_MS',
++            ),
++          );
++        }),
++      );
++
++      //limit invitation sending for a specific workspace
++      await this.throttlerService.tokenBucketThrottleOrThrow(
++        `invitation-resending-workspace:throttler:${workspaceId}`,
++        emails.length,
++        this.twentyConfigService.get(
++          'INVITATION_SENDING_BY_WORKSPACE_THROTTLE_LIMIT',
++        ),
++        this.twentyConfigService.get(
++          'INVITATION_SENDING_BY_WORKSPACE_THROTTLE_TTL_IN_MS',
++        ),
++      );
++    } catch {
++      throw new WorkspaceInvitationException(
++        'Workspace invitation sending rate limit exceeded.',
++        WorkspaceInvitationExceptionCode.INVALID_INVITATION,
++        {
++          userFriendlyMessage: msg`Too many workspace invitations sent. Please try again later.`,
++        },
++      );
++    }
++  }
+ }
+diff --git a/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.module.ts b/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.module.ts
+index becf292d1bc9a..c88b7fef67c0b 100644
+--- a/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.module.ts
++++ b/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.module.ts
+@@ -7,6 +7,7 @@ import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace
+ import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+ import { FileModule } from 'src/engine/core-modules/file/file.module';
+ import { OnboardingModule } from 'src/engine/core-modules/onboarding/onboarding.module';
++import { ThrottlerModule } from 'src/engine/core-modules/throttler/throttler.module';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
+ import { WorkspaceInvitationResolver } from 'src/engine/core-modules/workspace-invitation/workspace-invitation.resolver';
+@@ -25,6 +26,7 @@ import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permi
+     OnboardingModule,
+     PermissionsModule,
+     FeatureFlagModule,
++    ThrottlerModule,
+   ],
+   exports: [WorkspaceInvitationService],
+   providers: [WorkspaceInvitationService, WorkspaceInvitationResolver],
+diff --git a/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.resolver.ts b/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.resolver.ts
+index bc71e5efec1f7..81fdce79036ee 100644
+--- a/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.resolver.ts
++++ b/packages/twenty-server/src/engine/core-modules/workspace-invitation/workspace-invitation.resolver.ts
+@@ -1,7 +1,6 @@
+ import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
+ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+ 
+-import { FileService } from 'src/engine/core-modules/file/services/file.service';
+ import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
+ import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+@@ -35,7 +34,6 @@ export class WorkspaceInvitationResolver {
+   constructor(
+     private readonly twentyORMGlobalManager: TwentyORMGlobalManager,
+     private readonly workspaceInvitationService: WorkspaceInvitationService,
+-    private readonly fileService: FileService,
+   ) {}
+ 
+   @Mutation(() => String)

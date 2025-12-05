@@ -1,0 +1,549 @@
+diff --git a/app/client/src/ce/workers/Evaluation/evaluationUtils.ts b/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
+index 293fe0a221a..443fbb318c0 100644
+--- a/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
++++ b/app/client/src/ce/workers/Evaluation/evaluationUtils.ts
+@@ -413,7 +413,9 @@ export function isAppsmithEntity(
+   );
+ }
+ 
+-export function isJSAction(entity: DataTreeEntity): entity is JSActionEntity {
++export function isJSAction(
++  entity: Partial<DataTreeEntity>,
++): entity is JSActionEntity {
+   return (
+     typeof entity === "object" &&
+     "ENTITY_TYPE" in entity &&
+diff --git a/app/client/src/entities/DependencyMap/DependencyMapUtils.ts b/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
+index 9e4cb175ad7..933343f9e24 100644
+--- a/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
++++ b/app/client/src/entities/DependencyMap/DependencyMapUtils.ts
+@@ -4,9 +4,13 @@ import {
+   entityTypeCheckForPathDynamicTrigger,
+   getEntityNameAndPropertyPath,
+   IMMEDIATE_PARENT_REGEX,
++  isAction,
++  isJSAction,
+ } from "ee/workers/Evaluation/evaluationUtils";
+ import type { ConfigTree } from "entities/DataTree/dataTreeTypes";
+ import { isPathDynamicTrigger } from "utils/DynamicBindingUtils";
++import { WorkerEnv } from "workers/Evaluation/handlers/workerEnv";
++import { ActionRunBehaviour } from "PluginActionEditor/types/PluginActionTypes";
+ 
+ type SortDependencies =
+   | {
+@@ -23,6 +27,9 @@ export class DependencyMapUtils {
+   ): SortDependencies {
+     const dependencyTree: Array<[string, string | undefined]> = [];
+     const dependencies = dependencyMap.rawDependencies;
++    const featureFlags = WorkerEnv.getFeatureFlags();
++    const isReactiveActionsEnabled =
++      featureFlags.release_reactive_actions_enabled;
+ 
+     for (const [node, deps] of dependencies.entries()) {
+       if (deps.size) {
+@@ -38,7 +45,7 @@ export class DependencyMapUtils {
+         .reverse()
+         .filter((edge) => !!edge);
+ 
+-      if (configTree) {
++      if (configTree && isReactiveActionsEnabled) {
+         this.detectReactiveDependencyMisuse(dependencyMap, configTree);
+       }
+ 
+@@ -163,81 +170,91 @@ export class DependencyMapUtils {
+   ) {
+     const dependencies = dependencyMap.rawDependencies;
+ 
+-    // Helper function to get all transitive dependencies
+-    const getAllTransitiveDependencies = (node: string): Set<string> => {
+-      const allDeps = new Set<string>();
+-      const queue = [node];
++    for (const node of dependencies.keys()) {
++      const { entityName: nodeName } = getEntityNameAndPropertyPath(node);
++      const nodeConfig = configTree[nodeName];
+ 
+-      while (queue.length > 0) {
+-        const current = queue.shift()!;
+-        const deps = dependencyMap.getDirectDependencies(current) || [];
++      const isJSActionEntity = isJSAction(nodeConfig);
++      const isActionEntity = isAction(nodeConfig);
+ 
+-        for (const dep of deps) {
+-          if (!allDeps.has(dep)) {
+-            allDeps.add(dep);
+-            queue.push(dep);
+-          }
+-        }
++      if (isJSActionEntity) {
++        // Only continue if at least one function is automatic
++        const hasAutomaticFunc = Object.values(nodeConfig.meta).some(
++          (jsFunction) =>
++            jsFunction.runBehaviour === ActionRunBehaviour.AUTOMATIC,
++        );
++
++        if (!hasAutomaticFunc) continue;
++      } else if (isActionEntity) {
++        // Only continue if runBehaviour is AUTOMATIC
++        if (nodeConfig.runBehaviour !== ActionRunBehaviour.AUTOMATIC) continue;
++      } else {
++        // If not a JSAction, or Action, skip
++        continue;
+       }
+ 
+-      return allDeps;
+-    };
++      // For each entity, check if both .run and a .data path are present
++      let hasRun = false;
++      let hasData = false;
++      let dataPath = "";
++      let runPath = "";
+ 
+-    for (const [node, deps] of dependencies.entries()) {
+-      // Get all dependencies including transitive ones
+-      const allDeps = new Set<string>();
+-      const queue = Array.from(deps);
++      const transitiveDeps = this.getAllTransitiveDependencies(
++        dependencyMap,
++        node,
++      );
+ 
+-      while (queue.length > 0) {
+-        const dep = queue.shift()!;
++      for (const dep of transitiveDeps) {
++        const { entityName } = getEntityNameAndPropertyPath(dep);
++        const entityConfig = configTree[entityName];
+ 
+-        if (!allDeps.has(dep)) {
+-          allDeps.add(dep);
+-          const depDeps = dependencyMap.getDirectDependencies(dep) || [];
++        if (entityConfig && entityConfig.ENTITY_TYPE === "ACTION") {
++          if (this.isTriggerPath(dep, configTree)) {
++            hasRun = true;
++            runPath = dep;
++          }
+ 
+-          queue.push(...depDeps);
++          if (DependencyMapUtils.isDataPath(dep)) {
++            hasData = true;
++            dataPath = dep;
++          }
++
++          if (hasRun && hasData) {
++            throw Object.assign(
++              new Error(
++                `Reactive dependency misuse: '${node}' depends on both trigger path '${runPath}' and data path '${dataPath}' from the same entity. This can cause unexpected reactivity.`,
++              ),
++              { node, triggerPath: runPath, dataPath },
++            );
++          }
+         }
+       }
++    }
++  }
+ 
+-      // Separate dependencies into trigger paths and data paths
+-      const triggerPaths = Array.from(deps).filter((dep) =>
+-        this.isTriggerPath(dep, configTree),
+-      );
+-      const dataPaths = Array.from(deps).filter((dep) => this.isDataPath(dep));
+-
+-      // For each trigger path, check if there's a data path from the same entity
+-      for (const triggerPath of triggerPaths) {
+-        const triggerEntity = triggerPath.split(".")[0];
+-
+-        // Find data paths from the same entity
+-        const sameEntityDataPaths = dataPaths.filter((dataPath) => {
+-          const dataEntity = dataPath.split(".")[0];
+-
+-          return dataEntity === triggerEntity;
+-        });
+-
+-        if (sameEntityDataPaths.length > 0) {
+-          // Check if any of these data paths depend on the trigger path (directly or indirectly)
+-          for (const dataPath of sameEntityDataPaths) {
+-            const dataPathTransitiveDeps =
+-              getAllTransitiveDependencies(dataPath);
+-
+-            if (dataPathTransitiveDeps.has(triggerPath)) {
+-              const error = new Error(
+-                `Reactive dependency misuse: '${node}' depends on both trigger path '${triggerPath}' and data path '${dataPath}' from the same entity, and '${dataPath}' depends on '${triggerPath}' (directly or indirectly). This can cause unexpected reactivity.`,
+-              );
+-
+-              // Add custom properties
+-              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+-              // @ts-ignore
+-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-              (error as any).node = node;
+-
+-              throw error;
+-            }
+-          }
++  /**
++   * Returns all transitive dependencies (direct and indirect, no duplicates) for a given node.
++   */
++  static getAllTransitiveDependencies(
++    dependencyMap: DependencyMap,
++    node: string,
++  ): string[] {
++    const dependencies = dependencyMap.rawDependencies;
++    const visited = new Set<string>();
++
++    function traverse(current: string) {
++      const directDeps = dependencies.get(current) || new Set<string>();
++
++      for (const dep of directDeps) {
++        if (!visited.has(dep)) {
++          visited.add(dep);
++          traverse(dep);
+         }
+       }
+     }
++
++    traverse(node);
++
++    return Array.from(visited);
+   }
+ }
+diff --git a/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts b/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts
+new file mode 100644
+index 00000000000..74fa30cf7e7
+--- /dev/null
++++ b/app/client/src/entities/DependencyMap/__tests__/DependencyMapUtils.test.ts
+@@ -0,0 +1,337 @@
++import DependencyMap from "../index";
++import { DependencyMapUtils } from "../DependencyMapUtils";
++import { PluginType } from "entities/Plugin";
++import {
++  ENTITY_TYPE,
++  type DataTreeEntityConfig,
++  type MetaArgs,
++} from "ee/entities/DataTree/types";
++import type { ActionRunBehaviourType } from "PluginActionEditor/types/PluginActionTypes";
++
++describe("detectReactiveDependencyMisuse", () => {
++  function makeConfigTreeWithAction(
++    entityName: string,
++    runBehaviour: ActionRunBehaviourType = "AUTOMATIC",
++  ): DataTreeEntityConfig {
++    return {
++      ENTITY_TYPE: ENTITY_TYPE.ACTION,
++      dynamicTriggerPathList: [{ key: "run" }],
++      dynamicBindingPathList: [],
++      bindingPaths: {},
++      reactivePaths: {},
++      dependencyMap: {},
++      logBlackList: {},
++      pluginType: PluginType.API,
++      pluginId: "mockPluginId",
++      actionId: "mockActionId",
++      name: entityName,
++      runBehaviour,
++    };
++  }
++
++  function makeConfigTreeWithJSAction(
++    entityName: string,
++    meta: Record<string, MetaArgs> = {},
++  ): DataTreeEntityConfig {
++    return {
++      ENTITY_TYPE: ENTITY_TYPE.JSACTION,
++      meta,
++      dynamicBindingPathList: [],
++      actionNames: new Set(["myFun1", "myFun2"]),
++      bindingPaths: {},
++      reactivePaths: {},
++      dependencyMap: {},
++      pluginType: PluginType.JS,
++      name: entityName,
++      actionId: "mockJSActionId",
++      dynamicTriggerPathList: [],
++      variables: [],
++    };
++  }
++
++  function makeConfigTreeWithWidget(entityName: string): DataTreeEntityConfig {
++    return {
++      ENTITY_TYPE: ENTITY_TYPE.WIDGET,
++      bindingPaths: {},
++      reactivePaths: {},
++      triggerPaths: {},
++      validationPaths: {},
++      logBlackList: {},
++      propertyOverrideDependency: {},
++      overridingPropertyPaths: {},
++      privateWidgets: {},
++      widgetId: "mockWidgetId",
++      defaultMetaProps: [],
++      type: "MOCK_WIDGET_TYPE",
++      dynamicBindingPathList: [],
++      name: entityName,
++    };
++  }
++
++  it("does not throw for Widget entity", () => {
++    const dependencyMap = new DependencyMap();
++
++    dependencyMap.addNodes({
++      Widget1: true,
++      "Widget1.run": true,
++      "Widget1.data": true,
++    });
++    dependencyMap.addDependency("Widget1", ["Widget1.run", "Widget1.data"]);
++    const configTree = {
++      Widget1: makeConfigTreeWithWidget("Widget1"),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).not.toThrow();
++  });
++
++  it("does not throw for MANUAL ACTION entity", () => {
++    const dependencyMap = new DependencyMap();
++
++    dependencyMap.addNodes({
++      "JSObject1.myFun1": true,
++      "Query3.run": true,
++      "Query3.data": true,
++    });
++    dependencyMap.addDependency("JSObject1.myFun1", [
++      "Query3.run",
++      "Query3.data",
++    ]);
++    const configTree = {
++      Query3: makeConfigTreeWithAction("Query3", "MANUAL"),
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).not.toThrow();
++  });
++
++  it("does not throw for JSAction entity with no AUTOMATIC function", () => {
++    const dependencyMap = new DependencyMap();
++
++    dependencyMap.addNodes({
++      "JSObject1.myFun1": true,
++      "JSObject1.myFun2": true,
++      "Query2.run": true,
++      "Query2.data": true,
++    });
++    // JSObject1.myFun2 depends on Query2.run
++    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
++    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
++    dependencyMap.addDependency("JSObject1.myFun1", [
++      "JSObject1.myFun2",
++      "Query2.data",
++    ]);
++
++    // meta has no AUTOMATIC runBehaviour
++    const configTree = {
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++      Query2: makeConfigTreeWithAction("Query2", "AUTOMATIC"),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).not.toThrow();
++  });
++
++  it("does not throw if a node depends only on .run or only on .data for AUTOMATIC ACTION", () => {
++    const configTree = {
++      Api1: makeConfigTreeWithAction("Api1", "AUTOMATIC"),
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++      JSObject2: makeConfigTreeWithJSAction("JSObject2", {
++        myFun1: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++    };
++
++    // Only .run
++    const depMapRun = new DependencyMap();
++
++    depMapRun.addNodes({ "JSObject1.myFun1": true, "Api1.run": true });
++    depMapRun.addDependency("JSObject1.myFun1", ["Api1.run"]);
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(depMapRun, configTree);
++    }).not.toThrow();
++
++    // Only .data
++    const depMapData = new DependencyMap();
++
++    depMapData.addNodes({ "JSObject2.myFun1": true, "Api1.data": true });
++    depMapData.addDependency("JSObject2.myFun1", ["Api1.data"]);
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(depMapData, configTree);
++    }).not.toThrow();
++  });
++
++  it("throws if a node depends on both .run and .data of the same AUTOMATIC ACTION entity", () => {
++    const dependencyMap = new DependencyMap();
++
++    // Add nodes
++    dependencyMap.addNodes({
++      "JSObject1.myFun1": true,
++      "Query1.run": true,
++      "Query1.data": true,
++    });
++    // JSObject1.myFun1 depends on both Query1.run and Query1.data
++    dependencyMap.addDependency("JSObject1.myFun1", [
++      "Query1.run",
++      "Query1.data",
++    ]);
++    const configTree = {
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++      Query1: makeConfigTreeWithAction("Query1", "AUTOMATIC"),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).toThrow(/Reactive dependency misuse/);
++  });
++
++  it("throws if a node depends on both .run and .data of the same AUTOMATIC ACTION entity via transitive dependency", () => {
++    const dependencyMap = new DependencyMap();
++
++    dependencyMap.addNodes({
++      "JSObject1.myFun1": true,
++      "JSObject1.myFun2": true,
++      "Query2.run": true,
++      "Query2.data": true,
++    });
++    // JSObject1.myFun2 depends on Query2.run
++    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
++    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
++    dependencyMap.addDependency("JSObject1.myFun1", [
++      "JSObject1.myFun2",
++      "Query2.data",
++    ]);
++    const configTree = {
++      Query2: makeConfigTreeWithAction("Query2", "AUTOMATIC"),
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).toThrow(/Reactive dependency misuse/);
++  });
++
++  it("throws for JSAction entity with at least one AUTOMATIC function", () => {
++    // meta has one AUTOMATIC runBehaviour
++    const dependencyMap = new DependencyMap();
++
++    dependencyMap.addNodes({
++      "JSObject1.myFun1": true,
++      "JSObject1.myFun2": true,
++      "Query2.run": true,
++      "Query2.data": true,
++    });
++    // JSObject1.myFun2 depends on Query2.run
++    dependencyMap.addDependency("JSObject1.myFun2", ["Query2.run"]);
++    // JSObject1.myFun1 depends on both JSObject1.myFun2 and and Query2.data (transitive)
++    dependencyMap.addDependency("JSObject1.myFun1", [
++      "JSObject1.myFun2",
++      "Query2.data",
++    ]);
++    const configTree = {
++      JSObject1: makeConfigTreeWithJSAction("JSObject1", {
++        myFun1: {
++          runBehaviour: "AUTOMATIC",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++        myFun2: {
++          runBehaviour: "MANUAL",
++          arguments: [],
++          confirmBeforeExecute: false,
++        },
++      }),
++      Query2: makeConfigTreeWithAction("Query2", "MANUAL"),
++    };
++
++    expect(() => {
++      DependencyMapUtils.detectReactiveDependencyMisuse(
++        dependencyMap,
++        configTree,
++      );
++    }).toThrow(/Reactive dependency misuse/);
++  });
++});

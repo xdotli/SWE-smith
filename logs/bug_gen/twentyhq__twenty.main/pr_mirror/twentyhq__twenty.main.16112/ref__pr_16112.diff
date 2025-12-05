@@ -1,0 +1,76 @@
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
+index 9ab22c68174b2..569820634aa07 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/services/gmail-messages-import-error-handler.service.ts
+@@ -1,5 +1,7 @@
+ import { Injectable, Logger } from '@nestjs/common';
+ 
++import { isDefined } from 'twenty-shared/utils';
++
+ import {
+   MessageImportDriverException,
+   MessageImportDriverExceptionCode,
+@@ -23,7 +25,13 @@ export class GmailMessagesImportErrorHandler {
+     }
+ 
+     if (isGmailApiBatchError(error)) {
+-      throw parseGmailApiBatchError(error, messageExternalId);
++      const exception = parseGmailApiBatchError(error, messageExternalId);
++
++      if (!isDefined(exception)) {
++        return;
++      }
++
++      throw exception;
+     }
+ 
+     throw new MessageImportDriverException(
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
+index 6f2b99524bb59..bd1c44455eda8 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/__tests__/parse-gmail-messages-import-error.spec.ts
+@@ -111,26 +111,14 @@ describe('parseGmailApiBatchError', () => {
+     const error = gmailBatchApiErrorMocks.getError(404);
+     const exception = parseGmailApiBatchError(error, messageExternalId);
+ 
+-    expect(exception).toBeInstanceOf(MessageImportDriverException);
+-    expect(exception?.code).toBe(
+-      MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
+-    );
+-    expect(exception?.message).toBe(
+-      `${error.errors[0].message} for message with externalId: ${messageExternalId}`,
+-    );
++    expect(exception).toBeUndefined();
+   });
+ 
+   it('should handle 410 Gone', () => {
+     const error = gmailBatchApiErrorMocks.getError(410);
+     const exception = parseGmailApiBatchError(error, messageExternalId);
+ 
+-    expect(exception).toBeInstanceOf(MessageImportDriverException);
+-    expect(exception?.code).toBe(
+-      MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
+-    );
+-    expect(exception?.message).toBe(
+-      `${error.errors[0].message} for message with externalId: ${messageExternalId}`,
+-    );
++    expect(exception).toBeUndefined();
+   });
+ 
+   it('should handle 429 Too Many Requests', () => {
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
+index 1314e8e72a0f3..f2d9755bfdc75 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/drivers/gmail/utils/parse-gmail-api-batch-error.util.ts
+@@ -43,10 +43,7 @@ export const parseGmailApiBatchError = (
+ 
+     case 404:
+     case 410:
+-      return new MessageImportDriverException(
+-        message,
+-        MessageImportDriverExceptionCode.SYNC_CURSOR_ERROR,
+-      );
++      return undefined;
+ 
+     case 429:
+       return new MessageImportDriverException(

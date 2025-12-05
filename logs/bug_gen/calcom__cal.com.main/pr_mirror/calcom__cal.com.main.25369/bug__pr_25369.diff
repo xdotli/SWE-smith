@@ -1,0 +1,2006 @@
+diff --git a/packages/features/bookings/lib/getLuckyUser.test.ts b/packages/features/bookings/lib/getLuckyUser.test.ts
+index 4974f6c..b2e2dd7 100644
+--- a/packages/features/bookings/lib/getLuckyUser.test.ts
++++ b/packages/features/bookings/lib/getLuckyUser.test.ts
+@@ -418,1227 +418,4 @@ describe("maximize availability and weights", () => {
+       }),
+       buildBooking({
+         id: 3,
+-        userId: 1,
+-        createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: new Date("2022-01-25T03:30:00.000Z"),
+-      }),
+-    ]);
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.DAY, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[0]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, daily interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-20T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-
+-  it("can find lucky user with weights and adjusted weights", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        priority: 3,
+-        weight: 150,
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T07:30:00.000Z"),
+-          },
+-          {
+-            createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          },
+-          {
+-            createdAt: new Date("2022-01-25T03:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-      buildUser({
+-        id: 2,
+-        username: "test2",
+-        name: "Test User 2",
+-        email: "test2@example.com",
+-        priority: 3,
+-        weight: 100,
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-          },
+-          {
+-            createdAt: new Date("2022-01-25T03:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-    ];
+-
+-    CalendarManagerMock.getBusyCalendarTimes.mockResolvedValue({ success: true, data: [] });
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([]);
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([]);
+-    prismaMock.booking.findMany.mockResolvedValue([
+-      buildBooking({
+-        id: 1,
+-        userId: 1,
+-        createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 2,
+-        userId: 1,
+-        createdAt: new Date("2022-01-25T03:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 3,
+-        userId: 1,
+-        createdAt: new Date("2022-01-25T07:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-      }),
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: new Date("2022-01-25T03:30:00.000Z"),
+-      }),
+-    ]);
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.DAY, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[0]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, daily interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-20T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-
+-  it("applies calibration when user had OOO entries this month", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        bookings: [],
+-      }),
+-      buildUser({
+-        id: 2,
+-        username: "test2",
+-        name: "Test User 2",
+-        email: "test2@example.com",
+-        bookings: [],
+-      }),
+-    ];
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    CalendarManagerMock.getBusyCalendarTimes.mockResolvedValue({ success: true, data: [] });
+-
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([
+-      {
+-        start: dayjs().subtract(10, "day").toDate(),
+-        end: dayjs().subtract(5, "day").toDate(),
+-        userId: users[0].id,
+-      },
+-    ]);
+-
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([
+-      {
+-        userId: allRRHosts[0].user.id,
+-        weight: allRRHosts[0].weight,
+-        createdAt: allRRHosts[0].createdAt,
+-      },
+-    ]);
+-
+-    // bookings of current month
+-    prismaMock.booking.findMany.mockResolvedValue([
+-      buildBooking({
+-        id: 4,
+-        userId: 1,
+-        createdAt: dayjs().subtract(2, "days").toDate(),
+-      }),
+-      // happened during OOO of userId 1
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: dayjs().subtract(6, "days").toDate(),
+-      }),
+-      // happened during OOO of userId 1
+-      buildBooking({
+-        id: 5,
+-        userId: 2,
+-        createdAt: dayjs().subtract(7, "days").toDate(),
+-      }),
+-    ]);
+-
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[1]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, monthly interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-01T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-
+-  it("applies calibration when user had full day calendar events this month", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          },
+-          {
+-            createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-      buildUser({
+-        id: 2,
+-        username: "test2",
+-        name: "Test User 2",
+-        email: "test2@example.com",
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T04:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-    ];
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    CalendarManagerMock.getBusyCalendarTimes
+-      .mockResolvedValueOnce({
+-        success: true,
+-        data: [
+-          {
+-            start: dayjs().utc().startOf("month").toDate(),
+-            end: dayjs().utc().startOf("month").add(3, "day").toDate(),
+-            timeZone: "UTC",
+-          },
+-        ],
+-      })
+-      .mockResolvedValue([]);
+-
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([]);
+-
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([
+-      {
+-        userId: allRRHosts[0].user.id,
+-        weight: allRRHosts[0].weight,
+-        createdAt: allRRHosts[0].createdAt,
+-      },
+-    ]);
+-
+-    prismaMock.booking.findMany.mockResolvedValue([
+-      buildBooking({
+-        id: 1,
+-        userId: 1,
+-        createdAt: dayjs().startOf("month").add(10, "day").toDate(),
+-      }),
+-      // happened during OOO
+-      buildBooking({
+-        id: 2,
+-        userId: 2,
+-        createdAt: dayjs().startOf("month").add(5, "hour").toDate(),
+-      }),
+-      // happened during OOO
+-      buildBooking({
+-        id: 3,
+-        userId: 2,
+-        createdAt: dayjs().startOf("month").add(20, "hour").toDate(),
+-      }),
+-    ]);
+-
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[1]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, monthly interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-01T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-
+-  it("skips OOO calibration when there is only one host", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        bookings: [],
+-      }),
+-    ];
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    CalendarManagerMock.getBusyCalendarTimes.mockResolvedValue({ success: true, data: [] });
+-
+-    // Mock OOO entry for the single host
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([
+-      {
+-        start: dayjs().subtract(10, "day").toDate(),
+-        end: dayjs().subtract(5, "day").toDate(),
+-        userId: users[0].id,
+-      },
+-    ]);
+-
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([
+-      {
+-        userId: allRRHosts[0].user.id,
+-        weight: allRRHosts[0].weight,
+-        createdAt: allRRHosts[0].createdAt,
+-      },
+-    ]);
+-
+-    // Mock some bookings during the OOO period (though there's only one host)
+-    prismaMock.booking.findMany.mockResolvedValue([
+-      buildBooking({
+-        id: 1,
+-        userId: 1,
+-        createdAt: dayjs().subtract(7, "days").toDate(),
+-      }),
+-    ]);
+-
+-    // Should return the only available user without throwing division by zero error
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[0]);
+-  });
+-
+-  it("applies calibration to newly added hosts so they are not penalized unfairly compared to their peers", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          },
+-          {
+-            createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-      buildUser({
+-        id: 2,
+-        username: "test2",
+-        name: "Test User 2",
+-        email: "test2@example.com",
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T04:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-    ];
+-
+-    const middleOfMonth = new Date(
+-      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 14, 12, 0, 0)
+-    );
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: middleOfMonth,
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    CalendarManagerMock.getBusyCalendarTimes.mockResolvedValue({ success: true, data: [] });
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([]);
+-
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([
+-      {
+-        userId: allRRHosts[0].user.id,
+-        weight: allRRHosts[0].weight,
+-        createdAt: allRRHosts[0].createdAt,
+-      },
+-    ]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: dayjs(middleOfMonth).subtract(2, "days").toDate(),
+-      }),
+-      buildBooking({
+-        id: 5,
+-        userId: 2,
+-        createdAt: dayjs(middleOfMonth).subtract(5, "days").toDate(),
+-      }),
+-    ]);
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[1]);
+-
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([]);
+-    prismaMock.booking.findMany.mockResolvedValueOnce([
+-      // Mock 6: All hosts
+-      buildBooking({
+-        id: 4,
+-        userId: 2,
+-        createdAt: dayjs(middleOfMonth).add(2, "days").toDate(),
+-      }),
+-      buildBooking({
+-        id: 5,
+-        userId: 2,
+-        createdAt: dayjs(middleOfMonth).add(5, "days").toDate(),
+-      }),
+-    ]);
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse: null,
+-      })
+-    ).resolves.toStrictEqual(users[0]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, monthly interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-01T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-});
+-
+-describe("attribute weights and virtual queues", () => {
+-  it("prepareQueuesAndAttributesData returns correct attributeWeights and virtualQueuesData", async () => {
+-    const attributeOneOptionIdFirst = uuid();
+-    const attributeOneOptionIdSecond = uuid();
+-    const attributeTwoOptionIdFirst = uuid();
+-    const attributeTwoOptionIdSecond = uuid();
+-    const attributeId = uuid();
+-    const routeId = uuid();
+-    const fieldIdOne = uuid();
+-    const fieldIdTwo = uuid();
+-
+-    const routingFormResponse = {
+-      response: {
+-        [fieldIdOne]: {
+-          label: "company_size",
+-          value: attributeOneOptionIdFirst,
+-        },
+-        [fieldIdTwo]: { label: "headquarters", value: attributeTwoOptionIdSecond },
+-      },
+-      form: {
+-        routes: [
+-          {
+-            id: uuid(),
+-            action: { type: "eventTypeRedirectUrl", value: "team/team1/team1-event-1", eventTypeId: 29 },
+-            queryValue: { id: "a98ab8a9-4567-489a-bcde-f1932649bb8b", type: "group" },
+-            attributesQueryValue: {
+-              id: "b8ab8ba9-0123-4456-b89a-b1932649bb8b",
+-              type: "group",
+-              children1: {
+-                "a8999bb9-89ab-4cde-b012-31932649cc93": {
+-                  type: "rule",
+-                  properties: {
+-                    field: uuid(), //another attribute
+-                    value: [[`{field:${fieldIdOne}}`]],
+-                    operator: "multiselect_some_in",
+-                    valueSrc: ["value"],
+-                    valueType: ["multiselect"],
+-                    valueError: [null],
+-                  },
+-                },
+-              },
+-            },
+-            attributeRoutingConfig: {},
+-          },
+-          {
+-            //chosen route
+-            id: routeId,
+-            attributeIdForWeights: attributeId,
+-            action: { type: "eventTypeRedirectUrl", value: "team/team1/team1-event-1", eventTypeId: 29 },
+-            queryValue: { id: "a98ab8a9-4567-489a-bcde-f1932649bb8b", type: "group" },
+-            attributesQueryValue: {
+-              id: "b8ab8ba9-0123-4456-b89a-b1932649bb8b",
+-              type: "group",
+-              children1: {
+-                "a8999bb9-89ab-4cde-b012-31932649cc93": {
+-                  type: "rule",
+-                  properties: {
+-                    field: attributeId,
+-                    value: [[`{field:${fieldIdTwo}}`]],
+-                    operator: "multiselect_some_in",
+-                    valueSrc: ["value"],
+-                    valueType: ["multiselect"],
+-                    valueError: [null],
+-                  },
+-                },
+-              },
+-            },
+-            attributeRoutingConfig: {},
+-          },
+-        ],
+-        fields: [
+-          {
+-            id: fieldIdOne,
+-            type: "select",
+-            label: "company_size",
+-            options: [
+-              { id: attributeOneOptionIdFirst, label: "1-10" },
+-              { id: attributeOneOptionIdSecond, label: "11-20" },
+-            ],
+-            required: true,
+-          },
+-          {
+-            id: fieldIdTwo,
+-            type: "select",
+-            label: "headquarters",
+-            options: [
+-              { id: attributeTwoOptionIdFirst, label: "USA" },
+-              { id: attributeTwoOptionIdSecond, label: "Germany" },
+-            ],
+-            required: true,
+-          },
+-        ],
+-      },
+-      chosenRouteId: routeId,
+-    };
+-
+-    prismaMock.attribute.findUnique.mockResolvedValue({
+-      name: "Headquaters",
+-      id: attributeId,
+-      type: AttributeType.SINGLE_SELECT,
+-      slug: "headquarters",
+-      options: [
+-        {
+-          id: "12345",
+-          value: "Germany",
+-          slug: "Germany",
+-          assignedUsers: [
+-            {
+-              weight: 120,
+-              member: {
+-                userId: 1,
+-              },
+-            },
+-            {
+-              weight: 150,
+-              member: {
+-                userId: 2,
+-              },
+-            },
+-          ],
+-        },
+-      ],
+-    });
+-
+-    const queuesAndAttributesData = await luckyUserService.prepareQueuesAndAttributesData({
+-      eventType: {
+-        id: 1,
+-        isRRWeightsEnabled: true,
+-        team: {
+-          parentId: 1,
+-          rrResetInterval: RRResetInterval.DAY,
+-          rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-        },
+-        includeNoShowInRRCalculation: false,
+-      },
+-      routingFormResponse,
+-      allRRHosts: [
+-        {
+-          user: {
+-            id: 1,
+-            email: "test1@example.com",
+-            credentials: [],
+-            userLevelSelectedCalendars: [],
+-          },
+-          createdAt: new Date(),
+-          weight: 10,
+-        },
+-        {
+-          user: {
+-            id: 2,
+-            email: "test2@example.com",
+-            credentials: [],
+-            userLevelSelectedCalendars: [],
+-          },
+-          createdAt: new Date(),
+-          weight: 150,
+-        },
+-      ],
+-    });
+-
+-    expect(queuesAndAttributesData).toEqual({
+-      attributeWeights: [
+-        { userId: 1, weight: 120 },
+-        { userId: 2, weight: 150 },
+-      ],
+-      virtualQueuesData: {
+-        chosenRouteId: routeId,
+-        fieldOptionData: {
+-          fieldId: fieldIdTwo,
+-          selectedOptionIds: attributeTwoOptionIdSecond,
+-        },
+-      },
+-    });
+-  });
+-
+-  it("prepareQueuesAndAttributesData returns host weights as fallback when no members are assigned to the attribute", async () => {
+-    const attributeOptionIdFirst = uuid();
+-    const attributeOptionIdSecond = uuid();
+-    const attributeId = uuid();
+-    const routeId = uuid();
+-    const fieldId = uuid();
+-
+-    const routingFormResponse = {
+-      response: {
+-        [fieldId]: { label: "headquarters", value: attributeOptionIdSecond },
+-      },
+-      form: {
+-        routes: [
+-          {
+-            id: uuid(),
+-            action: { type: "eventTypeRedirectUrl", value: "team/team1/team1-event-1", eventTypeId: 29 },
+-            queryValue: { id: "a98ab8a9-4567-489a-bcde-f1932649bb8b", type: "group" },
+-            attributesQueryValue: {
+-              id: "b8ab8ba9-0123-4456-b89a-b1932649bb8b",
+-              type: "group",
+-              children1: {
+-                "a8999bb9-89ab-4cde-b012-31932649cc93": {
+-                  type: "rule",
+-                  properties: {
+-                    field: uuid(), //another attribute
+-                    value: [[`{field:${fieldId}}`]],
+-                    operator: "multiselect_some_in",
+-                    valueSrc: ["value"],
+-                    valueType: ["multiselect"],
+-                    valueError: [null],
+-                  },
+-                },
+-              },
+-            },
+-            attributeRoutingConfig: {},
+-          },
+-          {
+-            //chosen route
+-            id: routeId,
+-            attributeIdForWeights: attributeId,
+-            action: { type: "eventTypeRedirectUrl", value: "team/team1/team1-event-1", eventTypeId: 29 },
+-            queryValue: { id: "a98ab8a9-4567-489a-bcde-f1932649bb8b", type: "group" },
+-            attributesQueryValue: {
+-              id: "b8ab8ba9-0123-4456-b89a-b1932649bb8b",
+-              type: "group",
+-              children1: {
+-                "a8999bb9-89ab-4cde-b012-31932649cc93": {
+-                  type: "rule",
+-                  properties: {
+-                    field: attributeId,
+-                    value: [[`{field:${fieldId}}`]],
+-                    operator: "multiselect_some_in",
+-                    valueSrc: ["value"],
+-                    valueType: ["multiselect"],
+-                    valueError: [null],
+-                  },
+-                },
+-              },
+-            },
+-            attributeRoutingConfig: {},
+-          },
+-        ],
+-        fields: [
+-          {
+-            id: fieldId,
+-            type: "select",
+-            label: "headquarters",
+-            options: [
+-              { id: attributeOptionIdFirst, label: "USA" },
+-              { id: attributeOptionIdSecond, label: "Germany" },
+-            ],
+-            required: true,
+-          },
+-        ],
+-      },
+-      chosenRouteId: routeId,
+-    };
+-
+-    prismaMock.attribute.findUnique.mockResolvedValue({
+-      name: "Headquaters",
+-      id: attributeId,
+-      type: AttributeType.SINGLE_SELECT,
+-      slug: "headquarters",
+-      options: [
+-        {
+-          id: "12345",
+-          value: "Germany",
+-          slug: "Germany",
+-          assignedUsers: [],
+-        },
+-      ],
+-    });
+-
+-    const queuesAndAttributesData = await luckyUserService.prepareQueuesAndAttributesData({
+-      eventType: {
+-        id: 1,
+-        isRRWeightsEnabled: true,
+-        team: {
+-          parentId: 1,
+-          rrResetInterval: RRResetInterval.DAY,
+-          rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-        },
+-        includeNoShowInRRCalculation: false,
+-      },
+-      routingFormResponse,
+-      allRRHosts: [
+-        {
+-          user: {
+-            id: 1,
+-            email: "test1@example.com",
+-            credentials: [],
+-            userLevelSelectedCalendars: [],
+-          },
+-          createdAt: new Date(),
+-          weight: 10,
+-        },
+-        {
+-          user: {
+-            id: 2,
+-            email: "test2@example.com",
+-            credentials: [],
+-            userLevelSelectedCalendars: [],
+-          },
+-          createdAt: new Date(),
+-          weight: 150,
+-        },
+-      ],
+-    });
+-
+-    expect(queuesAndAttributesData.attributeWeights).toEqual([
+-      { userId: 1, weight: 10 },
+-      { userId: 2, weight: 150 },
+-    ]);
+-  });
+-
+-  it("uses attribute weights and counts only bookings within virtual queue", async () => {
+-    const users: GetLuckyUserAvailableUsersType = [
+-      buildUser({
+-        id: 1,
+-        username: "test1",
+-        name: "Test User 1",
+-        email: "test1@example.com",
+-        priority: 1,
+-        weight: 150,
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-      buildUser({
+-        id: 2,
+-        username: "test2",
+-        name: "Test User 2",
+-        email: "test2@example.com",
+-        priority: 3,
+-        weight: 50,
+-        bookings: [
+-          {
+-            createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          },
+-        ],
+-      }),
+-    ];
+-
+-    const attributeOptionIdFirst = uuid();
+-    const attributeOptionIdSecond = uuid();
+-    const attributeId = uuid();
+-    const routeId = uuid();
+-    const fieldId = uuid();
+-    const formId = uuid();
+-
+-    const routingFormResponse = {
+-      response: {
+-        [fieldId]: {
+-          label: "company_size",
+-          value: attributeOptionIdFirst,
+-        },
+-      },
+-      form: {
+-        routes: [
+-          {
+-            id: routeId,
+-            action: { type: "eventTypeRedirectUrl", value: "team/team1/team1-event-1", eventTypeId: 29 },
+-            queryValue: { id: "a98ab8a9-4567-489a-bcde-f1932649bb8b", type: "group" },
+-            attributeIdForWeights: attributeId,
+-            attributesQueryValue: {
+-              id: "b8ab8ba9-0123-4456-b89a-b1932649bb8b",
+-              type: "group",
+-              children1: {
+-                "a8999bb9-89ab-4cde-b012-31932649cc93": {
+-                  type: "rule",
+-                  properties: {
+-                    field: attributeId,
+-                    value: [[`{field:${fieldId}}`]],
+-                    operator: "multiselect_some_in",
+-                    valueSrc: ["value"],
+-                    valueType: ["multiselect"],
+-                    valueError: [null],
+-                  },
+-                },
+-              },
+-            },
+-            attributeRoutingConfig: {},
+-          },
+-        ],
+-        fields: [
+-          {
+-            id: fieldId,
+-            type: "select",
+-            label: "company_size",
+-            options: [
+-              { id: attributeOptionIdFirst, label: "1-10" },
+-              { id: attributeOptionIdSecond, label: "11-20" },
+-            ],
+-            required: true,
+-          },
+-        ],
+-      },
+-      chosenRouteId: routeId,
+-    };
+-
+-    CalendarManagerMock.getBusyCalendarTimes.mockResolvedValue({ success: true, data: [] });
+-    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([]);
+-
+-    prismaMock.user.findMany.mockResolvedValue(users);
+-    prismaMock.host.findMany.mockResolvedValue([]);
+-    prismaMock.booking.findMany.mockResolvedValue([
+-      {
+-        ...buildBooking({
+-          id: 1,
+-          userId: 1,
+-          createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-        }),
+-        routedFromRoutingFormReponse: {
+-          id: 1,
+-          formId,
+-          response: {
+-            [fieldId]: {
+-              label: "company_size",
+-              value: attributeOptionIdFirst,
+-            },
+-          },
+-          createdAt: new Date("2022-01-25T06:30:00.000Z"),
+-          chosenRouteId: routeId,
+-        },
+-      },
+-      {
+-        ...buildBooking({
+-          id: 3,
+-          userId: 2,
+-          createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-        }),
+-        routedFromRoutingFormReponse: {
+-          id: 1,
+-          formId,
+-          response: {
+-            [fieldId]: {
+-              label: "company_size",
+-              value: attributeOptionIdFirst,
+-            },
+-          },
+-          createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          chosenRouteId: routeId,
+-        },
+-      },
+-      {
+-        ...buildBooking({
+-          id: 3,
+-          userId: 2,
+-          createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-        }),
+-        routedFromRoutingFormReponse: {
+-          id: 1,
+-          formId,
+-          response: {
+-            [fieldId]: {
+-              label: "company_size",
+-              value: attributeOptionIdSecond,
+-            },
+-          },
+-          createdAt: new Date("2022-01-25T05:30:00.000Z"),
+-          chosenRouteId: routeId,
+-        },
+-      },
+-    ]);
+-
+-    prismaMock.attribute.findUnique.mockResolvedValue({
+-      name: "Company Size",
+-      id: attributeId,
+-      type: AttributeType.SINGLE_SELECT,
+-      slug: "company_size",
+-      options: [
+-        {
+-          id: "4321",
+-          value: "1-10",
+-          slug: "1-10",
+-          assignedUsers: [
+-            {
+-              weight: 80,
+-              member: {
+-                userId: 1,
+-              },
+-            },
+-            {
+-              weight: 100,
+-              member: {
+-                userId: 2,
+-              },
+-            },
+-          ],
+-        },
+-      ],
+-    });
+-
+-    const allRRHosts = [
+-      {
+-        user: {
+-          id: users[0].id,
+-          email: users[0].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[0].weight,
+-        createdAt: new Date(0),
+-      },
+-      {
+-        user: {
+-          id: users[1].id,
+-          email: users[1].email,
+-          credentials: [],
+-          userLevelSelectedCalendars: [],
+-        },
+-        weight: users[1].weight,
+-        createdAt: new Date(0),
+-      },
+-    ];
+-
+-    await expect(
+-      luckyUserService.getLuckyUser({
+-        availableUsers: users,
+-        eventType: {
+-          id: 1,
+-          isRRWeightsEnabled: true,
+-          team: {
+-            parentId: 1,
+-            rrResetInterval: RRResetInterval.DAY,
+-            rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-          },
+-          includeNoShowInRRCalculation: false,
+-        },
+-        allRRHosts,
+-        routingFormResponse,
+-      })
+-    ).resolves.toStrictEqual(users[1]);
+-
+-    const queryArgs = prismaMock.booking.findMany.mock.calls[0][0];
+-
+-    // Today: 2021-06-20T11:59:59Z, daily interval
+-    expect(queryArgs.where?.createdAt).toEqual(
+-      expect.objectContaining({
+-        gte: new Date("2021-06-20T00:00:00Z"),
+-        lte: new Date("2021-06-20T11:59:59.000Z"),
+-      })
+-    );
+-  });
+-});
+-
+-describe("get interval times", () => {
+-  it("should get correct interval start time with meeting started timestamp basis and DAY interval", () => {
+-    const meetingStartTime = new Date("2024-03-15T14:30:00Z");
+-    const result = getIntervalStartDate({
+-      interval: RRResetInterval.DAY,
+-      rrTimestampBasis: RRTimestampBasis.START_TIME,
+-      meetingStartTime,
+-    });
+-    expect(result).toEqual(new Date("2024-03-15T00:00:00Z"));
+-  });
+-
+-  it("should get correct interval start time with meeting started timestamp basis and MONTH interval", () => {
+-    const meetingStartTime = new Date("2024-03-15T14:30:00Z");
+-    const result = getIntervalStartDate({
+-      interval: RRResetInterval.MONTH,
+-      rrTimestampBasis: RRTimestampBasis.START_TIME,
+-      meetingStartTime,
+-    });
+-    expect(result).toEqual(new Date("2024-03-01T00:00:00Z"));
+-  });
+-
+-  it("should get correct interval start time with created at timestamp basis and DAY interval", () => {
+-    const result = getIntervalStartDate({
+-      interval: RRResetInterval.DAY,
+-      rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-    });
+-    expect(result).toEqual(new Date("2021-06-20T00:00:00Z")); // Based on the mocked system time
+-  });
+-
+-  it("should get correct interval start time with created at timestamp basis and MONTH interval", () => {
+-    const result = getIntervalStartDate({
+-      interval: RRResetInterval.MONTH,
+-      rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-    });
+-    expect(result).toEqual(new Date("2021-06-01T00:00:00Z")); // Based on the mocked system time
+-  });
+-
+-  it("should get correct interval end time with meeting started timestamp basis and DAY interval", () => {
+-    const meetingStartTime = new Date("2024-03-15T14:30:00Z");
+-    const result = getIntervalEndDate({
+-      interval: RRResetInterval.DAY,
+-      rrTimestampBasis: RRTimestampBasis.START_TIME,
+-      meetingStartTime,
+-    });
+-    expect(result).toEqual(new Date("2024-03-15T23:59:59.999Z"));
+-  });
+-
+-  it("should get correct interval end time with meeting started timestamp basis and MONTH interval", () => {
+-    const meetingStartTime = new Date("2024-03-15T14:30:00Z");
+-    const result = getIntervalEndDate({
+-      interval: RRResetInterval.MONTH,
+-      rrTimestampBasis: RRTimestampBasis.START_TIME,
+-      meetingStartTime,
+-    });
+-    expect(result).toEqual(new Date("2024-03-31T23:59:59.999Z"));
+-  });
+-
+-  it("should get correct interval end time with created at timestamp basis", () => {
+-    const result = getIntervalEndDate({
+-      interval: RRResetInterval.DAY,
+-      rrTimestampBasis: RRTimestampBasis.CREATED_AT,
+-    });
+-    expect(result).toEqual(new Date("2021-06-20T11:59:59Z")); // Based on the mocked system time
+-  });
+-});
++        userId: 1,
+\ No newline at end of file
+diff --git a/packages/features/bookings/lib/getLuckyUser.ts b/packages/features/bookings/lib/getLuckyUser.ts
+index e0afa66..40cec78 100644
+--- a/packages/features/bookings/lib/getLuckyUser.ts
++++ b/packages/features/bookings/lib/getLuckyUser.ts
+@@ -300,11 +300,6 @@ export class LuckyUserService implements ILuckyUserService {
+     const oooCalibration = new Map<number, number>();
+ 
+     oooData.forEach(({ userId, oooEntries }) => {
+-      // Skip OOO calibration if there's only one host (division by zero would occur)
+-      if (hosts.length <= 1) {
+-        return;
+-      }
+-
+       let calibration = 0;
+ 
+       oooEntries.forEach((oooEntry) => {
+@@ -385,753 +380,4 @@ export class LuckyUserService implements ILuckyUserService {
+ 
+     const allHostsWithCalibration = this.getHostsWithCalibration({
+       hosts: allRRHosts.map((host) => {
+-        return { email: host.user.email, userId: host.user.id, createdAt: host.createdAt };
+-      }),
+-      allRRHostsBookingsOfInterval,
+-      allRRHostsCreatedInInterval,
+-      oooData,
+-    });
+-
+-    let totalWeight: number;
+-
+-    if (attributeWeights && attributeWeights.length > 0) {
+-      totalWeight = attributeWeights.reduce((totalWeight, userWeight) => {
+-        totalWeight += userWeight.weight ?? 100;
+-        return totalWeight;
+-      }, 0);
+-    } else {
+-      totalWeight = allRRHosts.reduce((totalWeight, host) => {
+-        totalWeight += host.weight ?? 100;
+-        return totalWeight;
+-      }, 0);
+-    }
+-
+-    const totalCalibration = allHostsWithCalibration.reduce((totalCalibration, host) => {
+-      totalCalibration += host.calibration;
+-      return totalCalibration;
+-    }, 0);
+-
+-    const usersWithBookingShortfalls = availableUsers.map((user) => {
+-      let userWeight = user.weight ?? 100;
+-      if (attributeWeights) {
+-        userWeight = attributeWeights.find((userWeight) => userWeight.userId === user.id)?.weight ?? 100;
+-      }
+-      const targetPercentage = userWeight / totalWeight;
+-      const userBookings = bookingsOfAvailableUsersOfInterval.filter(
+-        (booking) =>
+-          booking.userId === user.id || booking.attendees.some((attendee) => attendee.email === user.email)
+-      );
+-
+-      const targetNumberOfBookings = (allBookings.length + totalCalibration) * targetPercentage;
+-      const userCalibration =
+-        allHostsWithCalibration.find((host) => host.userId === user.id)?.calibration ?? 0;
+-
+-      const bookingShortfall = targetNumberOfBookings - (userBookings.length + userCalibration);
+-
+-      return {
+-        ...user,
+-        calibration: userCalibration,
+-        weight: userWeight,
+-        targetNumberOfBookings,
+-        bookingShortfall,
+-        numBookings: userBookings.length,
+-      };
+-    });
+-
+-    const maxShortfall = Math.max(...usersWithBookingShortfalls.map((user) => user.bookingShortfall));
+-    const usersWithMaxShortfall = usersWithBookingShortfalls.filter(
+-      (user) => user.bookingShortfall === maxShortfall
+-    );
+-
+-    const maxWeight = Math.max(...usersWithMaxShortfall.map((user) => user.weight ?? 100));
+-
+-    const userIdsWithMaxShortfallAndWeight = new Set(
+-      usersWithMaxShortfall
+-        .filter((user) => {
+-          const weight = user.weight ?? 100;
+-          return weight === maxWeight;
+-        })
+-        .map((user) => user.id)
+-    );
+-
+-    const remainingUsersAfterWeightFilter = availableUsers.filter((user) =>
+-      userIdsWithMaxShortfallAndWeight.has(user.id)
+-    );
+-
+-    log.debug(
+-      "filterUsersBasedOnWeights",
+-      safeStringify({
+-        userIdsWithMaxShortfallAndWeight: userIdsWithMaxShortfallAndWeight,
+-        usersWithMaxShortfall: usersWithMaxShortfall.map((user) => user.email),
+-        usersWithBookingShortfalls: usersWithBookingShortfalls.map((user) => ({
+-          calibration: user.calibration,
+-          bookingShortfall: user.bookingShortfall,
+-          email: user.email,
+-          targetNumberOfBookings: user.targetNumberOfBookings,
+-          weight: user.weight,
+-          numBookings: user.numBookings,
+-        })),
+-        remainingUsersAfterWeightFilter: remainingUsersAfterWeightFilter.map((user) => user.email),
+-      })
+-    );
+-
+-    if (!isNonEmptyArray(remainingUsersAfterWeightFilter)) {
+-      throw new Error("Internal Error: Weight filter should never return length=0.");
+-    }
+-    return {
+-      remainingUsersAfterWeightFilter,
+-      usersAndTheirBookingShortfalls: usersWithBookingShortfalls.map((user) => ({
+-        id: user.id,
+-        calibration: user.calibration,
+-        bookingShortfall: user.bookingShortfall,
+-        weight: user.weight,
+-      })),
+-    };
+-  }
+-
+-  private getAverageAttributeWeights<
+-    T extends PartialUser & {
+-      priority?: number | null;
+-      weight?: number | null;
+-    }
+-  >(
+-    allRRHosts: GetLuckyUserParams<T>["allRRHosts"],
+-    attributesQueryValueChild: Record<
+-      string,
+-      {
+-        type?: string | undefined;
+-        properties?:
+-          | {
+-              field?: any;
+-              operator?: any;
+-              value?: any;
+-              valueSrc?: any;
+-            }
+-          | undefined;
+-      }
+-    >,
+-    attributeWithWeights: AttributeWithWeights
+-  ) {
+-    let averageWeightsHosts: { userId: number; weight: number }[] = [];
+-
+-    const fieldValueArray = Object.values(attributesQueryValueChild).map((child) => ({
+-      field: child.properties?.field,
+-      value: child.properties?.value,
+-    }));
+-
+-    fieldValueArray.map((obj) => {
+-      const attributeId = obj.field;
+-      const allRRHostsWeights = new Map<number, number[]>();
+-
+-      if (attributeId === attributeWithWeights.id) {
+-        obj.value.forEach((arrayobj: string[]) => {
+-          arrayobj.forEach((attributeOption: string) => {
+-            const attributeOptionWithUsers = attributeWithWeights.options.find(
+-              (option) => option.value.toLowerCase() === attributeOption.toLowerCase()
+-            );
+-
+-            allRRHosts.forEach((rrHost) => {
+-              const assignedUser = attributeOptionWithUsers?.assignedUsers.find(
+-                (assignedUser) => rrHost.user.id === assignedUser.member.userId
+-              );
+-
+-              if (allRRHostsWeights.has(rrHost.user.id)) {
+-                allRRHostsWeights.get(rrHost.user.id)?.push(assignedUser?.weight ?? rrHost.weight ?? 100);
+-              } else {
+-                allRRHostsWeights.set(rrHost.user.id, [assignedUser?.weight ?? rrHost.weight ?? 100]);
+-              }
+-            });
+-          });
+-        });
+-        averageWeightsHosts = Array.from(allRRHostsWeights.entries()).map(([userId, weights]) => {
+-          const totalWeight = weights.reduce((acc, weight) => acc + weight, 0);
+-          const averageWeight = totalWeight / weights.length;
+-
+-          return {
+-            userId,
+-            weight: averageWeight,
+-          };
+-        });
+-      }
+-    });
+-    log.debug(
+-      "getAverageAttributeWeights",
+-      safeStringify({ allRRHosts, attributesQueryValueChild, attributeWithWeights, averageWeightsHosts })
+-    );
+-
+-    return averageWeightsHosts;
+-  }
+-
+-  private getAttributesForVirtualQueues(
+-    response: Record<string, Pick<FormResponse[keyof FormResponse], "value">>,
+-    attributesQueryValueChild: Record<
+-      string,
+-      {
+-        type?: string | undefined;
+-        properties?:
+-          | {
+-              field?: any;
+-              operator?: any;
+-              value?: any;
+-              valueSrc?: any;
+-            }
+-          | undefined;
+-      }
+-    >,
+-    attributeWithWeights: { id: string }
+-  ) {
+-    let selectionOptions: Pick<VirtualQueuesDataType, "fieldOptionData">["fieldOptionData"] | undefined;
+-
+-    const fieldValueArray = Object.values(attributesQueryValueChild).map((child) => ({
+-      field: child.properties?.field,
+-      value: child.properties?.value,
+-    }));
+-
+-    fieldValueArray.some((obj) => {
+-      const attributeId = obj.field;
+-
+-      if (attributeId === attributeWithWeights.id) {
+-        obj.value.some((arrayobj: string[]) => {
+-          arrayobj.some((attributeOptionId: string) => {
+-            const content = attributeOptionId.slice(1, -1);
+-
+-            const routingFormFieldId = content.includes("field:") ? content.split("field:")[1] : null;
+-
+-            if (routingFormFieldId) {
+-              const fieldResponse = response[routingFormFieldId];
+-              selectionOptions = { fieldId: routingFormFieldId, selectedOptionIds: fieldResponse.value };
+-              return true;
+-            }
+-          });
+-        });
+-      }
+-    });
+-    return selectionOptions;
+-  }
+-
+-  private async getQueueAndAttributeWeightData<T extends PartialUser & { priority?: number | null }>(
+-    allRRHosts: GetLuckyUserParams<T>["allRRHosts"],
+-    routingFormResponse: RoutingFormResponse,
+-    attributeWithWeights: AttributeWithWeights
+-  ) {
+-    let averageWeightsHosts: { userId: number; weight: number }[] = [];
+-    const chosenRouteId = routingFormResponse?.chosenRouteId ?? undefined;
+-
+-    if (!chosenRouteId) return;
+-
+-    let fieldOptionData: { fieldId: string; selectedOptionIds: string | number | string[] } | undefined;
+-    const routingForm = routingFormResponse?.form;
+-
+-    if (routingForm && routingFormResponse) {
+-      const response = routingFormResponse.response as FormResponse;
+-      const routes = zodRoutes.parse(routingForm.routes);
+-      const chosenRoute = routes?.find((route) => route.id === routingFormResponse.chosenRouteId);
+-
+-      if (chosenRoute && "attributesQueryValue" in chosenRoute) {
+-        const parsedAttributesQueryValue = raqbQueryValueSchema.parse(chosenRoute.attributesQueryValue);
+-
+-        const attributesQueryValueWithLabel = getAttributesQueryValue({
+-          attributesQueryValue: chosenRoute.attributesQueryValue,
+-          attributes: [attributeWithWeights],
+-          dynamicFieldValueOperands: {
+-            fields: (routingFormResponse.form.fields as Fields) || [],
+-            response,
+-          },
+-        });
+-
+-        const parsedAttributesQueryValueWithLabel = raqbQueryValueSchema.parse(attributesQueryValueWithLabel);
+-
+-        if (parsedAttributesQueryValueWithLabel && parsedAttributesQueryValueWithLabel.children1) {
+-          averageWeightsHosts = this.getAverageAttributeWeights(
+-            allRRHosts,
+-            parsedAttributesQueryValueWithLabel.children1,
+-            attributeWithWeights
+-          );
+-        }
+-
+-        if (parsedAttributesQueryValue && parsedAttributesQueryValue.children1) {
+-          fieldOptionData = this.getAttributesForVirtualQueues(
+-            response,
+-            parsedAttributesQueryValue.children1,
+-            attributeWithWeights
+-          );
+-        }
+-      }
+-    }
+-
+-    if (fieldOptionData) {
+-      return { averageWeightsHosts, virtualQueuesData: { chosenRouteId, fieldOptionData } };
+-    }
+-
+-    return;
+-  }
+-
+-  private async getCalendarBusyTimesOfInterval(
+-    usersWithCredentials: {
+-      id: number;
+-      email: string;
+-      credentials: CredentialForCalendarService[];
+-      userLevelSelectedCalendars: SelectedCalendar[];
+-    }[],
+-    interval: RRResetInterval,
+-    rrTimestampBasis: RRTimestampBasis,
+-    meetingStartTime?: Date
+-  ): Promise<{ userId: number; busyTimes: (EventBusyDate & { timeZone?: string })[] }[]> {
+-    const usersBusyTimesQuery = await Promise.all(
+-      usersWithCredentials.map((user) =>
+-        getBusyCalendarTimes(
+-          user.credentials,
+-          getIntervalStartDate({ interval, rrTimestampBasis, meetingStartTime }).toISOString(),
+-          getIntervalEndDate({ interval, rrTimestampBasis, meetingStartTime }).toISOString(),
+-          user.userLevelSelectedCalendars,
+-          true,
+-          true
+-        )
+-      )
+-    );
+-
+-    return usersBusyTimesQuery.reduce((usersBusyTime, userBusyTimeQuery, index) => {
+-      if (userBusyTimeQuery.success) {
+-        usersBusyTime.push({
+-          userId: usersWithCredentials[index].id,
+-          busyTimes: userBusyTimeQuery.data,
+-        });
+-      }
+-      return usersBusyTime;
+-    }, [] as { userId: number; busyTimes: Awaited<ReturnType<typeof getBusyCalendarTimes>>["data"] }[]);
+-  }
+-
+-  private async getBookingsOfInterval({
+-    eventTypeId,
+-    users,
+-    virtualQueuesData,
+-    interval,
+-    includeNoShowInRRCalculation,
+-    rrTimestampBasis,
+-    meetingStartTime,
+-  }: {
+-    eventTypeId: number;
+-    users: { id: number; email: string }[];
+-    virtualQueuesData: VirtualQueuesDataType | null;
+-    interval: RRResetInterval;
+-    includeNoShowInRRCalculation: boolean;
+-    rrTimestampBasis: RRTimestampBasis;
+-    meetingStartTime?: Date;
+-  }) {
+-    return await this.bookingRepository.getAllBookingsForRoundRobin({
+-      eventTypeId: eventTypeId,
+-      users,
+-      startDate: getIntervalStartDate({ interval, rrTimestampBasis, meetingStartTime }),
+-      endDate: getIntervalEndDate({ interval, rrTimestampBasis, meetingStartTime }),
+-      virtualQueuesData,
+-      includeNoShowInRRCalculation,
+-      rrTimestampBasis,
+-    });
+-  }
+-
+-  private async fetchAllDataNeededForCalculations<
+-    T extends PartialUser & {
+-      priority?: number | null;
+-      weight?: number | null;
+-    }
+-  >(getLuckyUserParams: GetLuckyUserParams<T>): Promise<FetchedData> {
+-    const startTime = performance.now();
+-
+-    const { availableUsers, allRRHosts, eventType, meetingStartTime } = getLuckyUserParams;
+-    const notAvailableHosts = (function getNotAvailableHosts() {
+-      const availableUserIds = new Set(availableUsers.map((user) => user.id));
+-      return allRRHosts.reduce(
+-        (
+-          acc: {
+-            id: number;
+-            email: string;
+-          }[],
+-          host
+-        ) => {
+-          if (!availableUserIds.has(host.user.id)) {
+-            acc.push({
+-              id: host.user.id,
+-              email: host.user.email,
+-            });
+-          }
+-          return acc;
+-        },
+-        []
+-      );
+-    })();
+-
+-    const { attributeWeights, virtualQueuesData } = await this.prepareQueuesAndAttributesData(
+-      getLuckyUserParams
+-    );
+-
+-    const interval =
+-      eventType.isRRWeightsEnabled && getLuckyUserParams.eventType.team?.rrResetInterval
+-        ? getLuckyUserParams.eventType.team?.rrResetInterval
+-        : RRResetInterval.MONTH;
+-
+-    const rrTimestampBasis =
+-      eventType.isRRWeightsEnabled && getLuckyUserParams.eventType.team?.rrTimestampBasis
+-        ? getLuckyUserParams.eventType.team.rrTimestampBasis
+-        : RRTimestampBasis.CREATED_AT;
+-
+-    const intervalStartDate = getIntervalStartDate({ interval, rrTimestampBasis, meetingStartTime });
+-    const intervalEndDate = getIntervalEndDate({ interval, rrTimestampBasis, meetingStartTime });
+-
+-    const [
+-      userBusyTimesOfInterval,
+-      bookingsOfAvailableUsersOfInterval,
+-      bookingsOfNotAvailableUsersOfInterval,
+-      allRRHostsBookingsOfInterval,
+-      allRRHostsCreatedInInterval,
+-      organizersWithLastCreated,
+-    ] = await Promise.all([
+-      this.getCalendarBusyTimesOfInterval(
+-        allRRHosts.map((host) => host.user),
+-        interval,
+-        rrTimestampBasis,
+-        meetingStartTime
+-      ),
+-      this.getBookingsOfInterval({
+-        eventTypeId: eventType.id,
+-        users: availableUsers.map((user) => {
+-          return { id: user.id, email: user.email };
+-        }),
+-        virtualQueuesData: virtualQueuesData ?? null,
+-        interval,
+-        includeNoShowInRRCalculation: eventType.includeNoShowInRRCalculation,
+-        rrTimestampBasis,
+-        meetingStartTime,
+-      }),
+-      this.getBookingsOfInterval({
+-        eventTypeId: eventType.id,
+-        users: notAvailableHosts,
+-        virtualQueuesData: virtualQueuesData ?? null,
+-        interval,
+-        includeNoShowInRRCalculation: eventType.includeNoShowInRRCalculation,
+-        rrTimestampBasis,
+-        meetingStartTime,
+-      }),
+-      this.getBookingsOfInterval({
+-        eventTypeId: eventType.id,
+-        users: allRRHosts.map((host) => {
+-          return { id: host.user.id, email: host.user.email };
+-        }),
+-        virtualQueuesData: virtualQueuesData ?? null,
+-        interval,
+-        includeNoShowInRRCalculation: eventType.includeNoShowInRRCalculation,
+-        rrTimestampBasis,
+-        meetingStartTime,
+-      }),
+-      this.hostRepository.findHostsCreatedInInterval({
+-        eventTypeId: eventType.id,
+-        userIds: allRRHosts.map((host) => host.user.id),
+-        startDate: intervalStartDate,
+-      }),
+-      this.userRepository.findUsersWithLastBooking({
+-        userIds: availableUsers.map((user) => user.id),
+-        eventTypeId: eventType.id,
+-      }),
+-    ]);
+-
+-    const userFullDayBusyTimes = new Map<number, { start: Date; end: Date }[]>();
+-
+-    userBusyTimesOfInterval.forEach((userBusyTime) => {
+-      const fullDayBusyTimes = userBusyTime.busyTimes
+-        .filter((busyTime) => {
+-          if (!busyTime.timeZone) return false;
+-          const timezoneOffset = dayjs(busyTime.start).tz(busyTime.timeZone).utcOffset() * 60000;
+-          let start = new Date(new Date(busyTime.start).getTime() + timezoneOffset);
+-          const end = new Date(new Date(busyTime.end).getTime() + timezoneOffset);
+-
+-          const earliestStartTime = new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), 1));
+-          if (start < earliestStartTime) start = earliestStartTime;
+-
+-          return end.getTime() < new Date().getTime() && isFullDayEvent(start, end);
+-        })
+-        .map((busyTime) => ({ start: new Date(busyTime.start), end: new Date(busyTime.end) }));
+-
+-      userFullDayBusyTimes.set(userBusyTime.userId, fullDayBusyTimes);
+-    });
+-
+-    const oooEntries = await this.oooRepository.findOOOEntriesInInterval({
+-      userIds: allRRHosts.map((host) => host.user.id),
+-      startDate: intervalStartDate,
+-      endDate: intervalEndDate,
+-    });
+-
+-    const oooEntriesGroupedByUserId = new Map<number, { start: Date; end: Date }[]>();
+-
+-    oooEntries.forEach((entry) => {
+-      if (!oooEntriesGroupedByUserId.has(entry.userId)) {
+-        oooEntriesGroupedByUserId.set(entry.userId, []);
+-      }
+-      oooEntriesGroupedByUserId.get(entry.userId)!.push({ start: entry.start, end: entry.end });
+-    });
+-
+-    const oooData: { userId: number; oooEntries: { start: Date; end: Date }[] }[] = [];
+-
+-    userFullDayBusyTimes.forEach((fullDayBusyTimes, userId) => {
+-      const oooEntriesForUser = oooEntriesGroupedByUserId.get(userId) || [];
+-      const combinedEntries = [...oooEntriesForUser, ...fullDayBusyTimes];
+-      const oooEntries = mergeOverlappingRanges(combinedEntries);
+-
+-      oooData.push({
+-        userId,
+-        oooEntries,
+-      });
+-    });
+-
+-    const endTime = performance.now();
+-    log.info(`fetchAllDataNeededForCalculations took ${endTime - startTime}ms`);
+-
+-    log.debug(
+-      "fetchAllDataNeededForCalculations",
+-      safeStringify({
+-        bookingsOfAvailableUsersOfInterval: bookingsOfAvailableUsersOfInterval.length,
+-        bookingsOfNotAvailableUsersOfInterval: bookingsOfNotAvailableUsersOfInterval.length,
+-        allRRHostsBookingsOfInterval: allRRHostsBookingsOfInterval.length,
+-        allRRHostsCreatedInInterval: allRRHostsCreatedInInterval.length,
+-        virtualQueuesData,
+-        attributeWeights,
+-        oooData,
+-      })
+-    );
+-
+-    return {
+-      bookingsOfAvailableUsersOfInterval,
+-      bookingsOfNotAvailableUsersOfInterval,
+-      allRRHostsBookingsOfInterval,
+-      allRRHostsCreatedInInterval,
+-      organizersWithLastCreated,
+-      attributeWeights,
+-      virtualQueuesData,
+-      oooData,
+-    };
+-  }
+-
+-  // === Public methods exposed by the service ===
+-  public async getLuckyUser<
+-    T extends PartialUser & {
+-      priority?: number | null;
+-      weight?: number | null;
+-    }
+-  >(getLuckyUserParams: GetLuckyUserParams<T>) {
+-    const fetchedData = await this.fetchAllDataNeededForCalculations(getLuckyUserParams);
+-
+-    const { luckyUser } = this.getLuckyUser_requiresDataToBePreFetched({
+-      ...getLuckyUserParams,
+-      ...fetchedData,
+-    });
+-
+-    return luckyUser;
+-  }
+-
+-  public getLuckyUser_requiresDataToBePreFetched<
+-    T extends PartialUser & {
+-      priority?: number | null;
+-      weight?: number | null;
+-    }
+-  >({ availableUsers, ...getLuckyUserParams }: GetLuckyUserParams<T> & FetchedData) {
+-    const {
+-      eventType,
+-      bookingsOfAvailableUsersOfInterval,
+-      bookingsOfNotAvailableUsersOfInterval,
+-      allRRHostsBookingsOfInterval,
+-      allRRHostsCreatedInInterval,
+-      organizersWithLastCreated,
+-      oooData,
+-    } = getLuckyUserParams;
+-
+-    if (availableUsers.length === 1) {
+-      return { luckyUser: availableUsers[0], usersAndTheirBookingShortfalls: [] };
+-    }
+-
+-    let usersAndTheirBookingShortfalls: {
+-      id: number;
+-      bookingShortfall: number;
+-      calibration: number;
+-      weight: number;
+-    }[] = [];
+-    if (eventType.isRRWeightsEnabled) {
+-      const {
+-        remainingUsersAfterWeightFilter,
+-        usersAndTheirBookingShortfalls: _usersAndTheirBookingShortfalls,
+-      } = this.filterUsersBasedOnWeights({
+-        ...getLuckyUserParams,
+-        availableUsers,
+-        bookingsOfAvailableUsersOfInterval,
+-        bookingsOfNotAvailableUsersOfInterval,
+-        allRRHostsBookingsOfInterval,
+-        allRRHostsCreatedInInterval,
+-        oooData,
+-      });
+-      availableUsers = remainingUsersAfterWeightFilter;
+-      usersAndTheirBookingShortfalls = _usersAndTheirBookingShortfalls;
+-    }
+-
+-    const highestPriorityUsers = this.getUsersWithHighestPriority({ availableUsers });
+-    if (highestPriorityUsers.length === 1) {
+-      return {
+-        luckyUser: highestPriorityUsers[0],
+-        usersAndTheirBookingShortfalls,
+-      };
+-    }
+-
+-    return {
+-      luckyUser: this.leastRecentlyBookedUser({
+-        ...getLuckyUserParams,
+-        availableUsers: highestPriorityUsers,
+-        bookingsOfAvailableUsers: bookingsOfAvailableUsersOfInterval,
+-        organizersWithLastCreated,
+-      }),
+-      usersAndTheirBookingShortfalls,
+-    };
+-  }
+-
+-  public async prepareQueuesAndAttributesData<T extends PartialUser>({
+-    eventType,
+-    routingFormResponse,
+-    allRRHosts,
+-  }: Omit<GetLuckyUserParams<T>, "availableUsers">) {
+-    let attributeWeights;
+-    let virtualQueuesData;
+-    const organizationId = eventType.team?.parentId;
+-    log.debug("prepareQueuesAndAttributesData", safeStringify({ routingFormResponse, organizationId }));
+-    if (routingFormResponse && organizationId) {
+-      const routingForm = routingFormResponse?.form;
+-      const routes = zodRoutes.parse(routingForm.routes);
+-      const chosenRoute = routes?.find((route) => route.id === routingFormResponse.chosenRouteId);
+-
+-      if (chosenRoute && "attributeIdForWeights" in chosenRoute) {
+-        const attributeIdForWeights = chosenRoute.attributeIdForWeights;
+-
+-        if (attributeIdForWeights) {
+-          const attributeWithEnabledWeights = await this.attributeRepository.findUniqueWithWeights({
+-            teamId: organizationId,
+-            attributeId: attributeIdForWeights,
+-            isWeightsEnabled: true,
+-          });
+-
+-          if (attributeWithEnabledWeights) {
+-            const queueAndAtributeWeightData = await this.getQueueAndAttributeWeightData(
+-              allRRHosts,
+-              routingFormResponse,
+-              attributeWithEnabledWeights as AttributeWithWeights
+-            );
+-            if (
+-              queueAndAtributeWeightData?.averageWeightsHosts &&
+-              queueAndAtributeWeightData?.virtualQueuesData
+-            ) {
+-              attributeWeights = queueAndAtributeWeightData?.averageWeightsHosts;
+-              virtualQueuesData = queueAndAtributeWeightData?.virtualQueuesData;
+-            }
+-          }
+-        }
+-      }
+-    }
+-    return { attributeWeights, virtualQueuesData };
+-  }
+-
+-  public async getOrderedListOfLuckyUsers<AvailableUser extends AvailableUserBase>(
+-    getLuckyUserParams: GetLuckyUserParams<AvailableUser>
+-  ) {
+-    const { availableUsers, eventType } = getLuckyUserParams;
+-
+-    const {
+-      bookingsOfAvailableUsersOfInterval,
+-      bookingsOfNotAvailableUsersOfInterval,
+-      allRRHostsBookingsOfInterval,
+-      allRRHostsCreatedInInterval,
+-      organizersWithLastCreated,
+-      attributeWeights,
+-      virtualQueuesData,
+-      oooData,
+-    } = await this.fetchAllDataNeededForCalculations(getLuckyUserParams);
+-
+-    log.info(
+-      "getOrderedListOfLuckyUsers",
+-      safeStringify({
+-        availableUsers: availableUsers.map((user) => {
+-          return { id: user.id, email: user.email, priority: user.priority, weight: user.weight };
+-        }),
+-        bookingsOfAvailableUsersOfInterval,
+-        bookingsOfNotAvailableUsersOfInterval,
+-        allRRHostsBookingsOfInterval,
+-        allRRHostsCreatedInInterval,
+-        organizersWithLastCreated,
+-      })
+-    );
+-
+-    let remainingAvailableUsers = [...availableUsers];
+-    let bookingsOfRemainingAvailableUsersOfInterval = [...bookingsOfAvailableUsersOfInterval];
+-    const orderedUsersSet = new Set<AvailableUser>();
+-    const perUserBookingsCount: Record<number, number> = {};
+-
+-    const startTime = performance.now();
+-    let usersAndTheirBookingShortfalls: {
+-      id: number;
+-      bookingShortfall: number;
+-      calibration: number;
+-      weight: number;
+-    }[] = [];
+-    while (remainingAvailableUsers.length > 0) {
+-      const { luckyUser, usersAndTheirBookingShortfalls: _usersAndTheirBookingShortfalls } =
+-        this.getLuckyUser_requiresDataToBePreFetched({
+-          ...getLuckyUserParams,
+-          eventType,
+-          availableUsers: remainingAvailableUsers as [AvailableUser, ...AvailableUser[]],
+-          bookingsOfAvailableUsersOfInterval: bookingsOfRemainingAvailableUsersOfInterval,
+-          bookingsOfNotAvailableUsersOfInterval,
+-          allRRHostsBookingsOfInterval,
+-          allRRHostsCreatedInInterval,
+-          organizersWithLastCreated,
+-          attributeWeights,
+-          virtualQueuesData,
+-          oooData,
+-        });
+-
+-      if (!usersAndTheirBookingShortfalls.length) {
+-        usersAndTheirBookingShortfalls = _usersAndTheirBookingShortfalls;
+-      }
+-
+-      if (orderedUsersSet.has(luckyUser)) {
+-        throw new Error(
+-          `Error building ordered list of lucky users. The lucky user ${luckyUser.email} is already in the set.`
+-        );
+-      }
+-
+-      orderedUsersSet.add(luckyUser);
+-      perUserBookingsCount[luckyUser.id] = bookingsOfAvailableUsersOfInterval.filter(
+-        (booking) => booking.userId === luckyUser.id
+-      ).length;
+-      remainingAvailableUsers = remainingAvailableUsers.filter((user) => user.id !== luckyUser.id);
+-      bookingsOfRemainingAvailableUsersOfInterval = bookingsOfRemainingAvailableUsersOfInterval.filter(
+-        (booking) => remainingAvailableUsers.map((user) => user.id).includes(booking.userId ?? 0)
+-      );
+-    }
+-
+-    const endTime = performance.now();
+-    log.info(`getOrderedListOfLuckyUsers took ${endTime - startTime}ms`);
+-
+-    const bookingShortfalls: Record<number, number> = {};
+-    const calibrations: Record<number, number> = {};
+-    const weights: Record<number, number> = {};
+-
+-    usersAndTheirBookingShortfalls.forEach((user) => {
+-      bookingShortfalls[user.id] = parseFloat(user.bookingShortfall.toFixed(2));
+-      calibrations[user.id] = parseFloat(user.calibration.toFixed(2));
+-      weights[user.id] = user.weight;
+-    });
+-
+-    return {
+-      users: Array.from(orderedUsersSet),
+-      isUsingAttributeWeights: !!attributeWeights && !!virtualQueuesData,
+-      perUserData: {
+-        bookingsCount: perUserBookingsCount,
+-        bookingShortfalls: eventType.isRRWeightsEnabled ? bookingShortfalls : null,
+-        calibrations: eventType.isRRWeightsEnabled ? calibrations : null,
+-        weights: eventType.isRRWeightsEnabled ? weights : null,
+-      },
+-    };
+-  }
+-}
++        return { email: host.user.email, userId: host.user.id,
+\ No newline at end of file

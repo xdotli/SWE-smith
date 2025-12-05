@@ -1,0 +1,189 @@
+diff --git a/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/chart-settings/ChartSettingItem.tsx b/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/chart-settings/ChartSettingItem.tsx
+index 8f8e795cd7dbc..45f2291deb7ef 100644
+--- a/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/chart-settings/ChartSettingItem.tsx
++++ b/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/chart-settings/ChartSettingItem.tsx
+@@ -34,6 +34,9 @@ export const ChartSettingItem = ({
+   onFilterClick,
+ }: ChartSettingItemProps) => {
+   if (item.id === CHART_CONFIGURATION_SETTING_IDS.FILTER) {
++    const filterValue = getChartSettingsValues(item.id);
++    const filterDescription = isString(filterValue) ? filterValue : undefined;
++
+     return (
+       <SelectableListItem
+         key={item.id}
+@@ -46,6 +49,8 @@ export const ChartSettingItem = ({
+           Icon={item.Icon}
+           hasSubMenu
+           onClick={onFilterClick}
++          description={filterDescription}
++          contextualTextPosition="right"
+         />
+       </SelectableListItem>
+     );
+diff --git a/packages/twenty-front/src/modules/command-menu/pages/page-layout/hooks/useChartSettingsValues.ts b/packages/twenty-front/src/modules/command-menu/pages/page-layout/hooks/useChartSettingsValues.ts
+index aa760e8de6711..7798663623ab2 100644
+--- a/packages/twenty-front/src/modules/command-menu/pages/page-layout/hooks/useChartSettingsValues.ts
++++ b/packages/twenty-front/src/modules/command-menu/pages/page-layout/hooks/useChartSettingsValues.ts
+@@ -3,11 +3,13 @@ import { useGraphXSortOptionLabels } from '@/command-menu/pages/page-layout/hook
+ import { type ChartConfiguration } from '@/command-menu/pages/page-layout/types/ChartConfiguration';
+ import { CHART_CONFIGURATION_SETTING_IDS } from '@/command-menu/pages/page-layout/types/ChartConfigurationSettingIds';
+ import { getChartAxisNameDisplayOptions } from '@/command-menu/pages/page-layout/utils/getChartAxisNameDisplayOptions';
++import { getChartFilterRulesCount } from '@/command-menu/pages/page-layout/utils/getChartFilterRulesCount';
+ import { getDateGranularityLabel } from '@/command-menu/pages/page-layout/utils/getDateGranularityLabel';
+ import { getFieldLabelWithSubField } from '@/command-menu/pages/page-layout/utils/getFieldLabelWithSubField';
+ import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+ import { getAggregateOperationLabel } from '@/object-record/record-board/record-board-column/utils/getAggregateOperationLabel';
+ import { convertAggregateOperationToExtendedAggregateOperation } from '@/object-record/utils/convertAggregateOperationToExtendedAggregateOperation';
++import { plural } from '@lingui/core/macro';
+ import { useRecoilValue } from 'recoil';
+ import { type CompositeFieldSubFieldName } from 'twenty-shared/types';
+ import { capitalize, isDefined } from 'twenty-shared/utils';
+@@ -201,9 +203,18 @@ export const useChartSettingsValues = ({
+         return groupByOrderByLabel;
+       case CHART_CONFIGURATION_SETTING_IDS.DATA_LABELS:
+         return configuration.displayDataLabel ?? undefined;
++      case CHART_CONFIGURATION_SETTING_IDS.FILTER: {
++        const filterRulesCount = getChartFilterRulesCount(configuration.filter);
++        return filterRulesCount > 0
++          ? plural(filterRulesCount, {
++              one: `${filterRulesCount} rule`,
++              other: `${filterRulesCount} rules`,
++            })
++          : undefined;
++      }
+       case CHART_CONFIGURATION_SETTING_IDS.CENTER_METRIC:
+         return isPieChart
+-          ? (configuration.showCenterMetric ?? undefined)
++          ? (configuration.showCenterMetric ?? true)
+           : undefined;
+       case CHART_CONFIGURATION_SETTING_IDS.STACKED_BARS:
+         return configuration.__typename === 'BarChartConfiguration'
+diff --git a/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/__tests__/getChartFilterRulesCount.test.ts b/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/__tests__/getChartFilterRulesCount.test.ts
+new file mode 100644
+index 0000000000000..1cec14447a7fd
+--- /dev/null
++++ b/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/__tests__/getChartFilterRulesCount.test.ts
+@@ -0,0 +1,46 @@
++import { type ChartFilters } from '@/command-menu/pages/page-layout/types/ChartFilters';
++import { getChartFilterRulesCount } from '@/command-menu/pages/page-layout/utils/getChartFilterRulesCount';
++
++describe('getChartFilterRulesCount', () => {
++  it('should return 0 for undefined filter', () => {
++    expect(getChartFilterRulesCount(undefined)).toBe(0);
++  });
++
++  it('should return 0 when no root group exists', () => {
++    const filter: ChartFilters = {
++      recordFilters: [],
++      recordFilterGroups: [],
++    };
++
++    expect(getChartFilterRulesCount(filter)).toBe(0);
++  });
++
++  it('should return count of filters in root group', () => {
++    const filter: ChartFilters = {
++      recordFilterGroups: [
++        { id: 'root', parentRecordFilterGroupId: undefined },
++      ],
++      recordFilters: [
++        { id: 'filter-1', recordFilterGroupId: 'root' },
++        { id: 'filter-2', recordFilterGroupId: 'root' },
++      ],
++    } as ChartFilters;
++
++    expect(getChartFilterRulesCount(filter)).toBe(2);
++  });
++
++  it('should count both direct filters and nested groups as children', () => {
++    const filter: ChartFilters = {
++      recordFilterGroups: [
++        { id: 'root', parentRecordFilterGroupId: undefined },
++        { id: 'nested-group', parentRecordFilterGroupId: 'root' },
++      ],
++      recordFilters: [
++        { id: 'filter-1', recordFilterGroupId: 'root' },
++        { id: 'filter-2', recordFilterGroupId: 'nested-group' },
++      ],
++    } as ChartFilters;
++
++    expect(getChartFilterRulesCount(filter)).toBe(2);
++  });
++});
+diff --git a/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/getChartFilterRulesCount.ts b/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/getChartFilterRulesCount.ts
+new file mode 100644
+index 0000000000000..da231a1a04574
+--- /dev/null
++++ b/packages/twenty-front/src/modules/command-menu/pages/page-layout/utils/getChartFilterRulesCount.ts
+@@ -0,0 +1,31 @@
++import { type ChartFilters } from '@/command-menu/pages/page-layout/types/ChartFilters';
++import { isDefined } from 'twenty-shared/utils';
++
++export const getChartFilterRulesCount = (
++  filter: ChartFilters | undefined,
++): number => {
++  if (!isDefined(filter)) {
++    return 0;
++  }
++
++  const recordFilters = filter.recordFilters ?? [];
++  const recordFilterGroups = filter.recordFilterGroups ?? [];
++
++  const rootGroup = recordFilterGroups.find(
++    (group) => !isDefined(group.parentRecordFilterGroupId),
++  );
++
++  if (!isDefined(rootGroup)) {
++    return 0;
++  }
++
++  const childFiltersCount = recordFilters.filter(
++    (recordFilter) => recordFilter.recordFilterGroupId === rootGroup.id,
++  ).length;
++
++  const childGroupsCount = recordFilterGroups.filter(
++    (group) => group.parentRecordFilterGroupId === rootGroup.id,
++  ).length;
++
++  return childFiltersCount + childGroupsCount;
++};
+diff --git a/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/components/GraphWidgetPieChart.tsx b/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/components/GraphWidgetPieChart.tsx
+index 190bbc878dc0f..ae063d786ef84 100644
+--- a/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/components/GraphWidgetPieChart.tsx
++++ b/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/components/GraphWidgetPieChart.tsx
+@@ -71,7 +71,7 @@ export const GraphWidgetPieChart = ({
+   customFormatter,
+   onSliceClick,
+   showDataLabels = false,
+-  showCenterMetric = false,
++  showCenterMetric = true,
+ }: GraphWidgetPieChartProps) => {
+   const theme = useTheme();
+   const colorRegistry = createGraphColorRegistry(theme);
+diff --git a/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/hooks/useGraphPieChartWidgetData.ts b/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/hooks/useGraphPieChartWidgetData.ts
+index cdbc279ad5909..bceac7a8ba3f2 100644
+--- a/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/hooks/useGraphPieChartWidgetData.ts
++++ b/packages/twenty-front/src/modules/page-layout/widgets/graph/graphWidgetPieChart/hooks/useGraphPieChartWidgetData.ts
+@@ -61,7 +61,7 @@ export const useGraphPieChartWidgetData = ({
+     ...transformedData,
+     objectMetadataItem,
+     showDataLabels: configuration.displayDataLabel ?? false,
+-    showCenterMetric: configuration.showCenterMetric ?? false,
++    showCenterMetric: configuration.showCenterMetric ?? true,
+     loading,
+     error,
+   };
+diff --git a/packages/twenty-server/src/engine/core-modules/page-layout/dtos/pie-chart-configuration.dto.ts b/packages/twenty-server/src/engine/core-modules/page-layout/dtos/pie-chart-configuration.dto.ts
+index 13014c268d5d1..3abdd1db3a6c8 100644
+--- a/packages/twenty-server/src/engine/core-modules/page-layout/dtos/pie-chart-configuration.dto.ts
++++ b/packages/twenty-server/src/engine/core-modules/page-layout/dtos/pie-chart-configuration.dto.ts
+@@ -71,7 +71,7 @@ export class PieChartConfigurationDTO {
+   @IsOptional()
+   displayDataLabel?: boolean;
+ 
+-  @Field(() => Boolean, { nullable: true, defaultValue: false })
++  @Field(() => Boolean, { nullable: true, defaultValue: true })
+   @IsBoolean()
+   @IsOptional()
+   showCenterMetric?: boolean;

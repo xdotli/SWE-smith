@@ -1,0 +1,444 @@
+diff --git a/packages/app-store/utils.test.ts b/packages/app-store/utils.test.ts
+deleted file mode 100644
+index e2dd989..0000000
+--- a/packages/app-store/utils.test.ts
++++ /dev/null
+@@ -1,140 +0,0 @@
+-import { describe, it, expect } from "vitest";
+-
+-import type { App } from "@calcom/types/App";
+-import type { CredentialForCalendarService } from "@calcom/types/Credential";
+-
+-import { sanitizeAppForViewer } from "./utils";
+-import type { CredentialDataWithTeamName, LocationOption } from "./utils";
+-
+-describe("sanitizeAppForViewer", () => {
+-  it("should remove key, credential, and credentials properties", () => {
+-    const mockCredential: CredentialDataWithTeamName = {
+-      id: 1,
+-      type: "daily_video",
+-      key: { api_key: "secret-api-key" },
+-      userId: 1,
+-      user: { email: "test@example.com" },
+-      teamId: null,
+-      appId: "daily-video",
+-      invalid: false,
+-      delegatedTo: null,
+-      delegatedToId: null,
+-      delegationCredentialId: null,
+-      team: null,
+-    };
+-
+-    const mockApp: App & {
+-      credential: CredentialDataWithTeamName | null;
+-      credentials: CredentialDataWithTeamName[];
+-      locationOption: LocationOption | null;
+-    } = {
+-      type: "daily_video",
+-      name: "Daily Video",
+-      description: "Video conferencing",
+-      variant: "conferencing",
+-      slug: "daily-video",
+-      categories: ["conferencing"],
+-      logo: "/logo.png",
+-      publisher: "Daily",
+-      url: "https://daily.co",
+-      email: "support@daily.co",
+-      key: { api_key: "secret-global-api-key" },
+-      credential: mockCredential,
+-      credentials: [mockCredential],
+-      locationOption: {
+-        value: "integrations:daily_video",
+-        label: "Daily Video",
+-      },
+-    };
+-
+-    const sanitized = sanitizeAppForViewer(mockApp);
+-
+-    // Should not have key, credential, or credentials
+-    expect(sanitized).not.toHaveProperty("key");
+-    expect(sanitized).not.toHaveProperty("credential");
+-    expect(sanitized).not.toHaveProperty("credentials");
+-
+-    // Should have all other properties
+-    expect(sanitized).toHaveProperty("type", "daily_video");
+-    expect(sanitized).toHaveProperty("name", "Daily Video");
+-    expect(sanitized).toHaveProperty("slug", "daily-video");
+-    expect(sanitized).toHaveProperty("locationOption");
+-    expect(sanitized.locationOption).toEqual({
+-      value: "integrations:daily_video",
+-      label: "Daily Video",
+-    });
+-  });
+-
+-  it("should handle apps without credential or credentials", () => {
+-    const mockApp: App & {
+-      credential?: CredentialDataWithTeamName | null;
+-      credentials?: CredentialDataWithTeamName[];
+-      locationOption?: LocationOption | null;
+-    } = {
+-      type: "zoom_video",
+-      name: "Zoom",
+-      description: "Video conferencing",
+-      variant: "conferencing",
+-      slug: "zoom",
+-      categories: ["conferencing"],
+-      logo: "/logo.png",
+-      publisher: "Zoom",
+-      url: "https://zoom.us",
+-      email: "support@zoom.us",
+-      key: { api_key: "secret-key" },
+-    };
+-
+-    const sanitized = sanitizeAppForViewer(mockApp);
+-
+-    expect(sanitized).not.toHaveProperty("key");
+-    expect(sanitized).not.toHaveProperty("credential");
+-    expect(sanitized).not.toHaveProperty("credentials");
+-    expect(sanitized).toHaveProperty("slug", "zoom");
+-  });
+-
+-  it("should preserve all non-sensitive properties", () => {
+-    const mockApp: App & {
+-      credential: CredentialDataWithTeamName | null;
+-      credentials: CredentialDataWithTeamName[];
+-      locationOption: LocationOption | null;
+-    } = {
+-      type: "stripe_payment",
+-      name: "Stripe",
+-      description: "Payment processing",
+-      variant: "payment",
+-      slug: "stripe",
+-      categories: ["payment"],
+-      logo: "/logo.png",
+-      publisher: "Stripe",
+-      url: "https://stripe.com",
+-      email: "support@stripe.com",
+-      verified: true,
+-      trending: true,
+-      rating: 4.5,
+-      reviews: 1000,
+-      isGlobal: false,
+-      key: { api_key: "sk_live_secret" },
+-      credential: null,
+-      credentials: [],
+-      locationOption: null,
+-      appData: {
+-        location: {
+-          type: "integrations:stripe",
+-          label: "Stripe",
+-          linkType: "dynamic",
+-        },
+-      },
+-    };
+-
+-    const sanitized = sanitizeAppForViewer(mockApp);
+-
+-    expect(sanitized).not.toHaveProperty("key");
+-    expect(sanitized).not.toHaveProperty("credential");
+-    expect(sanitized).not.toHaveProperty("credentials");
+-    expect(sanitized.verified).toBe(true);
+-    expect(sanitized.trending).toBe(true);
+-    expect(sanitized.rating).toBe(4.5);
+-    expect(sanitized.reviews).toBe(1000);
+-    expect(sanitized.appData).toBeDefined();
+-  });
+-});
+diff --git a/packages/app-store/utils.ts b/packages/app-store/utils.ts
+index 78a9b0a..f1bdddc 100644
+--- a/packages/app-store/utils.ts
++++ b/packages/app-store/utils.ts
+@@ -57,7 +57,7 @@ function getApps(credentials: CredentialDataWithTeamName[], filterOnCredentials?
+       const credential = {
+         id: 0,
+         type: appMeta.type,
+-
++         
+         key: appMeta.key!,
+         userId: 0,
+         user: { email: "" },
+@@ -174,15 +174,4 @@ export const defaultVideoAppCategories: AppCategories[] = [
+   "video",
+ ];
+ 
+-export function sanitizeAppForViewer<
+-  T extends App & {
+-    credential?: CredentialDataWithTeamName | null;
+-    credentials?: CredentialDataWithTeamName[];
+-    locationOption?: LocationOption | null;
+-  }
+->(app: T): Omit<T, "key" | "credential" | "credentials"> {
+-  const { key: _, credential: _1, credentials: _2, ...sanitizedApp } = app;
+-  return sanitizedApp;
+-}
+-
+-export default getApps;
++export default getApps;
+\ No newline at end of file
+diff --git a/packages/trpc/server/routers/viewer/apps/appById.handler.test.ts b/packages/trpc/server/routers/viewer/apps/appById.handler.test.ts
+deleted file mode 100644
+index 29704af..0000000
+--- a/packages/trpc/server/routers/viewer/apps/appById.handler.test.ts
++++ /dev/null
+@@ -1,235 +0,0 @@
+-import { describe, it, expect, vi, beforeEach } from "vitest";
+-
+-import { TRPCError } from "@trpc/server";
+-
+-import type { CredentialForCalendarService } from "@calcom/types/Credential";
+-
+-import { appByIdHandler } from "./appById.handler";
+-import type { TAppByIdInputSchema } from "./appById.schema";
+-
+-// Mock the dependencies
+-vi.mock("@calcom/app-store/delegationCredential", () => ({
+-  getUsersCredentialsIncludeServiceAccountKey: vi.fn(),
+-}));
+-
+-vi.mock("@calcom/app-store/utils", () => ({
+-  default: vi.fn(),
+-  sanitizeAppForViewer: vi.fn((app) => {
+-    const { key: _, credential: _1, credentials: _2, ...sanitized } = app;
+-    return sanitized;
+-  }),
+-}));
+-
+-import { getUsersCredentialsIncludeServiceAccountKey } from "@calcom/app-store/delegationCredential";
+-import getApps, { sanitizeAppForViewer } from "@calcom/app-store/utils";
+-
+-import type { CredentialDataWithTeamName, LocationOption } from "@calcom/app-store/utils";
+-import type { App } from "@calcom/types/App";
+-
+-describe("appByIdHandler", () => {
+-  const mockUser = {
+-    id: 1,
+-    email: "test@example.com",
+-    username: "testuser",
+-    name: "Test User",
+-  };
+-
+-  beforeEach(() => {
+-    vi.clearAllMocks();
+-  });
+-
+-  it("should not expose key field for globally installed apps", async () => {
+-    const secretApiKey = "secret-daily-api-key-12345";
+-    const mockCredential: CredentialDataWithTeamName = {
+-      id: 0,
+-      type: "daily_video",
+-      key: { apikey: secretApiKey },
+-      userId: 0,
+-      user: { email: "" },
+-      teamId: null,
+-      appId: "daily-video",
+-      invalid: false,
+-      delegatedTo: null,
+-      delegatedToId: null,
+-      delegationCredentialId: null,
+-      team: {
+-        name: "Default",
+-      },
+-    };
+-
+-    const mockApp: App & {
+-      credential: CredentialDataWithTeamName | null;
+-      credentials: CredentialDataWithTeamName[];
+-      locationOption: LocationOption | null;
+-    } = {
+-      type: "daily_video",
+-      name: "Cal Video",
+-      description: "Video conferencing",
+-      variant: "conferencing",
+-      slug: "daily-video",
+-      categories: ["conferencing"],
+-      logo: "icon.svg",
+-      publisher: "Cal.com",
+-      url: "https://daily.co",
+-      email: "help@cal.com",
+-      isGlobal: true,
+-      // This is the sensitive key that should NOT be exposed
+-      key: { apikey: secretApiKey },
+-      credential: mockCredential,
+-      credentials: [mockCredential],
+-      locationOption: {
+-        value: "integrations:daily",
+-        label: "Cal Video",
+-      },
+-      appData: {
+-        location: {
+-          linkType: "dynamic",
+-          type: "integrations:daily",
+-          label: "Cal Video",
+-        },
+-      },
+-    };
+-
+-    vi.mocked(getUsersCredentialsIncludeServiceAccountKey).mockResolvedValue([]);
+-    vi.mocked(getApps).mockReturnValue([mockApp]);
+-
+-    const result = await appByIdHandler({
+-      ctx: { user: mockUser },
+-      input: { appId: "daily-video" } as TAppByIdInputSchema,
+-    });
+-
+-    // Verify that key is NOT in the response
+-    expect(result).not.toHaveProperty("key");
+-    expect(result).not.toHaveProperty("credential");
+-    expect(result).not.toHaveProperty("credentials");
+-
+-    // Verify that other properties are preserved
+-    expect(result).toHaveProperty("slug", "daily-video");
+-    expect(result).toHaveProperty("name", "Cal Video");
+-    expect(result).toHaveProperty("isGlobal", true);
+-    expect(result).toHaveProperty("locationOption");
+-    expect(result).toHaveProperty("isInstalled", 1);
+-
+-    // Verify sanitizeAppForViewer was called
+-    expect(sanitizeAppForViewer).toHaveBeenCalledWith(mockApp);
+-  });
+-
+-  it("should throw BAD_REQUEST when app is not found", async () => {
+-    vi.mocked(getUsersCredentialsIncludeServiceAccountKey).mockResolvedValue([]);
+-    vi.mocked(getApps).mockReturnValue([]);
+-
+-    await expect(
+-      appByIdHandler({
+-        ctx: { user: mockUser },
+-        input: { appId: "non-existent-app" } as TAppByIdInputSchema,
+-      })
+-    ).rejects.toThrow(TRPCError);
+-
+-    await expect(
+-      appByIdHandler({
+-        ctx: { user: mockUser },
+-        input: { appId: "non-existent-app" } as TAppByIdInputSchema,
+-      })
+-    ).rejects.toThrow("Could not find app non-existent-app");
+-  });
+-
+-  it("should preserve all non-sensitive properties", async () => {
+-    const mockApp: App & {
+-      credential: CredentialDataWithTeamName | null;
+-      credentials: CredentialDataWithTeamName[];
+-      locationOption: LocationOption | null;
+-    } = {
+-      type: "zoom_video",
+-      name: "Zoom",
+-      description: "Video conferencing",
+-      variant: "conferencing",
+-      slug: "zoom",
+-      categories: ["conferencing"],
+-      logo: "icon.svg",
+-      publisher: "Zoom",
+-      url: "https://zoom.us",
+-      email: "support@zoom.us",
+-      isGlobal: false,
+-      verified: true,
+-      trending: true,
+-      rating: 4.5,
+-      reviews: 1000,
+-      key: { api_key: "secret-zoom-key" },
+-      credential: null,
+-      credentials: [],
+-      locationOption: null,
+-    };
+-
+-    vi.mocked(getUsersCredentialsIncludeServiceAccountKey).mockResolvedValue([]);
+-    vi.mocked(getApps).mockReturnValue([mockApp]);
+-
+-    const result = await appByIdHandler({
+-      ctx: { user: mockUser },
+-      input: { appId: "zoom" } as TAppByIdInputSchema,
+-    });
+-
+-    // Verify sensitive fields are removed
+-    expect(result).not.toHaveProperty("key");
+-    expect(result).not.toHaveProperty("credential");
+-    expect(result).not.toHaveProperty("credentials");
+-
+-    // Verify non-sensitive fields are preserved
+-    expect(result).toHaveProperty("slug", "zoom");
+-    expect(result).toHaveProperty("name", "Zoom");
+-    expect(result).toHaveProperty("verified", true);
+-    expect(result).toHaveProperty("trending", true);
+-    expect(result).toHaveProperty("rating", 4.5);
+-    expect(result).toHaveProperty("reviews", 1000);
+-    expect(result).toHaveProperty("isInstalled", 0);
+-  });
+-
+-  it("should correctly set isInstalled based on credentials length", async () => {
+-    const mockCredential: CredentialDataWithTeamName = {
+-      id: 1,
+-      type: "google_calendar",
+-      key: { access_token: "token" },
+-      userId: 1,
+-      user: { email: "test@example.com" },
+-      teamId: null,
+-      appId: "google-calendar",
+-      invalid: false,
+-      delegatedTo: null,
+-      delegatedToId: null,
+-      delegationCredentialId: null,
+-      team: null,
+-    };
+-
+-    const mockApp: App & {
+-      credential: CredentialDataWithTeamName | null;
+-      credentials: CredentialDataWithTeamName[];
+-      locationOption: LocationOption | null;
+-    } = {
+-      type: "google_calendar",
+-      name: "Google Calendar",
+-      description: "Calendar integration",
+-      variant: "calendar",
+-      slug: "google-calendar",
+-      categories: ["calendar"],
+-      logo: "icon.svg",
+-      publisher: "Google",
+-      url: "https://google.com",
+-      email: "support@google.com",
+-      key: { api_key: "secret-key" },
+-      credential: mockCredential,
+-      credentials: [mockCredential],
+-      locationOption: null,
+-    };
+-
+-    vi.mocked(getUsersCredentialsIncludeServiceAccountKey).mockResolvedValue([]);
+-    vi.mocked(getApps).mockReturnValue([mockApp]);
+-
+-    const result = await appByIdHandler({
+-      ctx: { user: mockUser },
+-      input: { appId: "google-calendar" } as TAppByIdInputSchema,
+-    });
+-
+-    expect(result.isInstalled).toBe(1);
+-    expect(result).not.toHaveProperty("key");
+-  });
+-});
+-
+diff --git a/packages/trpc/server/routers/viewer/apps/appById.handler.ts b/packages/trpc/server/routers/viewer/apps/appById.handler.ts
+index bf14841..ddcafc7 100644
+--- a/packages/trpc/server/routers/viewer/apps/appById.handler.ts
++++ b/packages/trpc/server/routers/viewer/apps/appById.handler.ts
+@@ -1,5 +1,5 @@
+ import { getUsersCredentialsIncludeServiceAccountKey } from "@calcom/app-store/delegationCredential";
+-import getApps, { sanitizeAppForViewer } from "@calcom/app-store/utils";
++import getApps from "@calcom/app-store/utils";
+ import type { TrpcSessionUser } from "@calcom/trpc/server/types";
+ 
+ import { TRPCError } from "@trpc/server";
+@@ -24,9 +24,10 @@ export const appByIdHandler = async ({ ctx, input }: AppByIdOptions) => {
+     throw new TRPCError({ code: "BAD_REQUEST", message: `Could not find app ${appId}` });
+   }
+ 
+-  const safeApp = sanitizeAppForViewer(appFromDb);
++   
++  const { credential: _, credentials: _1, ...app } = appFromDb;
+   return {
+     isInstalled: appFromDb.credentials.length,
+-    ...safeApp,
++    ...app,
+   };
+-};
++};
+\ No newline at end of file

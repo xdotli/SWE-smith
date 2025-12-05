@@ -1,0 +1,71 @@
+diff --git a/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts b/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts
+index c71605038780d..d24ed895f3be4 100644
+--- a/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts
++++ b/frontend/src/scenes/session-recordings/player/rrweb/index.test.ts
+@@ -33,6 +33,30 @@ describe('CorsPlugin', () => {
+         CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })
+         expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/my-image.js`)
+     })
++
++    it('can replace a stylesheet css link', () => {
++        const el = document.createElement('link')
++        el.setAttribute('rel', 'stylesheet')
++        el.href = 'https://app.posthog.com/assets/styles.css'
++        CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })
++        expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/assets/styles.css`)
++    })
++
++    it('can replace a stylesheet css link with query parameters', () => {
++        const el = document.createElement('link')
++        el.setAttribute('rel', 'stylesheet')
++        el.href = 'https://app.posthog.com/assets/styles.css?v=123'
++        CorsPlugin.onBuild?.(el, { id: 1, replayer: null as unknown as any })
++        expect(el.href).toEqual(`https://replay.ph-proxy.com/proxy?url=https://app.posthog.com/assets/styles.css?v=123`)
++    })
++
++    it.each([
++        'https://app.posthog.com/styles.css',
++        'https://app.posthog.com/styles.css?v=123',
++        'https://app.posthog.com/assets/main.css?t=1234567890',
++    ])('should replace CSS urls', (cssUrl) => {
++        expect(CorsPlugin._replaceCSSUrl(cssUrl)).toEqual(`https://replay.ph-proxy.com/proxy?url=${cssUrl}`)
++    })
+ })
+ 
+ describe('WindowTitlePlugin', () => {
+diff --git a/frontend/src/scenes/session-recordings/player/rrweb/index.ts b/frontend/src/scenes/session-recordings/player/rrweb/index.ts
+index ee36a8be2ea11..8dd021ca88428 100644
+--- a/frontend/src/scenes/session-recordings/player/rrweb/index.ts
++++ b/frontend/src/scenes/session-recordings/player/rrweb/index.ts
+@@ -12,6 +12,7 @@ export const CorsPlugin: ReplayPlugin & {
+     _replaceFontCssUrls: (value: string | null) => string | null
+     _replaceFontUrl: (value: string) => string
+     _replaceJSUrl: (value: string) => string
++    _replaceCSSUrl: (value: string) => string
+ } = {
+     _replaceFontCssUrls: (value: string | null): string | null => {
+         return (
+@@ -30,6 +31,10 @@ export const CorsPlugin: ReplayPlugin & {
+         return value.replace(/^(https:\/\/\S*(?:\.js)\S*)$/i, `${PROXY_URL}/proxy?url=$1`)
+     },
+ 
++    _replaceCSSUrl: (value: string): string => {
++        return value.replace(/^(https:\/\/\S*(?:\.css)\S*)$/i, `${PROXY_URL}/proxy?url=$1`)
++    },
++
+     onBuild: (node) => {
+         if (node.nodeName === 'STYLE') {
+             const styleElement = node as HTMLStyleElement
+@@ -55,8 +60,11 @@ export const CorsPlugin: ReplayPlugin & {
+             if (!href) {
+                 return
+             }
+-            if (linkElement.getAttribute('rel') == 'modulepreload') {
++            const rel = linkElement.getAttribute('rel')
++            if (rel === 'modulepreload') {
+                 linkElement.href = CorsPlugin._replaceJSUrl(href)
++            } else if (rel === 'stylesheet') {
++                linkElement.href = CorsPlugin._replaceCSSUrl(href)
+             } else {
+                 linkElement.href = CorsPlugin._replaceFontUrl(href)
+             }

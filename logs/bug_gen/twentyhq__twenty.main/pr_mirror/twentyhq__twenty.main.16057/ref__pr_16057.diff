@@ -1,0 +1,217 @@
+diff --git a/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts b/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
+index cf71ceee0c2e8..b0c2b5d20f36f 100644
+--- a/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
++++ b/packages/twenty-front/src/modules/auth/sign-in-up/hooks/useSignInUpForm.ts
+@@ -64,5 +64,5 @@ export const useSignInUpForm = () => {
+       form.setValue('password', 'tim@apple.dev');
+     }
+   }, [form, isDeveloperDefaultSignInPrefilled, prefilledEmail]);
+-  return { form: form };
++  return { form };
+ };
+diff --git a/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts b/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
+index 16dfa9a136df9..b532f78729a73 100644
+--- a/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/actor/services/__tests__/created-by-from-auth-context.service.spec.ts
+@@ -106,13 +106,25 @@ describe('CreatedByFromAuthContextService', () => {
+       const authContext = {
+         workspaceMemberId: '20202020-0b5c-4178-bed7-d371f6411eaa',
+         user: {
+-          firstName: 'John',
+-          lastName: 'Doe',
++          firstName: '',
++          lastName: '',
+           id: '20202020-9aae-49a8-bafc-ac44bae62d6d',
+         },
+         workspace: { id: '20202020-bdec-497f-847a-1bb334fefe58' },
+       } as const satisfies TestingAuthContext;
+ 
++      const mockedWorkspaceMember = {
++        id: '20202020-0b5c-4178-bed7-d371f6411eaa',
++        name: {
++          firstName: 'John',
++          lastName: 'Doe',
++        },
++      } as const satisfies Partial<WorkspaceMemberWorkspaceEntity>;
++
++      mockWorkspaceMemberRepository.findOneOrFail.mockResolvedValueOnce(
++        mockedWorkspaceMember,
++      );
++
+       const result = await service.injectCreatedBy(
+         [{}],
+         'person',
+@@ -123,7 +135,7 @@ describe('CreatedByFromAuthContextService', () => {
+         {
+           createdBy: {
+             context: {},
+-            name: fromFullNameMetadataToName(authContext.user),
++            name: fromFullNameMetadataToName(mockedWorkspaceMember.name),
+             workspaceMemberId: authContext.workspaceMemberId,
+             source: FieldActorSource.MANUAL,
+           },
+diff --git a/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts b/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
+index e7e23715fced5..5da432f910bd6 100644
+--- a/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/actor/services/created-by-from-auth-context.service.ts
+@@ -102,24 +102,11 @@ export class CreatedByFromAuthContextService {
+   private async buildCreatedBy(
+     authContext: AuthContext,
+   ): Promise<ActorMetadata> {
+-    const { workspace, workspaceMemberId, user, apiKey } = authContext;
++    const { workspace, user, apiKey } = authContext;
+ 
+     assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
+ 
+-    // TODO: remove that code once we have the workspace member id in all tokens
+-    if (isDefined(workspaceMemberId) && isDefined(user)) {
+-      return buildCreatedByFromFullNameMetadata({
+-        fullNameMetadata: {
+-          firstName: user.firstName,
+-          lastName: user.lastName,
+-        },
+-        workspaceMemberId,
+-      });
+-    }
+-
+     if (isDefined(user)) {
+-      this.logger.warn("User doesn't have a workspace member id in the token");
+-
+       const workspaceMemberRepository =
+         await this.twentyORMGlobalManager.getRepositoryForWorkspace<WorkspaceMemberWorkspaceEntity>(
+           workspace.id,
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
+index dc137c3dc6f88..47aecbc2266d3 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.module.ts
+@@ -9,6 +9,7 @@ import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
+ import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
+ import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
+ import { FileModule } from 'src/engine/core-modules/file/file.module';
++import { OnboardingModule } from 'src/engine/core-modules/onboarding/onboarding.module';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+@@ -43,6 +44,7 @@ import { WorkspaceDataSourceModule } from 'src/engine/workspace-datasource/works
+         FileUploadModule,
+         FileModule,
+         TokenModule,
++        OnboardingModule,
+       ],
+       services: [UserWorkspaceService],
+     }),
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
+index 8f58d09b8a5ef..b42450254b796 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.spec.ts
+@@ -16,6 +16,7 @@ import {
+   type SignedFilesResult,
+ } from 'src/engine/core-modules/file/file-upload/services/file-upload.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
++import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+@@ -38,6 +39,7 @@ describe('UserWorkspaceService', () => {
+   let userRoleService: UserRoleService;
+   let fileService: FileService;
+   let fileUploadService: FileUploadService;
++  let onboardingService: OnboardingService;
+ 
+   beforeEach(async () => {
+     const module: TestingModule = await Test.createTestingModule({
+@@ -133,6 +135,12 @@ describe('UserWorkspaceService', () => {
+             copyFileFromWorkspaceToWorkspace: jest.fn(),
+           },
+         },
++        {
++          provide: OnboardingService,
++          useValue: {
++            setOnboardingCreateProfilePending: jest.fn(),
++          },
++        },
+       ],
+     }).compile();
+ 
+@@ -153,6 +161,7 @@ describe('UserWorkspaceService', () => {
+     );
+     userRoleService = module.get<UserRoleService>(UserRoleService);
+     fileUploadService = module.get<FileUploadService>(FileUploadService);
++    onboardingService = module.get<OnboardingService>(OnboardingService);
+   });
+ 
+   it('should be defined', () => {
+@@ -444,6 +453,17 @@ describe('UserWorkspaceService', () => {
+       expect(
+         workspaceInvitationService.invalidateWorkspaceInvitation,
+       ).toHaveBeenCalledWith(workspace.id, user.email, undefined);
++
++      expect(
++        onboardingService.setOnboardingCreateProfilePending,
++      ).toHaveBeenCalledWith(
++        {
++          userId: user.id,
++          workspaceId: workspace.id,
++          value: true,
++        },
++        undefined,
++      );
+     });
+ 
+     it('should not add user to workspace if already in workspace', async () => {
+diff --git a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
+index 6e1dabc845e15..f23b8320cfeae 100644
+--- a/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/user-workspace/user-workspace.service.ts
+@@ -19,6 +19,7 @@ import { LoginTokenService } from 'src/engine/core-modules/auth/token/services/l
+ import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
+ import { FileUploadService } from 'src/engine/core-modules/file/file-upload/services/file-upload.service';
+ import { FileService } from 'src/engine/core-modules/file/services/file.service';
++import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+ import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
+@@ -53,6 +54,7 @@ export class UserWorkspaceService extends TypeOrmQueryService<UserWorkspaceEntit
+     private readonly userRoleService: UserRoleService,
+     private readonly fileUploadService: FileUploadService,
+     private readonly fileService: FileService,
++    private readonly onboardingService: OnboardingService,
+   ) {
+     super(userWorkspaceRepository);
+   }
+@@ -173,6 +175,15 @@ export class UserWorkspaceService extends TypeOrmQueryService<UserWorkspaceEntit
+         user.email,
+         queryRunner,
+       );
++
++      await this.onboardingService.setOnboardingCreateProfilePending(
++        {
++          userId: user.id,
++          workspaceId: workspace.id,
++          value: true,
++        },
++        queryRunner,
++      );
+     }
+   }
+ 
+diff --git a/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts b/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
+index 0063b2000773d..97260aedca557 100644
+--- a/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
++++ b/packages/twenty-server/src/modules/workspace-member/query-hooks/workspace-member-query-hook.module.ts
+@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
+ import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+ import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
++import { UserModule } from 'src/engine/core-modules/user/user.module';
+ import { PermissionsModule } from 'src/engine/metadata-modules/permissions/permissions.module';
+ import { WorkspaceMemberCreateManyPreQueryHook } from 'src/modules/workspace-member/query-hooks/workspace-member-create-many.pre-query.hook';
+ import { WorkspaceMemberCreateOnePreQueryHook } from 'src/modules/workspace-member/query-hooks/workspace-member-create-one.pre-query.hook';
+@@ -38,6 +39,7 @@ import { WorkspaceMemberUpdateOnePreQueryHook } from 'src/modules/workspace-memb
+     PermissionsModule,
+     UserWorkspaceModule,
+     TypeOrmModule.forFeature([UserWorkspaceEntity]),
++    UserModule,
+   ],
+ })
+ export class WorkspaceMemberQueryHookModule {}

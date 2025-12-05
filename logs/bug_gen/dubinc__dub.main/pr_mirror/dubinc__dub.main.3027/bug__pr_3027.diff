@@ -1,0 +1,75 @@
+diff --git a/apps/web/tests/rewards/lead-reward.test.ts b/apps/web/tests/rewards/lead-reward.test.ts
+index 9545635..298887b 100644
+--- a/apps/web/tests/rewards/lead-reward.test.ts
++++ b/apps/web/tests/rewards/lead-reward.test.ts
+@@ -13,7 +13,7 @@ describe.concurrent("Lead rewards", async () => {
+   const h = new IntegrationHarness();
+   const { http } = await h.init();
+ 
+-  test("when customer country is US and partner country is US", async () => {
++  test("when {Partner} {Country} is {US}", async () => {
+     // Track the click
+     const clickResponse = await http.post<{ clickId: string }>({
+       path: "/track/click",
+@@ -47,11 +47,11 @@ describe.concurrent("Lead rewards", async () => {
+     await verifyCommission({
+       http,
+       customerExternalId: customer.externalId,
+-      expectedEarnings: E2E_LEAD_REWARD.modifiers[1].amountInCents,
++      expectedEarnings: E2E_LEAD_REWARD.modifiers[0].amountInCents,
+     });
+   });
+ 
+-  test("when customer country is US and partner country is not US", async () => {
++  test("when {Partner} {Country} is not {US}", async () => {
+     // Track the click
+     const clickResponse = await http.post<{ clickId: string }>({
+       path: "/track/click",
+@@ -85,7 +85,7 @@ describe.concurrent("Lead rewards", async () => {
+     await verifyCommission({
+       http,
+       customerExternalId: customer.externalId,
+-      expectedEarnings: E2E_LEAD_REWARD.modifiers[0].amountInCents,
++      expectedEarnings: E2E_LEAD_REWARD.amountInCents,
+     });
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/apps/web/tests/utils/resource.ts b/apps/web/tests/utils/resource.ts
+index 94685c4..ca8f96a 100644
+--- a/apps/web/tests/utils/resource.ts
++++ b/apps/web/tests/utils/resource.ts
+@@ -116,7 +116,7 @@ export const E2E_LEAD_REWARD = {
+       conditions: [
+         {
+           value: "US",
+-          entity: "customer",
++          entity: "partner",
+           operator: "equals_to",
+           attribute: "country",
+         },
+@@ -130,13 +130,13 @@ export const E2E_LEAD_REWARD = {
+       conditions: [
+         {
+           value: "US",
+-          entity: "partner",
++          entity: "customer",
+           operator: "equals_to",
+           attribute: "country",
+         },
+       ],
+-      maxDuration: 0,
+-      amountInCents: 300,
++      maxDuration: null,
++      amountInCents: 400,
+     },
+   ],
+ };
+@@ -231,4 +231,4 @@ export const E2E_FRAUD_PARTNER = {
+ } as const;
+ 
+ export const E2E_FRAUD_REFERRAL_SOURCE_BANNED_DOMAIN =
+-  "test-hostname-for-referral-source-banned-do-not-delete.com";
++  "test-hostname-for-referral-source-banned-do-not-delete.com";
+\ No newline at end of file

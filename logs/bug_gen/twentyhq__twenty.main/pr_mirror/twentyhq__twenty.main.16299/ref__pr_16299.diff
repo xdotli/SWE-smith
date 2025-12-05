@@ -1,0 +1,142 @@
+diff --git a/packages/twenty-front/src/modules/object-record/object-filter-dropdown/utils/__tests__/getOperandsForFilterType.test.ts b/packages/twenty-front/src/modules/object-record/object-filter-dropdown/utils/__tests__/getOperandsForFilterType.test.ts
+index ced4abf738f0a..ecc0b47c9d777 100644
+--- a/packages/twenty-front/src/modules/object-record/object-filter-dropdown/utils/__tests__/getOperandsForFilterType.test.ts
++++ b/packages/twenty-front/src/modules/object-record/object-filter-dropdown/utils/__tests__/getOperandsForFilterType.test.ts
+@@ -17,6 +17,7 @@ describe('getOperandsForFilterType', () => {
+ 
+   const numberOperands = [
+     RecordFilterOperand.IS,
++    RecordFilterOperand.IS_NOT,
+     RecordFilterOperand.GREATER_THAN_OR_EQUAL,
+     RecordFilterOperand.LESS_THAN_OR_EQUAL,
+   ];
+diff --git a/packages/twenty-front/src/modules/object-record/record-filter/utils/getRecordFilterOperands.ts b/packages/twenty-front/src/modules/object-record/record-filter/utils/getRecordFilterOperands.ts
+index d11443cc97c2b..791f78357f556 100644
+--- a/packages/twenty-front/src/modules/object-record/record-filter/utils/getRecordFilterOperands.ts
++++ b/packages/twenty-front/src/modules/object-record/record-filter/utils/getRecordFilterOperands.ts
+@@ -74,6 +74,7 @@ export const FILTER_OPERANDS_MAP = {
+   ],
+   NUMBER: [
+     RecordFilterOperand.IS,
++    RecordFilterOperand.IS_NOT,
+     RecordFilterOperand.GREATER_THAN_OR_EQUAL,
+     RecordFilterOperand.LESS_THAN_OR_EQUAL,
+     ...emptyOperands,
+diff --git a/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.spec.ts b/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.spec.ts
+index 36d013ceca576..9a23800934905 100644
+--- a/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.spec.ts
++++ b/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.spec.ts
+@@ -139,6 +139,11 @@ describe('buildValueFromFilter', () => {
+         value: '5',
+         expected: 5,
+       },
++      {
++        operand: ViewFilterOperand.IS_NOT,
++        value: '5',
++        expected: undefined,
++      },
+       {
+         operand: ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+         value: '5',
+diff --git a/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.ts b/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.ts
+index 898e3e6201182..c5ad711e0b403 100644
+--- a/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.ts
++++ b/packages/twenty-front/src/modules/object-record/record-table/utils/buildRecordInputFromFilter.ts
+@@ -159,6 +159,8 @@ const computeValueFromFilterNumber = (
+       return Number(value);
+     case ViewFilterOperand.IS:
+       return Number(value);
++    case ViewFilterOperand.IS_NOT:
++      return undefined;
+     case ViewFilterOperand.IS_EMPTY:
+       return undefined;
+     default:
+diff --git a/packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/filter-action/utils/getStepFilterOperands.ts b/packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/filter-action/utils/getStepFilterOperands.ts
+index 74b8ceabb998f..96d95db4525b2 100644
+--- a/packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/filter-action/utils/getStepFilterOperands.ts
++++ b/packages/twenty-front/src/modules/workflow/workflow-steps/workflow-actions/filter-action/utils/getStepFilterOperands.ts
+@@ -28,6 +28,7 @@ export const FILTER_OPERANDS_MAP = {
+   ],
+   NUMBER: [
+     ViewFilterOperand.IS,
++    ViewFilterOperand.IS_NOT,
+     ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+     ViewFilterOperand.LESS_THAN_OR_EQUAL,
+     ...emptyOperands,
+@@ -64,6 +65,7 @@ export const FILTER_OPERANDS_MAP = {
+   UUID: [ViewFilterOperand.IS, ViewFilterOperand.IS_NOT],
+   NUMERIC: [
+     ViewFilterOperand.IS,
++    ViewFilterOperand.IS_NOT,
+     ViewFilterOperand.GREATER_THAN_OR_EQUAL,
+     ViewFilterOperand.LESS_THAN_OR_EQUAL,
+     ...emptyOperands,
+diff --git a/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/__tests__/evaluate-filter-conditions.util.spec.ts b/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/__tests__/evaluate-filter-conditions.util.spec.ts
+index 01b408956e545..7fbb7efcedb63 100644
+--- a/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/__tests__/evaluate-filter-conditions.util.spec.ts
++++ b/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/__tests__/evaluate-filter-conditions.util.spec.ts
+@@ -484,6 +484,31 @@ describe('evaluateFilterConditions', () => {
+         expect(evaluateFilterConditions({ filters: [filter2] })).toBe(false);
+         expect(evaluateFilterConditions({ filters: [filter3] })).toBe(false);
+       });
++
++      it('should handle IsNot operand correctly', () => {
++        const filter1 = createFilter(
++          ViewFilterOperand.IS_NOT,
++          25,
++          25,
++          'NUMBER',
++        );
++        const filter2 = createFilter(
++          ViewFilterOperand.IS_NOT,
++          20,
++          25,
++          'NUMBER',
++        );
++        const filter3 = createFilter(
++          ViewFilterOperand.IS_NOT,
++          30,
++          25,
++          'NUMBER',
++        );
++
++        expect(evaluateFilterConditions({ filters: [filter1] })).toBe(false);
++        expect(evaluateFilterConditions({ filters: [filter2] })).toBe(true);
++        expect(evaluateFilterConditions({ filters: [filter3] })).toBe(true);
++      });
+     });
+ 
+     describe('string and array operands', () => {
+diff --git a/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/evaluate-filter-conditions.util.ts b/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/evaluate-filter-conditions.util.ts
+index 743a659ec0b66..efebf74c3134c 100644
+--- a/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/evaluate-filter-conditions.util.ts
++++ b/packages/twenty-server/src/modules/workflow/workflow-executor/workflow-actions/filter/utils/evaluate-filter-conditions.util.ts
+@@ -349,6 +349,9 @@ function evaluateNumberFilter(filter: ResolvedFilter): boolean {
+     case ViewFilterOperand.IS:
+       return Number(leftValue) === Number(rightValue);
+ 
++    case ViewFilterOperand.IS_NOT:
++      return Number(leftValue) !== Number(rightValue);
++
+     default:
+       throw new Error(
+         `Operand ${filter.operand} not supported for number filter`,
+diff --git a/packages/twenty-shared/src/utils/filter/turnRecordFilterIntoGqlOperationFilter.ts b/packages/twenty-shared/src/utils/filter/turnRecordFilterIntoGqlOperationFilter.ts
+index b2baffea11c40..dc517c6cd6178 100644
+--- a/packages/twenty-shared/src/utils/filter/turnRecordFilterIntoGqlOperationFilter.ts
++++ b/packages/twenty-shared/src/utils/filter/turnRecordFilterIntoGqlOperationFilter.ts
+@@ -416,6 +416,14 @@ export const turnRecordFilterIntoRecordGqlOperationFilter = ({
+               eq: parseFloat(recordFilter.value),
+             } as FloatFilter,
+           };
++        case RecordFilterOperand.IS_NOT:
++          return {
++            not: {
++              [correspondingFieldMetadataItem.name]: {
++                eq: parseFloat(recordFilter.value),
++              } as FloatFilter,
++            },
++          };
+         default:
+           throw new Error(
+             `Unknown operand ${recordFilter.operand} for ${filterType} filter`,

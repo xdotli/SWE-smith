@@ -1,0 +1,355 @@
+diff --git a/app/client/src/PluginActionEditor/types/PluginActionTypes.ts b/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
+index f81d82a2485..735c9652dce 100644
+--- a/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
++++ b/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
+@@ -6,6 +6,7 @@ export enum ActionRunBehaviour {
+   ON_PAGE_LOAD = "ON_PAGE_LOAD",
+   MANUAL = "MANUAL",
+   AUTOMATIC = "AUTOMATIC",
++  ON_PAGE_UNLOAD = "ON_PAGE_UNLOAD",
+ }
+ 
+ export type ActionRunBehaviourType = `${ActionRunBehaviour}`;
+diff --git a/app/client/src/ce/entities/FeatureFlag.ts b/app/client/src/ce/entities/FeatureFlag.ts
+index a6d84c60537..120af37c6d6 100644
+--- a/app/client/src/ce/entities/FeatureFlag.ts
++++ b/app/client/src/ce/entities/FeatureFlag.ts
+@@ -60,6 +60,8 @@ export const FEATURE_FLAG = {
+   release_ai_chat_integrations_enabled: "release_ai_chat_integrations_enabled",
+   release_reactive_actions_enabled: "release_reactive_actions_enabled",
+   license_ai_agent_instance_enabled: "license_ai_agent_instance_enabled",
++  release_jsobjects_onpageunloadactions_enabled:
++    "release_jsobjects_onpageunloadactions_enabled",
+ } as const;
+ 
+ export type FeatureFlag = keyof typeof FEATURE_FLAG;
+@@ -110,6 +112,7 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+   release_ai_chat_integrations_enabled: false,
+   release_reactive_actions_enabled: false,
+   license_ai_agent_instance_enabled: false,
++  release_jsobjects_onpageunloadactions_enabled: false,
+ };
+ 
+ export const AB_TESTING_EVENT_KEYS = {
+diff --git a/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts b/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
+index ff0dfc07892..fb530fa2a7f 100644
+--- a/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
++++ b/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
+@@ -22,3 +22,13 @@ export const RUN_BEHAVIOR_VALUES = [
+     children: "Manual",
+   },
+ ];
++
++export const JS_OBJECT_RUN_BEHAVIOR_VALUES = [
++  ...RUN_BEHAVIOR_VALUES,
++  {
++    label: "On page unload",
++    subText: "Query runs when the page unloads or when manually triggered",
++    value: ActionRunBehaviour.ON_PAGE_UNLOAD,
++    children: "On page unload",
++  },
++];
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
+index d537ae3cbc7..4f228569896 100644
+--- a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
++++ b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
+@@ -1,27 +1,21 @@
+-import React, { useCallback, useState } from "react";
+-import {
+-  Flex,
+-  Option,
+-  Select,
+-  Text,
+-  type SelectOptionProps,
+-} from "@appsmith/ads";
+-import type { JSAction } from "entities/JSCollection";
++import { Flex, Option, Select, Text } from "@appsmith/ads";
+ import {
+   createMessage,
+   JS_EDITOR_SETTINGS,
+   NO_JS_FUNCTIONS,
+ } from "ee/constants/messages";
++import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+ import AnalyticsUtil from "ee/utils/AnalyticsUtil";
+-import type { OnUpdateSettingsProps } from "../types";
+-import {
+-  ActionRunBehaviour,
+-  type ActionRunBehaviourType,
+-} from "PluginActionEditor/types/PluginActionTypes";
++import type { JSAction } from "entities/JSCollection";
++import { type ActionRunBehaviourType } from "PluginActionEditor/types/PluginActionTypes";
++import React, { useCallback, useMemo, useState } from "react";
+ import styled from "styled-components";
+-import { RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
+ import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
+-import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
++import type { OnUpdateSettingsProps } from "../types";
++import {
++  getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled,
++  getRunBehaviorOptionsBasedOnFeatureFlags,
++} from "./utils";
+ 
+ const OptionLabel = styled(Text)`
+   color: var(--ads-v2-color-fg);
+@@ -61,20 +55,31 @@ const FunctionSettingRow = (props: FunctionSettingsRowProps) => {
+   const isReactiveActionsEnabled = useFeatureFlag(
+     FEATURE_FLAG.release_reactive_actions_enabled,
+   );
+-  const options = RUN_BEHAVIOR_VALUES.filter(
+-    (option) =>
+-      isReactiveActionsEnabled || option.value !== ActionRunBehaviour.AUTOMATIC,
+-  ) as SelectOptionProps[];
++  const isOnPageUnloadEnabled = useFeatureFlag(
++    FEATURE_FLAG.release_jsobjects_onpageunloadactions_enabled,
++  );
++
++  const options = useMemo(
++    () =>
++      getRunBehaviorOptionsBasedOnFeatureFlags(
++        isReactiveActionsEnabled,
++        isOnPageUnloadEnabled,
++      ),
++    [isReactiveActionsEnabled, isOnPageUnloadEnabled],
++  );
++
+   let selectedValue = options.find((opt) => opt.value === runBehaviour);
+ 
+-  /* temporary check added to switch from automatic to page load as the run behaviour when feature flag is turned off */
+-  if (
+-    runBehaviour === ActionRunBehaviour.AUTOMATIC &&
+-    !isReactiveActionsEnabled
+-  ) {
+-    selectedValue = options.find(
+-      (opt) => opt.value === ActionRunBehaviour.ON_PAGE_LOAD,
++  const defaultRunBehaviourOption =
++    getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled(
++      runBehaviour,
++      isReactiveActionsEnabled,
++      isOnPageUnloadEnabled,
++      options,
+     );
++
++  if (defaultRunBehaviourOption) {
++    selectedValue = defaultRunBehaviourOption;
+   }
+ 
+   const onSelectOptions = useCallback(
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts
+new file mode 100644
+index 00000000000..3887fa94eb1
+--- /dev/null
++++ b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts
+@@ -0,0 +1,151 @@
++import {
++  ActionRunBehaviour,
++  type ActionRunBehaviourType,
++} from "PluginActionEditor/types/PluginActionTypes";
++import {
++  getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled,
++  getRunBehaviorOptionsBasedOnFeatureFlags,
++} from "./utils";
++import { JS_OBJECT_RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
++import type { SelectOptionProps } from "@appsmith/ads";
++
++describe("getRunBehaviorOptions", () => {
++  it("should return the correct options", () => {
++    const flagsOutputMatrix: {
++      isReactiveActionsEnabled: boolean;
++      isOnPageUnloadEnabled: boolean;
++      expectedOptions: SelectOptionProps[];
++    }[] = [
++      {
++        isReactiveActionsEnabled: true,
++        isOnPageUnloadEnabled: true,
++        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES,
++      },
++      {
++        isReactiveActionsEnabled: false,
++        isOnPageUnloadEnabled: true,
++        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
++          (option) => option.value !== ActionRunBehaviour.AUTOMATIC,
++        ),
++      },
++      {
++        isReactiveActionsEnabled: true,
++        isOnPageUnloadEnabled: false,
++        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
++          (option) => option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD,
++        ),
++      },
++      {
++        isReactiveActionsEnabled: false,
++        isOnPageUnloadEnabled: false,
++        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
++          (option) =>
++            option.value !== ActionRunBehaviour.AUTOMATIC &&
++            option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD,
++        ),
++      },
++    ];
++
++    flagsOutputMatrix.forEach(
++      ({
++        expectedOptions,
++        isOnPageUnloadEnabled,
++        isReactiveActionsEnabled,
++      }) => {
++        const options = getRunBehaviorOptionsBasedOnFeatureFlags(
++          isReactiveActionsEnabled,
++          isOnPageUnloadEnabled,
++        );
++
++        expect(options).toEqual(expectedOptions);
++      },
++    );
++  });
++});
++
++describe("getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled", () => {
++  const onPageLoadOption =
++    JS_OBJECT_RUN_BEHAVIOR_VALUES.find(
++      (option) => option.value === ActionRunBehaviour.ON_PAGE_LOAD,
++    ) ?? null;
++  const manualOption =
++    JS_OBJECT_RUN_BEHAVIOR_VALUES.find(
++      (option) => option.value === ActionRunBehaviour.MANUAL,
++    ) ?? null;
++
++  const flagsOutputMatrix: {
++    runBehaviour: ActionRunBehaviourType;
++    isReactiveActionsEnabled: boolean;
++    isOnPageUnloadEnabled: boolean;
++    expectedOption: SelectOptionProps | null;
++  }[] = [
++    {
++      runBehaviour: ActionRunBehaviour.AUTOMATIC,
++      isReactiveActionsEnabled: true,
++      isOnPageUnloadEnabled: true,
++      expectedOption: null,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.AUTOMATIC,
++      isReactiveActionsEnabled: false,
++      isOnPageUnloadEnabled: true,
++      expectedOption: onPageLoadOption,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.AUTOMATIC,
++      isReactiveActionsEnabled: true,
++      isOnPageUnloadEnabled: false,
++      expectedOption: null,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.AUTOMATIC,
++      isReactiveActionsEnabled: false,
++      isOnPageUnloadEnabled: false,
++      expectedOption: onPageLoadOption,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
++      isReactiveActionsEnabled: true,
++      isOnPageUnloadEnabled: true,
++      expectedOption: null,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
++      isReactiveActionsEnabled: false,
++      isOnPageUnloadEnabled: true,
++      expectedOption: null,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
++      isReactiveActionsEnabled: true,
++      isOnPageUnloadEnabled: false,
++      expectedOption: manualOption,
++    },
++    {
++      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
++      isReactiveActionsEnabled: false,
++      isOnPageUnloadEnabled: false,
++      expectedOption: manualOption,
++    },
++  ];
++
++  it("should return the correct options", () => {
++    flagsOutputMatrix.forEach(
++      ({
++        expectedOption,
++        isOnPageUnloadEnabled,
++        isReactiveActionsEnabled,
++        runBehaviour,
++      }) => {
++        const option = getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled(
++          runBehaviour,
++          isReactiveActionsEnabled,
++          isOnPageUnloadEnabled,
++          JS_OBJECT_RUN_BEHAVIOR_VALUES,
++        );
++
++        expect(option).toEqual(expectedOption);
++      },
++    );
++  });
++});
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts
+new file mode 100644
+index 00000000000..08a449a86ff
+--- /dev/null
++++ b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts
+@@ -0,0 +1,56 @@
++import {
++  ActionRunBehaviour,
++  type ActionRunBehaviourType,
++} from "PluginActionEditor/types/PluginActionTypes";
++import { JS_OBJECT_RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
++
++import { type SelectOptionProps } from "@appsmith/ads";
++/**
++ * Returns the list of run behavior options based on the current feature flags.
++ * - If reactive actions are disabled, removes AUTOMATIC.
++ * - If onPageUnload is disabled, removes ON_PAGE_UNLOAD.
++ */
++export const getRunBehaviorOptionsBasedOnFeatureFlags = (
++  isReactiveActionsEnabled: boolean,
++  isOnPageUnloadEnabled: boolean,
++) =>
++  JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
++    (option) =>
++      (isReactiveActionsEnabled ||
++        option.value !== ActionRunBehaviour.AUTOMATIC) &&
++      (isOnPageUnloadEnabled ||
++        option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD),
++  ) as SelectOptionProps[];
++
++/**
++ * Returns the default run behavior option if the current one is no longer available due to feature flag changes.
++ * - AUTOMATIC falls back to ON_PAGE_LOAD if reactive actions are disabled.
++ * - ON_PAGE_UNLOAD falls back to MANUAL if onPageUnload is disabled.
++ */
++export const getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled = (
++  runBehaviour: ActionRunBehaviourType,
++  isReactiveActionsEnabled: boolean,
++  isOnPageUnloadEnabled: boolean,
++  options: SelectOptionProps[],
++): SelectOptionProps | null => {
++  if (
++    runBehaviour === ActionRunBehaviour.AUTOMATIC &&
++    !isReactiveActionsEnabled
++  ) {
++    return (
++      options.find((opt) => opt.value === ActionRunBehaviour.ON_PAGE_LOAD) ??
++      null
++    );
++  }
++
++  if (
++    runBehaviour === ActionRunBehaviour.ON_PAGE_UNLOAD &&
++    !isOnPageUnloadEnabled
++  ) {
++    return (
++      options.find((opt) => opt.value === ActionRunBehaviour.MANUAL) ?? null
++    );
++  }
++
++  return null;
++};

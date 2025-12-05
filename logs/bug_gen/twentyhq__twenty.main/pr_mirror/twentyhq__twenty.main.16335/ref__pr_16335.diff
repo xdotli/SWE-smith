@@ -1,0 +1,43 @@
+diff --git a/packages/create-twenty-app/src/cli.ts b/packages/create-twenty-app/src/cli.ts
+index b1f818009efce..9294a94ade717 100644
+--- a/packages/create-twenty-app/src/cli.ts
++++ b/packages/create-twenty-app/src/cli.ts
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env node
+ import chalk from 'chalk';
+ import { Command, CommanderError } from 'commander';
+-import { CreateAppCommand } from './create-app.command';
++import { CreateAppCommand } from '@/create-app.command';
+ import packageJson from '../package.json';
+ 
+ const program = new Command(packageJson.name)
+diff --git a/packages/create-twenty-app/src/create-app.command.ts b/packages/create-twenty-app/src/create-app.command.ts
+index ecdebba46ffda..5c5ff4a7b1e98 100644
+--- a/packages/create-twenty-app/src/create-app.command.ts
++++ b/packages/create-twenty-app/src/create-app.command.ts
+@@ -2,11 +2,11 @@ import chalk from 'chalk';
+ import * as fs from 'fs-extra';
+ import inquirer from 'inquirer';
+ import * as path from 'path';
+-import { copyBaseApplicationProject } from './utils/app-template';
++import { copyBaseApplicationProject } from '@/utils/app-template';
+ import kebabCase from 'lodash.kebabcase';
+-import { convertToLabel } from './utils/convert-to-label';
+-import { tryGitInit } from './utils/try-git-init';
+-import { install } from './utils/install';
++import { convertToLabel } from '@/utils/convert-to-label';
++import { tryGitInit } from '@/utils/try-git-init';
++import { install } from '@/utils/install';
+ 
+ const CURRENT_EXECUTION_DIRECTORY = process.env.INIT_CWD || process.cwd();
+ 
+diff --git a/packages/create-twenty-app/src/utils/__tests__/convert-to-label.spec.ts b/packages/create-twenty-app/src/utils/__tests__/convert-to-label.spec.ts
+index d565478c2a8c7..d7eeedfe865a9 100644
+--- a/packages/create-twenty-app/src/utils/__tests__/convert-to-label.spec.ts
++++ b/packages/create-twenty-app/src/utils/__tests__/convert-to-label.spec.ts
+@@ -1,4 +1,4 @@
+-import { convertToLabel } from '../convert-to-label';
++import { convertToLabel } from '@/utils/convert-to-label';
+ 
+ describe('convertToLabel', () => {
+   it('should convert to label', () => {

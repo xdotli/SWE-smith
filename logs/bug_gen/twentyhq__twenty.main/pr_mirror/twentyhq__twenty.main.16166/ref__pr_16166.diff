@@ -1,0 +1,157 @@
+diff --git a/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/ChartTypeSelectionSection.tsx b/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/ChartTypeSelectionSection.tsx
+index 8657148271fd9..538a5020a7d91 100644
+--- a/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/ChartTypeSelectionSection.tsx
++++ b/packages/twenty-front/src/modules/command-menu/pages/page-layout/components/ChartTypeSelectionSection.tsx
+@@ -9,9 +9,9 @@ import { MenuPicker } from 'twenty-ui/navigation';
+ const graphTypeOptions = [
+   GraphType.VERTICAL_BAR,
+   GraphType.HORIZONTAL_BAR,
+-  GraphType.AGGREGATE,
+-  GraphType.PIE,
+   GraphType.LINE,
++  GraphType.PIE,
++  GraphType.AGGREGATE,
+   GraphType.GAUGE,
+ ];
+ 
+@@ -36,32 +36,25 @@ export const ChartTypeSelectionSection = ({
+ 
+   return (
+     <StyledChartTypeSelectionContainer>
+-      {graphTypeOptions.map((graphType) => {
+-        const isChartV2Type = [
+-          GraphType.PIE,
+-          GraphType.LINE,
+-          GraphType.GAUGE,
+-        ].includes(graphType);
+-
+-        const isDisabled = isChartV2Type && !isDashboardV2Enabled;
+-
+-        return (
+-          <MenuPicker
+-            id={graphType}
+-            selected={currentGraphType === graphType}
+-            key={graphType}
+-            icon={GRAPH_TYPE_INFORMATION[graphType].icon}
+-            onClick={() => {
+-              setCurrentGraphType(graphType);
+-            }}
+-            showLabel
+-            disabled={isDisabled}
+-            tooltipContent={
+-              isDisabled ? t`Soon` : t(GRAPH_TYPE_INFORMATION[graphType].label)
+-            }
+-          />
+-        );
+-      })}
++      {graphTypeOptions
++        .filter(
++          (graphType) => isDashboardV2Enabled || graphType !== GraphType.GAUGE,
++        )
++        .map((graphType) => {
++          return (
++            <MenuPicker
++              id={graphType}
++              selected={currentGraphType === graphType}
++              key={graphType}
++              icon={GRAPH_TYPE_INFORMATION[graphType].icon}
++              onClick={() => {
++                setCurrentGraphType(graphType);
++              }}
++              showLabel
++              tooltipContent={t(GRAPH_TYPE_INFORMATION[graphType].label)}
++            />
++          );
++        })}
+     </StyledChartTypeSelectionContainer>
+   );
+ };
+diff --git a/packages/twenty-server/src/engine/core-modules/page-layout/utils/__tests__/validate-and-transform-widget-configuration.util.spec.ts b/packages/twenty-server/src/engine/core-modules/page-layout/utils/__tests__/validate-and-transform-widget-configuration.util.spec.ts
+index f532f54f66db5..5000aaf463489 100644
+--- a/packages/twenty-server/src/engine/core-modules/page-layout/utils/__tests__/validate-and-transform-widget-configuration.util.spec.ts
++++ b/packages/twenty-server/src/engine/core-modules/page-layout/utils/__tests__/validate-and-transform-widget-configuration.util.spec.ts
+@@ -247,33 +247,35 @@ describe('validateAndTransformWidgetConfiguration', () => {
+   });
+ 
+   describe('Feature flags', () => {
+-    it('should throw error for unsupported graph type', () => {
++    it('should throw error for GAUGE chart type when IS_DASHBOARD_V2_ENABLED is false', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+-          configuration: TEST_PIE_CHART_CONFIG,
++          configuration: TEST_GAUGE_CHART_CONFIG,
+           isDashboardV2Enabled: false,
+         }),
+       ).toThrow(/IS_DASHBOARD_V2_ENABLED feature flag/);
++    });
+ 
++    it('should not throw error for GAUGE chart type when IS_DASHBOARD_V2_ENABLED is true', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+-          configuration: TEST_LINE_CHART_CONFIG,
+-          isDashboardV2Enabled: false,
++          configuration: TEST_GAUGE_CHART_CONFIG,
++          isDashboardV2Enabled: true,
+         }),
+-      ).toThrow(/IS_DASHBOARD_V2_ENABLED feature flag/);
++      ).not.toThrow();
++    });
+ 
++    it('should not throw error for PIE chart type regardless of IS_DASHBOARD_V2_ENABLED', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+-          configuration: TEST_GAUGE_CHART_CONFIG,
++          configuration: TEST_PIE_CHART_CONFIG,
+           isDashboardV2Enabled: false,
+         }),
+-      ).toThrow(/IS_DASHBOARD_V2_ENABLED feature flag/);
+-    });
++      ).not.toThrow();
+ 
+-    it('should not throw error when IS_DASHBOARD_V2_ENABLED feature flag is enabled', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+@@ -283,21 +285,19 @@ describe('validateAndTransformWidgetConfiguration', () => {
+       ).not.toThrow();
+     });
+ 
+-    it('should not throw error when IS_DASHBOARD_V2_ENABLED feature flag is enabled', () => {
++    it('should not throw error for LINE chart type regardless of IS_DASHBOARD_V2_ENABLED', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+           configuration: TEST_LINE_CHART_CONFIG,
+-          isDashboardV2Enabled: true,
++          isDashboardV2Enabled: false,
+         }),
+       ).not.toThrow();
+-    });
+ 
+-    it('should not throw error when IS_DASHBOARD_V2_ENABLED feature flag is enabled', () => {
+       expect(() =>
+         validateAndTransformWidgetConfiguration({
+           type: WidgetType.GRAPH,
+-          configuration: TEST_GAUGE_CHART_CONFIG,
++          configuration: TEST_LINE_CHART_CONFIG,
+           isDashboardV2Enabled: true,
+         }),
+       ).not.toThrow();
+diff --git a/packages/twenty-server/src/engine/core-modules/page-layout/utils/validate-and-transform-widget-configuration.util.ts b/packages/twenty-server/src/engine/core-modules/page-layout/utils/validate-and-transform-widget-configuration.util.ts
+index c511f669d75eb..68f8b17a28389 100644
+--- a/packages/twenty-server/src/engine/core-modules/page-layout/utils/validate-and-transform-widget-configuration.util.ts
++++ b/packages/twenty-server/src/engine/core-modules/page-layout/utils/validate-and-transform-widget-configuration.util.ts
+@@ -38,9 +38,7 @@ const validateGraphConfiguration = ({
+     return null;
+   }
+ 
+-  const v2ChartTypes = [GraphType.PIE, GraphType.LINE, GraphType.GAUGE];
+-
+-  if (v2ChartTypes.includes(graphType) && !isDashboardV2Enabled) {
++  if (graphType === GraphType.GAUGE && !isDashboardV2Enabled) {
+     throw new Error(
+       `Chart type ${graphType} requires IS_DASHBOARD_V2_ENABLED feature flag`,
+     );

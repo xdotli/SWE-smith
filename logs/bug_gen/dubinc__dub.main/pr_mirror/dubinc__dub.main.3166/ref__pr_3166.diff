@@ -1,0 +1,59 @@
+diff --git a/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts b/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
+index dc63bac2cde..dc9e139f5ba 100644
+--- a/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
++++ b/apps/web/app/(ee)/api/stripe/connect/webhook/account-updated.ts
+@@ -1,9 +1,14 @@
+ import { createFraudEvents } from "@/lib/api/fraud/create-fraud-events";
++import { qstash } from "@/lib/cron";
+ import { stripe } from "@/lib/stripe";
+ import { prisma } from "@dub/prisma";
+-import { log } from "@dub/utils";
++import { APP_DOMAIN_WITH_NGROK, log } from "@dub/utils";
+ import Stripe from "stripe";
+ 
++const queue = qstash.queue({
++  queueName: "withdraw-stripe-balance",
++});
++
+ export async function accountUpdated(event: Stripe.Event) {
+   const account = event.data.object as Stripe.Account;
+ 
+@@ -110,5 +115,26 @@ export async function accountUpdated(event: Stripe.Event) {
+     }
+   }
+ 
++  // Retry payouts that got stuck when the account was restricted (e.g: payout sent but paused
++  // due to verification requirements). Once payouts are re-enabled, queue them for processing.
++  const pendingPayouts = await prisma.payout.count({
++    where: {
++      partnerId: partner.id,
++      status: "sent",
++      mode: "internal",
++    },
++  });
++
++  if (pendingPayouts > 0) {
++    await queue.enqueueJSON({
++      url: `${APP_DOMAIN_WITH_NGROK}/api/cron/payouts/balance-available`,
++      deduplicationId: event.id,
++      method: "POST",
++      body: {
++        stripeAccount: partner.stripeConnectId,
++      },
++    });
++  }
++
+   return `Updated partner ${partner.email} (${partner.stripeConnectId}) with country ${country}, payoutsEnabledAt set, payoutMethodHash ${defaultExternalAccount.fingerprint}`;
+ }
+diff --git a/apps/web/tests/fraud/index.test.ts b/apps/web/tests/fraud/index.test.ts
+index 27354a54165..e788eec903e 100644
+--- a/apps/web/tests/fraud/index.test.ts
++++ b/apps/web/tests/fraud/index.test.ts
+@@ -254,6 +254,6 @@ async function waitForFraudEvent({
+ 
+       return data[0];
+     },
+-    { retries: 10, interval: 300 },
++    { retries: 10, interval: 600 },
+   );
+ }

@@ -1,0 +1,186 @@
+diff --git a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-event-list-fetch.cron.job.ts b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-event-list-fetch.cron.job.ts
+index 3700e337e5054..aef27c0b063cd 100644
+--- a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-event-list-fetch.cron.job.ts
++++ b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-event-list-fetch.cron.job.ts
+@@ -50,8 +50,11 @@ export class CalendarEventListFetchCronJob {
+       try {
+         const schemaName = getWorkspaceSchemaName(activeWorkspace.id);
+ 
++        const now = new Date().toISOString();
++
+         const [calendarChannels] = await this.coreDataSource.query(
+-          `UPDATE ${schemaName}."calendarChannel" SET "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_SCHEDULED}' WHERE "isSyncEnabled" = true AND "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING}' RETURNING *`,
++          `UPDATE ${schemaName}."calendarChannel" SET "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_SCHEDULED}', "syncStageStartedAt" = '${now}'
++          WHERE "isSyncEnabled" = true AND "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENT_LIST_FETCH_PENDING}' RETURNING *`,
+         );
+ 
+         for (const calendarChannel of calendarChannels) {
+diff --git a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-events-import.cron.job.ts b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-events-import.cron.job.ts
+index e75e462985971..c5e3318585ec6 100644
+--- a/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-events-import.cron.job.ts
++++ b/packages/twenty-server/src/modules/calendar/calendar-event-import-manager/crons/jobs/calendar-events-import.cron.job.ts
+@@ -48,8 +48,11 @@ export class CalendarEventsImportCronJob {
+       try {
+         const schemaName = getWorkspaceSchemaName(activeWorkspace.id);
+ 
++        const now = new Date().toISOString();
++
+         const [calendarChannels] = await this.coreDataSource.query(
+-          `UPDATE ${schemaName}."calendarChannel" SET "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_SCHEDULED}' WHERE "isSyncEnabled" = true AND "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_PENDING}' RETURNING *`,
++          `UPDATE ${schemaName}."calendarChannel" SET "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_SCHEDULED}', "syncStageStartedAt" = '${now}'
++           WHERE "isSyncEnabled" = true AND "syncStage" = '${CalendarChannelSyncStage.CALENDAR_EVENTS_IMPORT_PENDING}' RETURNING *`,
+         );
+ 
+         for (const calendarChannel of calendarChannels) {
+diff --git a/packages/twenty-server/src/modules/messaging/common/services/message-channel-sync-status.service.ts b/packages/twenty-server/src/modules/messaging/common/services/message-channel-sync-status.service.ts
+index 9484e8ddc0138..fbfa95484de71 100644
+--- a/packages/twenty-server/src/modules/messaging/common/services/message-channel-sync-status.service.ts
++++ b/packages/twenty-server/src/modules/messaging/common/services/message-channel-sync-status.service.ts
+@@ -133,6 +133,27 @@ export class MessageChannelSyncStatusService {
+     });
+   }
+ 
++  public async markAsMessagesListFetchScheduled(
++    messageChannelIds: string[],
++    workspaceId: string,
++  ) {
++    if (!messageChannelIds.length) {
++      return;
++    }
++
++    const messageChannelRepository =
++      await this.twentyORMGlobalManager.getRepositoryForWorkspace<MessageChannelWorkspaceEntity>(
++        workspaceId,
++        'messageChannel',
++      );
++
++    await messageChannelRepository.update(messageChannelIds, {
++      syncStage: MessageChannelSyncStage.MESSAGE_LIST_FETCH_SCHEDULED,
++      syncStatus: MessageChannelSyncStatus.ONGOING,
++      syncStageStartedAt: new Date().toISOString(),
++    });
++  }
++
+   public async markAsMessagesListFetchOngoing(
+     messageChannelIds: string[],
+     workspaceId: string,
+@@ -150,7 +171,6 @@ export class MessageChannelSyncStatusService {
+     await messageChannelRepository.update(messageChannelIds, {
+       syncStage: MessageChannelSyncStage.MESSAGE_LIST_FETCH_ONGOING,
+       syncStatus: MessageChannelSyncStatus.ONGOING,
+-      syncStageStartedAt: new Date().toISOString(),
+     });
+   }
+ 
+@@ -182,6 +202,25 @@ export class MessageChannelSyncStatusService {
+     });
+   }
+ 
++  public async markAsMessagesImportScheduled(
++    messageChannelIds: string[],
++    workspaceId: string,
++  ) {
++    if (!messageChannelIds.length) {
++      return;
++    }
++
++    const messageChannelRepository =
++      await this.twentyORMGlobalManager.getRepositoryForWorkspace<MessageChannelWorkspaceEntity>(
++        workspaceId,
++        'messageChannel',
++      );
++
++    await messageChannelRepository.update(messageChannelIds, {
++      syncStage: MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED,
++    });
++  }
++
+   public async markAsMessagesImportOngoing(
+     messageChannelIds: string[],
+     workspaceId: string,
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-message-list-fetch.cron.job.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-message-list-fetch.cron.job.ts
+index e51101b553a37..7e9508919e1a6 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-message-list-fetch.cron.job.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-message-list-fetch.cron.job.ts
+@@ -48,8 +48,11 @@ export class MessagingMessageListFetchCronJob {
+       try {
+         const schemaName = getWorkspaceSchemaName(activeWorkspace.id);
+ 
++        const now = new Date().toISOString();
++
+         const [messageChannels] = await this.coreDataSource.query(
+-          `UPDATE ${schemaName}."messageChannel" SET "syncStage" = '${MessageChannelSyncStage.MESSAGE_LIST_FETCH_SCHEDULED}' WHERE "isSyncEnabled" = true AND "syncStage" = '${MessageChannelSyncStage.MESSAGE_LIST_FETCH_PENDING}' RETURNING *`,
++          `UPDATE ${schemaName}."messageChannel" SET "syncStage" = '${MessageChannelSyncStage.MESSAGE_LIST_FETCH_SCHEDULED}', "syncStageStartedAt" = '${now}'
++           WHERE "isSyncEnabled" = true AND "syncStage" = '${MessageChannelSyncStage.MESSAGE_LIST_FETCH_PENDING}' RETURNING *`,
+         );
+ 
+         for (const messageChannel of messageChannels) {
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-messages-import.cron.job.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-messages-import.cron.job.ts
+index 091197e4ffd45..9397b37e473a5 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-messages-import.cron.job.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/crons/jobs/messaging-messages-import.cron.job.ts
+@@ -53,8 +53,11 @@ export class MessagingMessagesImportCronJob {
+       try {
+         const schemaName = getWorkspaceSchemaName(activeWorkspace.id);
+ 
++        const now = new Date().toISOString();
++
+         const [messageChannels] = await this.coreDataSource.query(
+-          `UPDATE ${schemaName}."messageChannel" SET "syncStage" = '${MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED}' WHERE "isSyncEnabled" = true AND "syncStage" = '${MessageChannelSyncStage.MESSAGES_IMPORT_PENDING}' RETURNING *`,
++          `UPDATE ${schemaName}."messageChannel" SET "syncStage" = '${MessageChannelSyncStage.MESSAGES_IMPORT_SCHEDULED}', "syncStageStartedAt" = '${now}'
++          WHERE "isSyncEnabled" = true AND "syncStage" = '${MessageChannelSyncStage.MESSAGES_IMPORT_PENDING}' RETURNING *`,
+         );
+ 
+         for (const messageChannel of messageChannels) {
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-message-list-fetch.service.spec.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-message-list-fetch.service.spec.ts
+index 1f24fbd578465..ec045ba16c386 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-message-list-fetch.service.spec.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-message-list-fetch.service.spec.ts
+@@ -291,7 +291,7 @@ describe('MessagingMessageListFetchService', () => {
+     });
+     expect(
+       messageChannelSyncStatusService.markAsMessagesListFetchOngoing,
+-    ).toHaveBeenCalledWith([mockMicrosoftMessageChannel.id]);
++    ).toHaveBeenCalledWith([mockMicrosoftMessageChannel.id], workspaceId);
+ 
+     expect(messagingGetMessageListService.getMessageLists).toHaveBeenCalledWith(
+       {
+@@ -332,7 +332,7 @@ describe('MessagingMessageListFetchService', () => {
+ 
+     expect(
+       messageChannelSyncStatusService.scheduleMessagesImport,
+-    ).toHaveBeenCalledWith([mockMicrosoftMessageChannel.id]);
++    ).toHaveBeenCalledWith([mockMicrosoftMessageChannel.id], workspaceId);
+   });
+ 
+   it('should process Google message list fetch correctly', async () => {
+@@ -350,7 +350,7 @@ describe('MessagingMessageListFetchService', () => {
+     });
+     expect(
+       messageChannelSyncStatusService.markAsMessagesListFetchOngoing,
+-    ).toHaveBeenCalledWith([mockGoogleMessageChannel.id]);
++    ).toHaveBeenCalledWith([mockGoogleMessageChannel.id], workspaceId);
+ 
+     expect(messagingGetMessageListService.getMessageLists).toHaveBeenCalledWith(
+       {
+@@ -391,6 +391,6 @@ describe('MessagingMessageListFetchService', () => {
+ 
+     expect(
+       messageChannelSyncStatusService.scheduleMessagesImport,
+-    ).toHaveBeenCalledWith([mockGoogleMessageChannel.id]);
++    ).toHaveBeenCalledWith([mockGoogleMessageChannel.id], workspaceId);
+   });
+ });
+diff --git a/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-messages-import.service.spec.ts b/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-messages-import.service.spec.ts
+index f11d03923f6c2..f4e7cba4f730a 100644
+--- a/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-messages-import.service.spec.ts
++++ b/packages/twenty-server/src/modules/messaging/message-import-manager/services/__tests__/messaging-messages-import.service.spec.ts
+@@ -213,7 +213,7 @@ describe('MessagingMessagesImportService', () => {
+     );
+     expect(
+       messageChannelSyncStatusService.markAsMessagesImportOngoing,
+-    ).toHaveBeenCalledWith([mockMessageChannel.id]);
++    ).toHaveBeenCalledWith([mockMessageChannel.id], workspaceId);
+ 
+     expect(
+       connectedAccountRefreshTokensService.refreshAndSaveTokens,

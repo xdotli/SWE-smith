@@ -1,0 +1,443 @@
+diff --git a/packages/hoppscotch-backend/src/published-docs/published-docs.resolver.ts b/packages/hoppscotch-backend/src/published-docs/published-docs.resolver.ts
+index 0f038bd6ba..11e72ec2c8 100644
+--- a/packages/hoppscotch-backend/src/published-docs/published-docs.resolver.ts
++++ b/packages/hoppscotch-backend/src/published-docs/published-docs.resolver.ts
+@@ -34,6 +34,7 @@ export class PublishedDocsResolver {
+ 
+   @ResolveField(() => User, {
+     description: 'Returns the creator of the published document',
++    nullable: true,
+   })
+   async creator(@Parent() publishedDocs: PublishedDocs): Promise<User> {
+     const creator = await this.publishedDocsService.getPublishedDocsCreator(
+@@ -41,11 +42,7 @@ export class PublishedDocsResolver {
+     );
+ 
+     if (E.isLeft(creator)) throwErr(creator.left);
+-    return {
+-      ...creator.right,
+-      currentGQLSession: JSON.stringify(creator.right.currentGQLSession),
+-      currentRESTSession: JSON.stringify(creator.right.currentRESTSession),
+-    };
++    return creator.right;
+   }
+ 
+   @ResolveField(() => PublishedDocsCollection, {
+diff --git a/packages/hoppscotch-backend/src/published-docs/published-docs.service.spec.ts b/packages/hoppscotch-backend/src/published-docs/published-docs.service.spec.ts
+index 624517fb83..e532eb6194 100644
+--- a/packages/hoppscotch-backend/src/published-docs/published-docs.service.spec.ts
++++ b/packages/hoppscotch-backend/src/published-docs/published-docs.service.spec.ts
+@@ -47,8 +47,8 @@ const user: User = {
+   lastLoggedOn: currentTime,
+   lastActiveOn: currentTime,
+   createdOn: currentTime,
+-  currentGQLSession: JSON.stringify({}),
+-  currentRESTSession: JSON.stringify({}),
++  currentGQLSession: {} as any,
++  currentRESTSession: {} as any,
+ };
+ 
+ const userPublishedDoc: DBPublishedDocs = {
+@@ -179,6 +179,9 @@ describe('getPublishedDocByID', () => {
+ describe('getAllUserPublishedDocs', () => {
+   test('should return a list of user published documents with pagination', async () => {
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([userPublishedDoc]);
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
++      { id: 'collection_1' },
++    ] as any);
+ 
+     const result = await publishedDocsService.getAllUserPublishedDocs(
+       user.uid,
+@@ -190,6 +193,7 @@ describe('getAllUserPublishedDocs', () => {
+ 
+   test('should return an empty array when no documents found', async () => {
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([]);
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([]);
+ 
+     const result = await publishedDocsService.getAllUserPublishedDocs(
+       user.uid,
+@@ -201,6 +205,9 @@ describe('getAllUserPublishedDocs', () => {
+   test('should return paginated results correctly', async () => {
+     const docs = [userPublishedDoc, { ...userPublishedDoc, id: 'pub_doc_3' }];
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([docs[0]]);
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
++      { id: 'collection_1' },
++    ] as any);
+ 
+     const result = await publishedDocsService.getAllUserPublishedDocs(
+       user.uid,
+@@ -208,11 +215,94 @@ describe('getAllUserPublishedDocs', () => {
+     );
+     expect(result).toHaveLength(1);
+   });
++
++  test('should filter out published docs with non-existent collections', async () => {
++    const doc1 = {
++      ...userPublishedDoc,
++      id: 'pub_doc_1',
++      collectionID: 'collection_1',
++    };
++    const doc2 = {
++      ...userPublishedDoc,
++      id: 'pub_doc_2',
++      collectionID: 'collection_2',
++    };
++    const doc3 = {
++      ...userPublishedDoc,
++      id: 'pub_doc_3',
++      collectionID: 'collection_3',
++    };
++
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([doc1, doc2, doc3]);
++    // Only collection_1 and collection_3 exist
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
++      { id: 'collection_1' },
++      { id: 'collection_3' },
++    ] as any);
++
++    const result = await publishedDocsService.getAllUserPublishedDocs(
++      user.uid,
++      { skip: 0, take: 10 },
++    );
++
++    // Should only return docs with existing collections
++    expect(result).toHaveLength(2);
++    expect(result.map((d) => d.id)).toEqual(['pub_doc_1', 'pub_doc_3']);
++  });
++
++  test('should delete published docs with non-existent collections', async () => {
++    const doc1 = {
++      ...userPublishedDoc,
++      id: 'pub_doc_1',
++      collectionID: 'collection_1',
++    };
++    const doc2 = {
++      ...userPublishedDoc,
++      id: 'pub_doc_2',
++      collectionID: 'collection_deleted',
++    };
++
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([doc1, doc2]);
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
++      { id: 'collection_1' },
++    ] as any);
++    mockPrisma.publishedDocs.deleteMany.mockResolvedValueOnce({
++      count: 1,
++    } as any);
++
++    await publishedDocsService.getAllUserPublishedDocs(user.uid, {
++      skip: 0,
++      take: 10,
++    });
++
++    expect(mockPrisma.publishedDocs.deleteMany).toHaveBeenCalledWith({
++      where: {
++        id: { in: ['pub_doc_2'] },
++      },
++    });
++  });
++
++  test('should not call deleteMany when all collections exist', async () => {
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([userPublishedDoc]);
++    mockPrisma.userCollection.findMany.mockResolvedValueOnce([
++      { id: 'collection_1' },
++    ] as any);
++
++    await publishedDocsService.getAllUserPublishedDocs(user.uid, {
++      skip: 0,
++      take: 10,
++    });
++
++    expect(mockPrisma.publishedDocs.deleteMany).not.toHaveBeenCalled();
++  });
+ });
+ 
+ describe('getAllTeamPublishedDocs', () => {
+   test('should return a list of team published documents with pagination', async () => {
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([teamPublishedDoc]);
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([
++      { id: 'team_collection_1' },
++    ] as any);
+ 
+     const result = await publishedDocsService.getAllTeamPublishedDocs(
+       'team_1',
+@@ -225,6 +315,7 @@ describe('getAllTeamPublishedDocs', () => {
+ 
+   test('should return an empty array when no team documents found', async () => {
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([]);
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([]);
+ 
+     const result = await publishedDocsService.getAllTeamPublishedDocs(
+       'team_1',
+@@ -236,6 +327,9 @@ describe('getAllTeamPublishedDocs', () => {
+ 
+   test('should filter by teamID and collectionID correctly', async () => {
+     mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([teamPublishedDoc]);
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([
++      { id: 'team_collection_1' },
++    ] as any);
+ 
+     await publishedDocsService.getAllTeamPublishedDocs(
+       'team_1',
+@@ -256,6 +350,88 @@ describe('getAllTeamPublishedDocs', () => {
+       },
+     });
+   });
++
++  test('should filter out published docs with non-existent team collections', async () => {
++    const doc1 = {
++      ...teamPublishedDoc,
++      id: 'pub_doc_1',
++      collectionID: 'team_collection_1',
++    };
++    const doc2 = {
++      ...teamPublishedDoc,
++      id: 'pub_doc_2',
++      collectionID: 'team_collection_2',
++    };
++    const doc3 = {
++      ...teamPublishedDoc,
++      id: 'pub_doc_3',
++      collectionID: 'team_collection_3',
++    };
++
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([doc1, doc2, doc3]);
++    // Only team_collection_1 and team_collection_3 exist
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([
++      { id: 'team_collection_1' },
++      { id: 'team_collection_3' },
++    ] as any);
++
++    const result = await publishedDocsService.getAllTeamPublishedDocs(
++      'team_1',
++      undefined,
++      { skip: 0, take: 10 },
++    );
++
++    // Should only return docs with existing collections
++    expect(result).toHaveLength(2);
++    expect(result.map((d) => d.id)).toEqual(['pub_doc_1', 'pub_doc_3']);
++  });
++
++  test('should delete published docs with non-existent team collections', async () => {
++    const doc1 = {
++      ...teamPublishedDoc,
++      id: 'pub_doc_1',
++      collectionID: 'team_collection_1',
++    };
++    const doc2 = {
++      ...teamPublishedDoc,
++      id: 'pub_doc_2',
++      collectionID: 'team_collection_deleted',
++    };
++
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([doc1, doc2]);
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([
++      { id: 'team_collection_1' },
++    ] as any);
++    mockPrisma.publishedDocs.deleteMany.mockResolvedValueOnce({
++      count: 1,
++    } as any);
++
++    await publishedDocsService.getAllTeamPublishedDocs('team_1', undefined, {
++      skip: 0,
++      take: 10,
++    });
++
++    expect(mockPrisma.publishedDocs.deleteMany).toHaveBeenCalledWith({
++      where: {
++        id: { in: ['pub_doc_2'] },
++      },
++    });
++  });
++
++  test('should not call deleteMany when all team collections exist', async () => {
++    mockPrisma.publishedDocs.findMany.mockResolvedValueOnce([teamPublishedDoc]);
++    mockPrisma.teamCollection.findMany.mockResolvedValueOnce([
++      { id: 'team_collection_1' },
++    ] as any);
++
++    await publishedDocsService.getAllTeamPublishedDocs(
++      'team_1',
++      'team_collection_1',
++      { skip: 0, take: 10 },
++    );
++
++    expect(mockPrisma.publishedDocs.deleteMany).not.toHaveBeenCalled();
++  });
+ });
+ 
+ describe('createPublishedDoc', () => {
+@@ -650,7 +826,14 @@ describe('getPublishedDocsCreator', () => {
+     const result = await publishedDocsService.getPublishedDocsCreator(
+       userPublishedDoc.id,
+     );
+-    expect(result).toEqualRight(user);
++
++    const expectedUser = {
++      ...user,
++      currentGQLSession: JSON.stringify(user.currentGQLSession),
++      currentRESTSession: JSON.stringify(user.currentRESTSession),
++    };
++
++    expect(result).toEqualRight(expectedUser);
+   });
+ 
+   test('should throw PUBLISHED_DOCS_NOT_FOUND when document ID is invalid', async () => {
+diff --git a/packages/hoppscotch-backend/src/published-docs/published-docs.service.ts b/packages/hoppscotch-backend/src/published-docs/published-docs.service.ts
+index 215e2fcc7c..43e5001f64 100644
+--- a/packages/hoppscotch-backend/src/published-docs/published-docs.service.ts
++++ b/packages/hoppscotch-backend/src/published-docs/published-docs.service.ts
+@@ -14,8 +14,9 @@ import {
+   PUBLISHED_DOCS_INVALID_COLLECTION,
+   PUBLISHED_DOCS_NOT_FOUND,
+   PUBLISHED_DOCS_UPDATE_FAILED,
++  TEAM_INVALID_COLL_ID,
+   TEAM_INVALID_ID,
+-  USERS_NOT_FOUND,
++  USER_COLL_NOT_FOUND,
+ } from 'src/errors';
+ import * as E from 'fp-ts/Either';
+ import { PublishedDocs } from './published-docs.model';
+@@ -155,9 +156,16 @@ export class PublishedDocsService {
+     const user = await this.prisma.user.findUnique({
+       where: { uid: publishedDocs.creatorUid },
+     });
+-    if (!user) return E.left(USERS_NOT_FOUND);
+ 
+-    return E.right(user);
++    const creator = user
++      ? {
++          ...user,
++          currentGQLSession: JSON.stringify(user.currentGQLSession),
++          currentRESTSession: JSON.stringify(user.currentRESTSession),
++        }
++      : null;
++
++    return E.right(creator);
+   }
+ 
+   /**
+@@ -235,7 +243,20 @@ export class PublishedDocsService {
+               query.tree === TreeLevel.FULL,
+             );
+ 
+-      if (E.isLeft(collectionResult)) return E.left(collectionResult.left);
++      if (E.isLeft(collectionResult)) {
++        // Delete the published doc if its collection is missing
++        const isCollectionNotFound =
++          collectionResult.left === USER_COLL_NOT_FOUND ||
++          collectionResult.left === TEAM_INVALID_COLL_ID;
++
++        if (isCollectionNotFound) {
++          await this.prisma.publishedDocs.delete({
++            where: { id: publishedDocs.id },
++          });
++        }
++
++        return E.left(collectionResult.left);
++      }
+ 
+       return E.right(
+         this.cast({
+@@ -248,6 +269,26 @@ export class PublishedDocsService {
+     return E.right(this.cast(publishedDocs));
+   }
+ 
++  /**
++   * Cleanup orphaned published documents whose collections no longer exist
++   */
++  private async cleanupOrphanedPublishedDocs<
++    T extends { id: string; collectionID: string },
++  >(docs: T[], existingCollectionIDs: Set<string>): Promise<T[]> {
++    const docsToDelete = docs.filter(
++      (doc) => !existingCollectionIDs.has(doc.collectionID),
++    );
++
++    if (docsToDelete.length > 0) {
++      const idsToDelete = docsToDelete.map((doc) => doc.id);
++      this.prisma.publishedDocs.deleteMany({
++        where: { id: { in: idsToDelete } },
++      });
++    }
++
++    return docs.filter((doc) => existingCollectionIDs.has(doc.collectionID));
++  }
++
+   /**
+    * Get all published documents for a user with pagination
+    * @param userUid - The UID of the user
+@@ -266,7 +307,29 @@ export class PublishedDocsService {
+       },
+     });
+ 
+-    return docs.map((doc) => this.cast(doc));
++    if (docs.length === 0) return [];
++
++    // Cross-check if all collections exist
++    const collectionIDs = docs.map((doc) => doc.collectionID);
++    const existingCollections = await this.prisma.userCollection.findMany({
++      where: {
++        id: { in: collectionIDs },
++        userUid,
++      },
++      select: { id: true },
++    });
++
++    const existingCollectionIDs = new Set(
++      existingCollections.map((col) => col.id),
++    );
++
++    const validDocs = await this.cleanupOrphanedPublishedDocs<DbPublishedDocs>(
++      docs,
++      existingCollectionIDs,
++    );
++
++    // Return only docs with existing collections
++    return validDocs.map((doc) => this.cast(doc));
+   }
+ 
+   /**
+@@ -290,7 +353,29 @@ export class PublishedDocsService {
+       },
+     });
+ 
+-    return docs.map((doc) => this.cast(doc));
++    if (docs.length === 0) return [];
++
++    // Cross-check if all collections exist
++    const collectionIDs = docs.map((doc) => doc.collectionID);
++    const existingCollections = await this.prisma.teamCollection.findMany({
++      where: {
++        id: { in: collectionIDs },
++        teamID,
++      },
++      select: { id: true },
++    });
++
++    const existingCollectionIDs = new Set(
++      existingCollections.map((col) => col.id),
++    );
++
++    const validDocs = await this.cleanupOrphanedPublishedDocs<DbPublishedDocs>(
++      docs,
++      existingCollectionIDs,
++    );
++
++    // Return only docs with existing collections
++    return validDocs.map((doc) => this.cast(doc));
+   }
+ 
+   /**
+diff --git a/packages/hoppscotch-backend/src/user-collection/user-collection.service.ts b/packages/hoppscotch-backend/src/user-collection/user-collection.service.ts
+index 5d89c04b88..270c441b0f 100644
+--- a/packages/hoppscotch-backend/src/user-collection/user-collection.service.ts
++++ b/packages/hoppscotch-backend/src/user-collection/user-collection.service.ts
+@@ -40,7 +40,6 @@ import {
+ import { CollectionFolder } from 'src/types/CollectionFolder';
+ import { PrismaError } from 'src/prisma/prisma-error-codes';
+ import { SortOptions } from 'src/types/SortOptions';
+-import { UserRequest } from 'src/user-request/user-request.model';
+ 
+ @Injectable()
+ export class UserCollectionService {

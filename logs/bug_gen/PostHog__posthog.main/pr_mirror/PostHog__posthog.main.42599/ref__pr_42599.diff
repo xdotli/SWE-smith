@@ -1,0 +1,57 @@
+diff --git a/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts b/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
+index 47125eae22135..fe056d73e532e 100644
+--- a/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
++++ b/plugin-server/src/cdp/consumers/cdp-events-consumer.test.ts
+@@ -534,5 +534,33 @@ describe('hog flow processing', () => {
+                 teamId: 2,
+             })
+         })
++
++        it('should not produce billable_invocation metrics for hog flow invocations', async () => {
++            await insertHogFlow(
++                new FixtureHogFlowBuilder()
++                    .withTeamId(team.id)
++                    .withSimpleWorkflow({
++                        trigger: {
++                            type: 'event',
++                            filters: HOG_FILTERS_EXAMPLES.pageview_or_autocapture_filter.filters ?? {},
++                        },
++                    })
++                    .build()
++            )
++
++            await processor['createHogFlowInvocations']([globals])
++
++            const producedMetrics =
++                mockProducerObserver.getProducedKafkaMessagesForTopic('clickhouse_app_metrics2_test')
++            expect(producedMetrics).not.toEqual(
++                expect.arrayContaining([
++                    expect.objectContaining({
++                        value: expect.objectContaining({
++                            metric_name: 'billable_invocation',
++                        }),
++                    }),
++                ])
++            )
++        })
+     })
+ })
+diff --git a/plugin-server/src/cdp/consumers/cdp-events.consumer.ts b/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
+index 6f44c0c5f3d5c..5236d5060b960 100644
+--- a/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
++++ b/plugin-server/src/cdp/consumers/cdp-events.consumer.ts
+@@ -375,14 +375,6 @@ export class CdpEventsConsumer extends CdpConsumerBase {
+                 metric_name: 'triggered',
+                 count: 1,
+             })
+-
+-            triggeredInvocationsMetrics.push({
+-                team_id: item.teamId,
+-                app_source_id: item.functionId,
+-                metric_kind: 'billing',
+-                metric_name: 'billable_invocation',
+-                count: 1,
+-            })
+         })
+ 
+         this.hogFunctionMonitoringService.queueAppMetrics(triggeredInvocationsMetrics, 'hog_flow')

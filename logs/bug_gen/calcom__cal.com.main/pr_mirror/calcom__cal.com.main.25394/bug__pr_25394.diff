@@ -1,0 +1,179 @@
+diff --git a/apps/web/test/lib/confirm.handler.test.ts b/apps/web/test/lib/confirm.handler.test.ts
+index 0ef053d..11b9c58 100644
+--- a/apps/web/test/lib/confirm.handler.test.ts
++++ b/apps/web/test/lib/confirm.handler.test.ts
+@@ -73,7 +73,6 @@ describe("confirmHandler", () => {
+             location: "integrations:daily",
+             attendees: [attendeeUser],
+             responses: { name: attendeeUser.name, email: attendeeUser.email, notes: "Sensitive information" },
+-            user: { id: organizer.id },
+           },
+         ],
+         organizer,
+@@ -108,4 +107,4 @@ describe("confirmHandler", () => {
+     expect(calendarEvent.hideCalendarNotes).toBe(true);
+     expect(calendarEvent.hideCalendarEventDetails).toBe(true);
+   });
+-});
++});
+\ No newline at end of file
+diff --git a/packages/trpc/server/routers/viewer/bookings/confirm.handler.ts b/packages/trpc/server/routers/viewer/bookings/confirm.handler.ts
+index dd15753..748982c 100644
+--- a/packages/trpc/server/routers/viewer/bookings/confirm.handler.ts
++++ b/packages/trpc/server/routers/viewer/bookings/confirm.handler.ts
+@@ -46,6 +46,7 @@ type ConfirmOptions = {
+ };
+ 
+ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
++  const { user } = ctx;
+   const {
+     bookingId,
+     recurringEventId,
+@@ -139,17 +140,12 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+     },
+   });
+ 
+-  const user = booking.user;
+-  if (!user) {
+-    throw new TRPCError({ code: "BAD_REQUEST", message: "Booking must have an organizer" });
+-  }
+-
+   await checkIfUserIsAuthorizedToConfirmBooking({
+     eventTypeId: booking.eventTypeId,
+-    loggedInUserId: ctx.user.id,
++    loggedInUserId: user.id,
+     teamId: booking.eventType?.teamId || booking.eventType?.parent?.teamId,
+     bookingUserId: booking.userId,
+-    userRole: ctx.user.role,
++    userRole: user.role,
+   });
+ 
+   // Do not move this before authorization check.
+@@ -195,7 +191,7 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+ 
+   const organizerOrganizationProfile = await prisma.profile.findFirst({
+     where: {
+-      userId: user.id,
++      userId: booking.user?.id,
+     },
+   });
+ 
+@@ -293,9 +289,9 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+   }
+ 
+   if (confirmed) {
+-    const credentials = await getUsersCredentialsIncludeServiceAccountKey(user);
++    const credentials = await getUsersCredentialsIncludeServiceAccountKey(booking.user);
+     const userWithCredentials = {
+-      ...user,
++      ...booking.user,
+       credentials,
+     };
+     const allCredentials = await getAllCredentialsIncludeServiceAccountKey(userWithCredentials, {
+@@ -308,7 +304,7 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+     );
+     evt.conferenceCredentialId = conferenceCredentialId.conferenceCredentialId;
+     await handleConfirmation({
+-      user: { ...user, credentials: allCredentials },
++      user: { ...booking.user, credentials: allCredentials },
+       evt,
+       recurringEventId,
+       prisma,
+@@ -394,7 +390,7 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+     };
+     await handleWebhookTrigger({ subscriberOptions, eventTrigger, webhookData });
+ 
+-    const workflows = await getAllWorkflowsFromEventType(booking.eventType, user.id);
++    const workflows = await getAllWorkflowsFromEventType(booking.eventType, booking.user?.id);
+     try {
+       const creditService = new CreditService();
+ 
+@@ -409,86 +405,4 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
+             slug: booking.eventType?.slug as string,
+           },
+         },
+-        hideBranding: !!booking.eventType?.owner?.hideBranding,
+-        triggers: [WorkflowTriggerEvents.BOOKING_REJECTED],
+-        creditCheckFn: creditService.hasAvailableCredits.bind(creditService),
+-      });
+-    } catch (error) {
+-      // Silently fail
+-      console.error(
+-        "Error while scheduling workflow reminders for BOOKING_REJECTED:",
+-        error instanceof Error ? error.message : String(error)
+-      );
+-    }
+-  }
+-
+-  const message = confirmed ? "Booking confirmed" : "Booking rejected";
+-  const status = confirmed ? BookingStatus.ACCEPTED : BookingStatus.REJECTED;
+-
+-  return { message, status };
+-};
+-
+-const checkIfUserIsAuthorizedToConfirmBooking = async ({
+-  eventTypeId,
+-  loggedInUserId,
+-  teamId,
+-  bookingUserId,
+-  userRole,
+-}: {
+-  eventTypeId: number | null;
+-  loggedInUserId: number;
+-  teamId?: number | null;
+-  bookingUserId: number | null;
+-  userRole: string;
+-}): Promise<void> => {
+-  // check system wide admin
+-  if (userRole === UserPermissionRole.ADMIN) return;
+-
+-  // Check if the user is the owner of the event type
+-  if (bookingUserId === loggedInUserId) return;
+-
+-  // Check if user is associated with the event type
+-  if (eventTypeId) {
+-    const [loggedInUserAsHostOfEventType, loggedInUserAsUserOfEventType] = await Promise.all([
+-      prisma.eventType.findUnique({
+-        where: {
+-          id: eventTypeId,
+-          hosts: { some: { userId: loggedInUserId } },
+-        },
+-        select: { id: true },
+-      }),
+-      prisma.eventType.findUnique({
+-        where: {
+-          id: eventTypeId,
+-          users: { some: { id: loggedInUserId } },
+-        },
+-        select: { id: true },
+-      }),
+-    ]);
+-
+-    if (loggedInUserAsHostOfEventType || loggedInUserAsUserOfEventType) return;
+-  }
+-
+-  // Check if the user is an admin/owner of the team the booking belongs to
+-  if (teamId) {
+-    const membership = await prisma.membership.findFirst({
+-      where: {
+-        userId: loggedInUserId,
+-        teamId: teamId,
+-        role: {
+-          in: [MembershipRole.OWNER, MembershipRole.ADMIN],
+-        },
+-      },
+-    });
+-    if (membership) return;
+-  }
+-
+-  if (
+-    bookingUserId &&
+-    (await PrismaOrgMembershipRepository.isLoggedInUserOrgAdminOfBookingHost(loggedInUserId, bookingUserId))
+-  ) {
+-    return;
+-  }
+-
+-  throw new TRPCError({ code: "UNAUTHORIZED", message: "User is not authorized to confirm this booking" });
+-};
++        hideB
+\ No newline at end of file

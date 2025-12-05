@@ -1,0 +1,398 @@
+diff --git a/app/client/src/PluginActionEditor/types/PluginActionTypes.ts b/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
+index 735c965..5b718e0 100644
+--- a/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
++++ b/app/client/src/PluginActionEditor/types/PluginActionTypes.ts
+@@ -6,7 +6,6 @@ export enum ActionRunBehaviour {
+   ON_PAGE_LOAD = "ON_PAGE_LOAD",
+   MANUAL = "MANUAL",
+   AUTOMATIC = "AUTOMATIC",
+-  ON_PAGE_UNLOAD = "ON_PAGE_UNLOAD",
+ }
+ 
+ export type ActionRunBehaviourType = `${ActionRunBehaviour}`;
+@@ -28,4 +27,4 @@ export interface ActionSettingsConfig {
+   sectionName: string;
+   id: number;
+   children: ActionSettingsConfigChildren[];
+-}
++}
+\ No newline at end of file
+diff --git a/app/client/src/ce/entities/FeatureFlag.ts b/app/client/src/ce/entities/FeatureFlag.ts
+index f460d67..1ea7773 100644
+--- a/app/client/src/ce/entities/FeatureFlag.ts
++++ b/app/client/src/ce/entities/FeatureFlag.ts
+@@ -60,8 +60,6 @@ export const FEATURE_FLAG = {
+   release_ai_chat_integrations_enabled: "release_ai_chat_integrations_enabled",
+   release_reactive_actions_enabled: "release_reactive_actions_enabled",
+   license_ai_agent_instance_enabled: "license_ai_agent_instance_enabled",
+-  release_jsobjects_onpageunloadactions_enabled:
+-    "release_jsobjects_onpageunloadactions_enabled",
+   configure_block_event_tracking_for_anonymous_users:
+     "configure_block_event_tracking_for_anonymous_users",
+   release_static_url_enabled: "release_static_url_enabled",
+@@ -116,7 +114,6 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+   release_ai_chat_integrations_enabled: false,
+   release_reactive_actions_enabled: false,
+   license_ai_agent_instance_enabled: false,
+-  release_jsobjects_onpageunloadactions_enabled: false,
+   configure_block_event_tracking_for_anonymous_users: false,
+   release_static_url_enabled: false,
+   release_window_dimensions_enabled: false,
+@@ -125,4 +122,4 @@ export const DEFAULT_FEATURE_FLAG_VALUE: FeatureFlags = {
+ export const AB_TESTING_EVENT_KEYS = {
+   abTestingFlagLabel: "abTestingFlagLabel",
+   abTestingFlagValue: "abTestingFlagValue",
+-};
++};
+\ No newline at end of file
+diff --git a/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts b/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
+index bc845df..56836de 100644
+--- a/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
++++ b/app/client/src/constants/AppsmithActionConstants/formConfig/PluginSettings.ts
+@@ -21,33 +21,4 @@ export const RUN_BEHAVIOR_VALUES = [
+     value: ActionRunBehaviour.MANUAL,
+     children: "Manual",
+   },
+-];
+-
+-export const JS_OBJECT_RUN_BEHAVIOR_VALUES = [
+-  {
+-    label: "Automatic",
+-    subText:
+-      "JS function runs on page load or when a variable it depends on changes",
+-    value: ActionRunBehaviour.AUTOMATIC,
+-    children: "Automatic",
+-  },
+-  {
+-    label: "On page load",
+-    subText: "JS function runs when the page loads or when manually triggered",
+-    value: ActionRunBehaviour.ON_PAGE_LOAD,
+-    children: "On page load",
+-  },
+-  {
+-    label: "Manual",
+-    subText:
+-      "JS function only runs when called in an event or JS with functionName()",
+-    value: ActionRunBehaviour.MANUAL,
+-    children: "Manual",
+-  },
+-  {
+-    label: "On page unload",
+-    subText: "Query runs when the page unloads or when manually triggered",
+-    value: ActionRunBehaviour.ON_PAGE_UNLOAD,
+-    children: "On page unload",
+-  },
+-];
++];
+\ No newline at end of file
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
+index 4f22856..bc4173d 100644
+--- a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
++++ b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/JSFunctionSettings.tsx
+@@ -1,21 +1,27 @@
+-import { Flex, Option, Select, Text } from "@appsmith/ads";
++import React, { useCallback, useState } from "react";
++import {
++  Flex,
++  Option,
++  Select,
++  Text,
++  type SelectOptionProps,
++} from "@appsmith/ads";
++import type { JSAction } from "entities/JSCollection";
+ import {
+   createMessage,
+   JS_EDITOR_SETTINGS,
+   NO_JS_FUNCTIONS,
+ } from "ee/constants/messages";
+-import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+ import AnalyticsUtil from "ee/utils/AnalyticsUtil";
+-import type { JSAction } from "entities/JSCollection";
+-import { type ActionRunBehaviourType } from "PluginActionEditor/types/PluginActionTypes";
+-import React, { useCallback, useMemo, useState } from "react";
+-import styled from "styled-components";
+-import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
+ import type { OnUpdateSettingsProps } from "../types";
+ import {
+-  getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled,
+-  getRunBehaviorOptionsBasedOnFeatureFlags,
+-} from "./utils";
++  ActionRunBehaviour,
++  type ActionRunBehaviourType,
++} from "PluginActionEditor/types/PluginActionTypes";
++import styled from "styled-components";
++import { RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
++import { useFeatureFlag } from "utils/hooks/useFeatureFlag";
++import { FEATURE_FLAG } from "ee/entities/FeatureFlag";
+ 
+ const OptionLabel = styled(Text)`
+   color: var(--ads-v2-color-fg);
+@@ -55,31 +61,20 @@ const FunctionSettingRow = (props: FunctionSettingsRowProps) => {
+   const isReactiveActionsEnabled = useFeatureFlag(
+     FEATURE_FLAG.release_reactive_actions_enabled,
+   );
+-  const isOnPageUnloadEnabled = useFeatureFlag(
+-    FEATURE_FLAG.release_jsobjects_onpageunloadactions_enabled,
+-  );
+-
+-  const options = useMemo(
+-    () =>
+-      getRunBehaviorOptionsBasedOnFeatureFlags(
+-        isReactiveActionsEnabled,
+-        isOnPageUnloadEnabled,
+-      ),
+-    [isReactiveActionsEnabled, isOnPageUnloadEnabled],
+-  );
+-
++  const options = RUN_BEHAVIOR_VALUES.filter(
++    (option) =>
++      isReactiveActionsEnabled || option.value !== ActionRunBehaviour.AUTOMATIC,
++  ) as SelectOptionProps[];
+   let selectedValue = options.find((opt) => opt.value === runBehaviour);
+ 
+-  const defaultRunBehaviourOption =
+-    getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled(
+-      runBehaviour,
+-      isReactiveActionsEnabled,
+-      isOnPageUnloadEnabled,
+-      options,
++  /* temporary check added to switch from automatic to page load as the run behaviour when feature flag is turned off */
++  if (
++    runBehaviour === ActionRunBehaviour.AUTOMATIC &&
++    !isReactiveActionsEnabled
++  ) {
++    selectedValue = options.find(
++      (opt) => opt.value === ActionRunBehaviour.ON_PAGE_LOAD,
+     );
+-
+-  if (defaultRunBehaviourOption) {
+-    selectedValue = defaultRunBehaviourOption;
+   }
+ 
+   const onSelectOptions = useCallback(
+@@ -166,4 +161,4 @@ export const JSFunctionSettings = (props: Props) => {
+       )}
+     </Flex>
+   );
+-};
++};
+\ No newline at end of file
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts
+deleted file mode 100644
+index 3887fa9..0000000
+--- a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.test.ts
++++ /dev/null
+@@ -1,151 +0,0 @@
+-import {
+-  ActionRunBehaviour,
+-  type ActionRunBehaviourType,
+-} from "PluginActionEditor/types/PluginActionTypes";
+-import {
+-  getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled,
+-  getRunBehaviorOptionsBasedOnFeatureFlags,
+-} from "./utils";
+-import { JS_OBJECT_RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
+-import type { SelectOptionProps } from "@appsmith/ads";
+-
+-describe("getRunBehaviorOptions", () => {
+-  it("should return the correct options", () => {
+-    const flagsOutputMatrix: {
+-      isReactiveActionsEnabled: boolean;
+-      isOnPageUnloadEnabled: boolean;
+-      expectedOptions: SelectOptionProps[];
+-    }[] = [
+-      {
+-        isReactiveActionsEnabled: true,
+-        isOnPageUnloadEnabled: true,
+-        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES,
+-      },
+-      {
+-        isReactiveActionsEnabled: false,
+-        isOnPageUnloadEnabled: true,
+-        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
+-          (option) => option.value !== ActionRunBehaviour.AUTOMATIC,
+-        ),
+-      },
+-      {
+-        isReactiveActionsEnabled: true,
+-        isOnPageUnloadEnabled: false,
+-        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
+-          (option) => option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD,
+-        ),
+-      },
+-      {
+-        isReactiveActionsEnabled: false,
+-        isOnPageUnloadEnabled: false,
+-        expectedOptions: JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
+-          (option) =>
+-            option.value !== ActionRunBehaviour.AUTOMATIC &&
+-            option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD,
+-        ),
+-      },
+-    ];
+-
+-    flagsOutputMatrix.forEach(
+-      ({
+-        expectedOptions,
+-        isOnPageUnloadEnabled,
+-        isReactiveActionsEnabled,
+-      }) => {
+-        const options = getRunBehaviorOptionsBasedOnFeatureFlags(
+-          isReactiveActionsEnabled,
+-          isOnPageUnloadEnabled,
+-        );
+-
+-        expect(options).toEqual(expectedOptions);
+-      },
+-    );
+-  });
+-});
+-
+-describe("getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled", () => {
+-  const onPageLoadOption =
+-    JS_OBJECT_RUN_BEHAVIOR_VALUES.find(
+-      (option) => option.value === ActionRunBehaviour.ON_PAGE_LOAD,
+-    ) ?? null;
+-  const manualOption =
+-    JS_OBJECT_RUN_BEHAVIOR_VALUES.find(
+-      (option) => option.value === ActionRunBehaviour.MANUAL,
+-    ) ?? null;
+-
+-  const flagsOutputMatrix: {
+-    runBehaviour: ActionRunBehaviourType;
+-    isReactiveActionsEnabled: boolean;
+-    isOnPageUnloadEnabled: boolean;
+-    expectedOption: SelectOptionProps | null;
+-  }[] = [
+-    {
+-      runBehaviour: ActionRunBehaviour.AUTOMATIC,
+-      isReactiveActionsEnabled: true,
+-      isOnPageUnloadEnabled: true,
+-      expectedOption: null,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.AUTOMATIC,
+-      isReactiveActionsEnabled: false,
+-      isOnPageUnloadEnabled: true,
+-      expectedOption: onPageLoadOption,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.AUTOMATIC,
+-      isReactiveActionsEnabled: true,
+-      isOnPageUnloadEnabled: false,
+-      expectedOption: null,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.AUTOMATIC,
+-      isReactiveActionsEnabled: false,
+-      isOnPageUnloadEnabled: false,
+-      expectedOption: onPageLoadOption,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
+-      isReactiveActionsEnabled: true,
+-      isOnPageUnloadEnabled: true,
+-      expectedOption: null,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
+-      isReactiveActionsEnabled: false,
+-      isOnPageUnloadEnabled: true,
+-      expectedOption: null,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
+-      isReactiveActionsEnabled: true,
+-      isOnPageUnloadEnabled: false,
+-      expectedOption: manualOption,
+-    },
+-    {
+-      runBehaviour: ActionRunBehaviour.ON_PAGE_UNLOAD,
+-      isReactiveActionsEnabled: false,
+-      isOnPageUnloadEnabled: false,
+-      expectedOption: manualOption,
+-    },
+-  ];
+-
+-  it("should return the correct options", () => {
+-    flagsOutputMatrix.forEach(
+-      ({
+-        expectedOption,
+-        isOnPageUnloadEnabled,
+-        isReactiveActionsEnabled,
+-        runBehaviour,
+-      }) => {
+-        const option = getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled(
+-          runBehaviour,
+-          isReactiveActionsEnabled,
+-          isOnPageUnloadEnabled,
+-          JS_OBJECT_RUN_BEHAVIOR_VALUES,
+-        );
+-
+-        expect(option).toEqual(expectedOption);
+-      },
+-    );
+-  });
+-});
+diff --git a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts b/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts
+deleted file mode 100644
+index 08a449a..0000000
+--- a/app/client/src/pages/Editor/JSEditor/JSEditorToolbar/components/utils.ts
++++ /dev/null
+@@ -1,56 +0,0 @@
+-import {
+-  ActionRunBehaviour,
+-  type ActionRunBehaviourType,
+-} from "PluginActionEditor/types/PluginActionTypes";
+-import { JS_OBJECT_RUN_BEHAVIOR_VALUES } from "constants/AppsmithActionConstants/formConfig/PluginSettings";
+-
+-import { type SelectOptionProps } from "@appsmith/ads";
+-/**
+- * Returns the list of run behavior options based on the current feature flags.
+- * - If reactive actions are disabled, removes AUTOMATIC.
+- * - If onPageUnload is disabled, removes ON_PAGE_UNLOAD.
+- */
+-export const getRunBehaviorOptionsBasedOnFeatureFlags = (
+-  isReactiveActionsEnabled: boolean,
+-  isOnPageUnloadEnabled: boolean,
+-) =>
+-  JS_OBJECT_RUN_BEHAVIOR_VALUES.filter(
+-    (option) =>
+-      (isReactiveActionsEnabled ||
+-        option.value !== ActionRunBehaviour.AUTOMATIC) &&
+-      (isOnPageUnloadEnabled ||
+-        option.value !== ActionRunBehaviour.ON_PAGE_UNLOAD),
+-  ) as SelectOptionProps[];
+-
+-/**
+- * Returns the default run behavior option if the current one is no longer available due to feature flag changes.
+- * - AUTOMATIC falls back to ON_PAGE_LOAD if reactive actions are disabled.
+- * - ON_PAGE_UNLOAD falls back to MANUAL if onPageUnload is disabled.
+- */
+-export const getDefaultRunBehaviorOptionWhenFeatureFlagIsDisabled = (
+-  runBehaviour: ActionRunBehaviourType,
+-  isReactiveActionsEnabled: boolean,
+-  isOnPageUnloadEnabled: boolean,
+-  options: SelectOptionProps[],
+-): SelectOptionProps | null => {
+-  if (
+-    runBehaviour === ActionRunBehaviour.AUTOMATIC &&
+-    !isReactiveActionsEnabled
+-  ) {
+-    return (
+-      options.find((opt) => opt.value === ActionRunBehaviour.ON_PAGE_LOAD) ??
+-      null
+-    );
+-  }
+-
+-  if (
+-    runBehaviour === ActionRunBehaviour.ON_PAGE_UNLOAD &&
+-    !isOnPageUnloadEnabled
+-  ) {
+-    return (
+-      options.find((opt) => opt.value === ActionRunBehaviour.MANUAL) ?? null
+-    );
+-  }
+-
+-  return null;
+-};
