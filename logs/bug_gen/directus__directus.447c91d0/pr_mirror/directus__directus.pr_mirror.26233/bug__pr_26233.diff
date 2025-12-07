@@ -1,0 +1,315 @@
+diff --git a/api/src/services/graphql/resolvers/query.test.ts b/api/src/services/graphql/resolvers/query.test.ts
+deleted file mode 100644
+index 828daaa..0000000
+--- a/api/src/services/graphql/resolvers/query.test.ts
++++ /dev/null
+@@ -1,243 +0,0 @@
+-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+-import { parseArgs } from '../schema/parse-args.js';
+-import { getQuery } from '../schema/parse-query.js';
+-import { getAggregateQuery } from '../utils/aggregate-query.js';
+-import { replaceFragmentsInSelections } from '../utils/replace-fragments.js';
+-import { resolveQuery } from './query.js';
+-
+-vi.mock('../utils/replace-fragments.js');
+-vi.mock('../schema/parse-args.js');
+-vi.mock('../utils/aggregate-query.js');
+-vi.mock('../schema/parse-query.js');
+-
+-describe('resolveQuery', () => {
+-	const mockReplaceFragments = vi.fn();
+-	const mockParseArgs = vi.fn();
+-	const mockGetAggregateQuery = vi.fn();
+-	const mockGetQuery = vi.fn();
+-
+-	beforeEach(() => {
+-		vi.mocked(replaceFragmentsInSelections).mockImplementation(mockReplaceFragments);
+-		vi.mocked(parseArgs).mockImplementation(mockParseArgs);
+-		vi.mocked(getAggregateQuery).mockImplementation(mockGetAggregateQuery);
+-		vi.mocked(getQuery).mockImplementation(mockGetQuery);
+-	});
+-
+-	afterEach(() => {
+-		vi.clearAllMocks();
+-		vi.resetAllMocks();
+-		vi.restoreAllMocks();
+-	});
+-
+-	test('system scope prefixes collection with directus_', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({});
+-
+-		mockGetQuery.mockResolvedValue({
+-			fields: [],
+-		});
+-
+-		const gql: any = {
+-			scope: 'system',
+-			schema: { collections: {} },
+-			accountability: {},
+-			read: vi.fn(() => []),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'users',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		await resolveQuery(gql, info);
+-
+-		expect(mockGetQuery).toHaveBeenCalled();
+-		const lastCallArgs = mockGetQuery.mock.calls[mockGetQuery.mock.calls.length - 1];
+-		const collectionArg = lastCallArgs?.[lastCallArgs.length - 1];
+-		expect(collectionArg).toBe('directus_users');
+-	});
+-
+-	test('returns null when selections are missing', async () => {
+-		mockReplaceFragments.mockReturnValue(null);
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: { collections: {} },
+-			accountability: {},
+-			read: vi.fn(),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'posts',
+-			fieldNodes: [{ selectionSet: undefined }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		const res = await resolveQuery(gql, info);
+-
+-		expect(res).toBeNull();
+-		expect(mockParseArgs).not.toHaveBeenCalled();
+-	});
+-
+-	test('aggregate branch calls getAggregateQuery with correct collection name', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({ id: 'id' });
+-
+-		mockGetAggregateQuery.mockReturnValue({
+-			fields: [],
+-		});
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: {
+-				collections: {},
+-			},
+-			accountability: {},
+-			read: vi.fn(),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'posts_aggregated',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		await resolveQuery(gql, info);
+-
+-		const lastCallArgs = mockGetAggregateQuery.mock.calls[mockGetAggregateQuery.mock.calls.length - 1];
+-		const collectionArg = lastCallArgs?.[lastCallArgs.length - 1];
+-		expect(collectionArg).toBe('posts');
+-	});
+-
+-	test('query by id calls getQuery with correct collection name', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({ id: 'abc' });
+-
+-		mockGetQuery.mockReturnValue({
+-			fields: [],
+-		});
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: {
+-				collections: {},
+-			},
+-			accountability: {},
+-			read: vi.fn(),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'posts_by_id',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		await resolveQuery(gql, info);
+-
+-		expect(mockGetQuery).toHaveBeenCalled();
+-		const lastCallArgs = mockGetQuery.mock.calls[mockGetQuery.mock.calls.length - 1];
+-		const collectionArg = lastCallArgs?.[lastCallArgs.length - 1];
+-		expect(collectionArg).toBe('posts');
+-	});
+-
+-	test('query by version injects versionRaw to query', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({ id: 'abc' });
+-
+-		mockGetQuery.mockReturnValue({
+-			fields: [],
+-		});
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: {
+-				collections: {},
+-			},
+-			accountability: {},
+-			read: vi.fn(),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'posts_by_version',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		await resolveQuery(gql, info);
+-
+-		expect(gql.read).toHaveBeenCalled();
+-		const lastCallArgs = gql.read.mock.calls[gql.read.mock.calls.length - 1];
+-		const queryArg = lastCallArgs?.[1];
+-		expect(queryArg).toEqual(expect.objectContaining({ versionRaw: true }));
+-	});
+-
+-	test('properly resolves fields to correct path for each nested function field', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({ id: 'abc' });
+-
+-		mockGetAggregateQuery.mockResolvedValue({
+-			fields: ['count(a)', 'sum(b.c)', 'max(c.d.e)'],
+-		});
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: { collections: {} },
+-			accountability: {},
+-			read: vi.fn(() => []),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'col_aggregated',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		await resolveQuery(gql, info);
+-
+-		expect(gql.read).toHaveBeenCalled();
+-		const lastCallArgs = gql.read.mock.calls[gql.read.mock.calls.length - 1];
+-		const queryArg = lastCallArgs?.[1];
+-		expect(queryArg).toEqual(expect.objectContaining({ fields: ['count(a)', 'b.sum(c)', 'c.d.max(e)'] }));
+-	});
+-
+-	test('inject group field for each item when grouping', async () => {
+-		mockReplaceFragments.mockReturnValue([{}]);
+-		mockParseArgs.mockReturnValue({});
+-
+-		mockGetAggregateQuery.mockResolvedValue({
+-			group: ['category'],
+-			aggregate: { count: ['id'] },
+-		});
+-
+-		const gql: any = {
+-			scope: 'app',
+-			schema: { collections: {} },
+-			accountability: {},
+-			read: vi.fn(() => [
+-				{ category: 'A', count: { id: 5 } },
+-				{ category: 'B', count: { id: 10 } },
+-			]),
+-		};
+-
+-		const info: any = {
+-			fieldName: 'items_aggregated',
+-			fieldNodes: [{ selectionSet: { selections: [{}] }, arguments: [] }],
+-			fragments: {},
+-			variableValues: {},
+-		};
+-
+-		const res = await resolveQuery(gql, info);
+-
+-		expect(res).toEqual([
+-			{ category: 'A', count: { id: 5 }, group: { category: 'A' } },
+-			{ category: 'B', count: { id: 10 }, group: { category: 'B' } },
+-		]);
+-	});
+-});
+diff --git a/api/src/services/graphql/resolvers/query.ts b/api/src/services/graphql/resolvers/query.ts
+index dafadf2..7c19517 100644
+--- a/api/src/services/graphql/resolvers/query.ts
++++ b/api/src/services/graphql/resolvers/query.ts
+@@ -28,12 +28,12 @@ export async function resolveQuery(gql: GraphQLService, info: GraphQLResolveInfo
+ 		collection = collection.slice(0, -11);
+ 		query = await getAggregateQuery(args, selections, gql.schema, gql.accountability, collection);
+ 	} else {
++		query = await getQuery(args, gql.schema, selections, info.variableValues, gql.accountability, collection);
++
+ 		if (collection.endsWith('_by_id') && collection in gql.schema.collections === false) {
+ 			collection = collection.slice(0, -6);
+ 		}
+ 
+-		query = await getQuery(args, gql.schema, selections, info.variableValues, gql.accountability, collection);
+-
+ 		if (collection.endsWith('_by_version') && collection in gql.schema.collections === false) {
+ 			collection = collection.slice(0, -11);
+ 			query.versionRaw = true;
+@@ -61,4 +61,4 @@ export async function resolveQuery(gql: GraphQLService, info: GraphQLResolveInfo
+ 	}
+ 
+ 	return result;
+-}
++}
+\ No newline at end of file
+diff --git a/api/src/services/graphql/schema/parse-query.test.ts b/api/src/services/graphql/schema/parse-query.test.ts
+index aeb33eb..e97fcd8 100644
+--- a/api/src/services/graphql/schema/parse-query.test.ts
++++ b/api/src/services/graphql/schema/parse-query.test.ts
+@@ -1,8 +1,11 @@
+ import type { FieldNode, SelectionNode } from 'graphql';
+ import { afterEach, describe, expect, test, vi } from 'vitest';
+ import { sanitizeQuery } from '../../../utils/sanitize-query.js';
++import { parseArgs } from './parse-args.js';
+ import { getQuery } from './parse-query.js';
+ 
++vi.mock('/parse-args.js');
++
+ vi.mock('../../../utils/sanitize-query.js', () => ({
+ 	sanitizeQuery: vi.fn(async (q) => q),
+ }));
+@@ -20,6 +23,8 @@ vi.mock('../utils/replace-funcs.js', () => ({
+ 	replaceFuncs: vi.fn((v) => v),
+ }));
+ 
++vi.mock('./parse-args.js');
++
+ const mockSchema = {} as any;
+ const mockAccountability = null;
+ const mockVariableValues = {};
+@@ -98,6 +103,7 @@ describe('parseFields', () => {
+ 
+ 		const query = await getQuery({}, mockSchema, selections, mockVariableValues, mockAccountability);
+ 		expect(query.fields).toEqual(['posts']);
++		expect(parseArgs).toHaveBeenCalledWith(selections[0]!.arguments, mockVariableValues);
+ 	});
+ 
+ 	test('should parse InlineFragment with arguments', async () => {
+@@ -186,4 +192,4 @@ describe('parseFields', () => {
+ 		const query = await getQuery({}, mockSchema, selections, mockVariableValues, mockAccountability);
+ 		expect(query.fields).toEqual(['parent.child.grandchild']);
+ 	});
+-});
++});
+\ No newline at end of file

@@ -1,0 +1,17 @@
+{
+    "FAIL_TO_PASS": [],
+    "PASS_TO_PASS": [
+        "TS  |@sanity/types| test/options.test-d.ts (2 tests)",
+        "|sanity| src/core/search/weighted/createWeightedSearch.test.ts (3 tests) 27ms",
+        "rxSwr > should discard old cache keys when exceeding maxSize  413ms",
+        "|sanity| src/core/util/searchUtils.test.ts (3 tests) 18ms",
+        "|sanity| src/structure/structureResolvers/__tests__/assignId.test.ts (1 test) 9ms",
+        "|@sanity/schema| test/validation/validation.test.ts (5 tests) 35ms",
+        "|cli| server/__tests__/aliases.test.ts (3 tests) 20ms",
+        "|@sanity/migrate| src/fetch-utils/__test__/sanityRequestOptions.test.ts (1 test) 7ms",
+        "|cli| actions/graphql/gen3/__tests__/utils.test.ts (2 tests) 14ms",
+        "TS  |sanity| src/presentation/__tests__/plugin.test-d.tsx (15 tests)"
+    ],
+    "FAIL_TO_FAIL": [],
+    "PASS_TO_FAIL": []
+}

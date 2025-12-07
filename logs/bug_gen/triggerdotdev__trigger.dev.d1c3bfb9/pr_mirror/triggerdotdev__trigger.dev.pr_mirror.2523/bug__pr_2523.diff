@@ -1,0 +1,1836 @@
+diff --git a/apps/supervisor/src/workloadServer/index.ts b/apps/supervisor/src/workloadServer/index.ts
+index 35d53d3..0c9f83c 100644
+--- a/apps/supervisor/src/workloadServer/index.ts
++++ b/apps/supervisor/src/workloadServer/index.ts
+@@ -125,7 +125,7 @@ export class WorkloadServer extends EventEmitter<WorkloadServerEvents> {
+   }
+ 
+   private createHttpServer({ host, port }: { host: string; port: number }) {
+-    const httpServer = new HttpServer({
++    return new HttpServer({
+       port,
+       host,
+       metrics: {
+@@ -346,6 +346,23 @@ export class WorkloadServer extends EventEmitter<WorkloadServerEvents> {
+           },
+         }
+       )
++      .route("/api/v1/workload-actions/runs/:runFriendlyId/logs/debug", "POST", {
++        paramsSchema: WorkloadActionParams.pick({ runFriendlyId: true }),
++        bodySchema: WorkloadDebugLogRequestBody,
++        handler: async ({ req, reply, params, body }) => {
++          reply.empty(204);
++
++          if (!env.SEND_RUN_DEBUG_LOGS) {
++            return;
++          }
++
++          await this.workerClient.sendDebugLog(
++            params.runFriendlyId,
++            body,
++            this.runnerIdFromRequest(req)
++          );
++        },
++      })
+       .route("/api/v1/workload-actions/deployments/:deploymentId/dequeue", "GET", {
+         paramsSchema: z.object({
+           deploymentId: z.string(),
+@@ -370,31 +387,6 @@ export class WorkloadServer extends EventEmitter<WorkloadServerEvents> {
+           reply.json(dequeueResponse.data satisfies WorkloadDequeueFromVersionResponseBody);
+         },
+       });
+-
+-    if (env.SEND_RUN_DEBUG_LOGS) {
+-      httpServer.route("/api/v1/workload-actions/runs/:runFriendlyId/logs/debug", "POST", {
+-        paramsSchema: WorkloadActionParams.pick({ runFriendlyId: true }),
+-        bodySchema: WorkloadDebugLogRequestBody,
+-        handler: async ({ req, reply, params, body }) => {
+-          reply.empty(204);
+-
+-          await this.workerClient.sendDebugLog(
+-            params.runFriendlyId,
+-            body,
+-            this.runnerIdFromRequest(req)
+-          );
+-        },
+-      });
+-    } else {
+-      // Lightweight mock route without schemas
+-      httpServer.route("/api/v1/workload-actions/runs/:runFriendlyId/logs/debug", "POST", {
+-        handler: async ({ reply }) => {
+-          reply.empty(204);
+-        },
+-      });
+-    }
+-
+-    return httpServer;
+   }
+ 
+   private createWebsocketServer() {
+@@ -479,120 +471,4 @@ export class WorkloadServer extends EventEmitter<WorkloadServerEvents> {
+ 
+         this.runSockets.set(friendlyId, socket);
+         this.emit("runConnected", { run: { friendlyId } });
+-        socket.data.runFriendlyId = friendlyId;
+-      };
+-
+-      const runDisconnected = (friendlyId: string) => {
+-        socketLogger.debug("runDisconnected", { ...getSocketMetadata() });
+-
+-        this.runSockets.delete(friendlyId);
+-        this.emit("runDisconnected", { run: { friendlyId } });
+-        socket.data.runFriendlyId = undefined;
+-      };
+-
+-      socketLogger.log("wsServer socket connected", { ...getSocketMetadata() });
+-
+-      // FIXME: where does this get set?
+-      if (socket.data.runFriendlyId) {
+-        runConnected(socket.data.runFriendlyId);
+-      }
+-
+-      socket.on("disconnecting", (reason, description) => {
+-        socketLogger.log("Socket disconnecting", { ...getSocketMetadata(), reason, description });
+-
+-        if (socket.data.runFriendlyId) {
+-          runDisconnected(socket.data.runFriendlyId);
+-        }
+-      });
+-
+-      socket.on("disconnect", (reason, description) => {
+-        socketLogger.log("Socket disconnected", { ...getSocketMetadata(), reason, description });
+-      });
+-
+-      socket.on("error", (error) => {
+-        socketLogger.error("Socket error", {
+-          ...getSocketMetadata(),
+-          error: {
+-            name: error.name,
+-            message: error.message,
+-            stack: error.stack,
+-          },
+-        });
+-      });
+-
+-      socket.on("run:start", async (message) => {
+-        const log = socketLogger.child({
+-          eventName: "run:start",
+-          ...getSocketMetadata(),
+-          ...message,
+-        });
+-
+-        log.log("Handling run:start");
+-
+-        try {
+-          runConnected(message.run.friendlyId);
+-        } catch (error) {
+-          log.error("run:start error", { error });
+-        }
+-      });
+-
+-      socket.on("run:stop", async (message) => {
+-        const log = socketLogger.child({
+-          eventName: "run:stop",
+-          ...getSocketMetadata(),
+-          ...message,
+-        });
+-
+-        log.log("Handling run:stop");
+-
+-        try {
+-          runDisconnected(message.run.friendlyId);
+-        } catch (error) {
+-          log.error("run:stop error", { error });
+-        }
+-      });
+-    });
+-
+-    return websocketServer;
+-  }
+-
+-  notifyRun({ run }: { run: { friendlyId: string } }) {
+-    try {
+-      const runSocket = this.runSockets.get(run.friendlyId);
+-
+-      if (!runSocket) {
+-        this.logger.debug("notifyRun: Run socket not found", { run });
+-
+-        this.workerClient.sendDebugLog(run.friendlyId, {
+-          time: new Date(),
+-          message: "run:notify socket not found on supervisor",
+-        });
+-
+-        return;
+-      }
+-
+-      runSocket.emit("run:notify", { version: "1", run });
+-      this.logger.debug("run:notify sent", { run });
+-
+-      this.workerClient.sendDebugLog(run.friendlyId, {
+-        time: new Date(),
+-        message: "run:notify supervisor -> runner",
+-      });
+-    } catch (error) {
+-      this.logger.error("Error in notifyRun", { run, error });
+-
+-      this.workerClient.sendDebugLog(run.friendlyId, {
+-        time: new Date(),
+-        message: "run:notify error on supervisor",
+-      });
+-    }
+-  }
+-
+-  async start() {
+-    await this.httpServer.start();
+-  }
+-
+-  async stop() {
+-    await this.httpServer.stop();
+-  }
+-}
++        socket.
+\ No newline at end of file
+diff --git a/packages/cli-v3/src/entryPoints/managed/controller.ts b/packages/cli-v3/src/entryPoints/managed/controller.ts
+index 54f0dba..330c776 100644
+--- a/packages/cli-v3/src/entryPoints/managed/controller.ts
++++ b/packages/cli-v3/src/entryPoints/managed/controller.ts
+@@ -449,195 +449,4 @@ export class ManagedRunController {
+     this.currentExecution?.kill().catch(() => {});
+     this.taskRunProcessProvider.cleanup().catch(() => {});
+ 
+-    process.exit(code);
+-  }
+-
+-  createSupervisorSocket(): SupervisorSocket {
+-    const wsUrl = new URL("/workload", this.workerApiUrl);
+-
+-    const socket: SupervisorSocket = io(wsUrl.href, {
+-      transports: ["websocket"],
+-      extraHeaders: {
+-        [WORKLOAD_HEADERS.DEPLOYMENT_ID]: this.env.TRIGGER_DEPLOYMENT_ID,
+-        [WORKLOAD_HEADERS.RUNNER_ID]: this.env.TRIGGER_RUNNER_ID,
+-      },
+-    });
+-
+-    socket.on("connect", () => {
+-      this.sendDebugLog({
+-        runId: this.runFriendlyId,
+-        message: "Socket connected to supervisor",
+-      });
+-    });
+-
+-    socket.on("connect_error", (error) => {
+-      this.sendDebugLog({
+-        runId: this.runFriendlyId,
+-        message: "Socket connection error",
+-        properties: { error: error instanceof Error ? error.message : String(error) },
+-      });
+-    });
+-
+-    socket.on("disconnect", async (reason, description) => {
+-      const parseDescription = ():
+-        | {
+-            description: string;
+-            context?: string;
+-          }
+-        | undefined => {
+-        if (!description) {
+-          return undefined;
+-        }
+-
+-        if (description instanceof Error) {
+-          return {
+-            description: description.toString(),
+-          };
+-        }
+-
+-        return {
+-          description: description.description,
+-          context: description.context ? String(description.context) : undefined,
+-        };
+-      };
+-
+-      if (this.currentExecution) {
+-        const currentEnv = {
+-          workerInstanceName: this.env.TRIGGER_WORKER_INSTANCE_NAME,
+-          runnerId: this.env.TRIGGER_RUNNER_ID,
+-          supervisorApiUrl: this.env.TRIGGER_SUPERVISOR_API_URL,
+-        };
+-
+-        const result = await this.currentExecution.processEnvOverrides("socket disconnected", true);
+-
+-        const newEnv = {
+-          workerInstanceName: this.env.TRIGGER_WORKER_INSTANCE_NAME,
+-          runnerId: this.env.TRIGGER_RUNNER_ID,
+-          supervisorApiUrl: this.env.TRIGGER_SUPERVISOR_API_URL,
+-        };
+-
+-        this.sendDebugLog({
+-          runId: this.runFriendlyId,
+-          message: "Socket disconnected from supervisor - processed env overrides",
+-          properties: { reason, ...parseDescription(), currentEnv, newEnv },
+-        });
+-
+-        if (!result) {
+-          return;
+-        }
+-
+-        // If runner ID changed, we detected a restore
+-        if (result.runnerIdChanged) {
+-          this.sendDebugLog({
+-            runId: this.runFriendlyId,
+-            message: "Runner ID changed - restore detected",
+-            properties: {
+-              supervisorChanged: result.supervisorChanged,
+-            },
+-          });
+-
+-          if (!result.supervisorChanged) {
+-            return;
+-          }
+-
+-          // Only reconnect WebSocket if supervisor URL actually changed
+-          this.sendDebugLog({
+-            runId: this.runFriendlyId,
+-            message: "Supervisor URL changed - creating new socket connection",
+-          });
+-
+-          // First disconnect the old socket to avoid conflicts
+-          socket.removeAllListeners();
+-          socket.disconnect();
+-
+-          // Create a new socket with the updated URL and headers
+-          this.socket = this.createSupervisorSocket();
+-
+-          // Re-subscribe to notifications if we have an active execution
+-          if (this.runFriendlyId && this.snapshotFriendlyId) {
+-            this.subscribeToRunNotifications(this.runFriendlyId, this.snapshotFriendlyId);
+-          }
+-        }
+-
+-        return;
+-      }
+-
+-      this.sendDebugLog({
+-        runId: this.runFriendlyId,
+-        message: "Socket disconnected from supervisor",
+-        properties: { reason, ...parseDescription() },
+-      });
+-    });
+-
+-    return socket;
+-  }
+-
+-  start() {
+-    this.sendDebugLog({
+-      runId: this.runFriendlyId,
+-      message: "Starting up",
+-    });
+-
+-    // If we have run and snapshot IDs, we can start an attempt immediately
+-    if (this.env.TRIGGER_RUN_ID && this.env.TRIGGER_SNAPSHOT_ID) {
+-      this.startRunExecution({
+-        runFriendlyId: this.env.TRIGGER_RUN_ID,
+-        snapshotFriendlyId: this.env.TRIGGER_SNAPSHOT_ID,
+-        dequeuedAt: this.env.TRIGGER_DEQUEUED_AT_MS,
+-        podScheduledAt: this.env.TRIGGER_POD_SCHEDULED_AT_MS,
+-      }).finally(() => {});
+-      return;
+-    }
+-
+-    // ..otherwise we need to wait for a run
+-    this.waitForNextRun();
+-    return;
+-  }
+-
+-  async cancelRunsAndExitProcess() {
+-    this.sendDebugLog({
+-      runId: this.runFriendlyId,
+-      message: "Shutting down",
+-    });
+-
+-    // Cancel the current execution
+-    const [error] = await tryCatch(this.currentExecution?.cancel());
+-
+-    if (error) {
+-      this.sendDebugLog({
+-        runId: this.runFriendlyId,
+-        message: "Error during shutdown",
+-        properties: { error: String(error) },
+-      });
+-    }
+-
+-    // Cleanup the task run process provider
+-    const [cleanupError] = await tryCatch(this.taskRunProcessProvider.cleanup());
+-
+-    if (cleanupError) {
+-      this.sendDebugLog({
+-        runId: this.runFriendlyId,
+-        message: "Error during task run process provider cleanup",
+-        properties: { error: String(cleanupError) },
+-      });
+-    }
+-
+-    // Close the socket
+-    this.socket.close();
+-
+-    // Exit the process
+-    this.exitProcess(this.successExitCode);
+-  }
+-
+-  sendDebugLog(opts: SendDebugLogOptions) {
+-    this.logger.sendDebugLog({
+-      ...opts,
+-      message: `[controller] ${opts.message}`,
+-      properties: {
+-        ...opts.properties,
+-        runnerWarmStartCount: this.warmStartCount,
+-        runnerRestoreCount: this.restoreCount,
+-      },
+-    });
+-  }
+-}
++    process
+\ No newline at end of file
+diff --git a/packages/cli-v3/src/entryPoints/managed/execution.ts b/packages/cli-v3/src/entryPoints/managed/execution.ts
+index 2dd3e68..49e26f5 100644
+--- a/packages/cli-v3/src/entryPoints/managed/execution.ts
++++ b/packages/cli-v3/src/entryPoints/managed/execution.ts
+@@ -436,830 +436,4 @@ export class RunExecution {
+       this.sendDebugLog("error: invalid attempt number returned from start attempt", {
+         attemptNumber: String(attemptNumber),
+       });
+-    }
+-
+-    const metrics = this.measureExecutionMetrics({
+-      attemptCreatedAt: attemptStartedAt,
+-      dequeuedAt: this.dequeuedAt?.getTime(),
+-      podScheduledAt: this.podScheduledAt?.getTime(),
+-    });
+-
+-    this.sendDebugLog("started attempt", { start: start.data });
+-
+-    return { ...start.data, metrics };
+-  }
+-
+-  /**
+-   * Executes the run. This will return when the execution is complete and we should warm start.
+-   * When this returns, the child process will have been cleaned up.
+-   */
+-  public async execute(runOpts: RunExecutionRunOptions): Promise<void> {
+-    if (this.isShuttingDown) {
+-      throw new Error("execute called after execution shut down");
+-    }
+-
+-    // Setup initial state
+-    this.runFriendlyId = runOpts.runFriendlyId;
+-
+-    // Create snapshot manager
+-    this.snapshotManager = new SnapshotManager({
+-      runFriendlyId: runOpts.runFriendlyId,
+-      runnerId: this.env.TRIGGER_RUNNER_ID,
+-      initialSnapshotId: runOpts.snapshotFriendlyId,
+-      // We're just guessing here, but "PENDING_EXECUTING" is probably fine
+-      initialStatus: "PENDING_EXECUTING",
+-      logger: this.logger,
+-      metadataClient: this.metadataClient,
+-      onSnapshotChange: this.processSnapshotChange.bind(this),
+-      onSuspendable: this.handleSuspendable.bind(this),
+-    });
+-
+-    this.dequeuedAt = runOpts.dequeuedAt;
+-    this.podScheduledAt = runOpts.podScheduledAt;
+-
+-    // Create and start services
+-    this.snapshotPoller = new RunExecutionSnapshotPoller({
+-      runFriendlyId: this.runFriendlyId,
+-      snapshotFriendlyId: this.snapshotManager.snapshotId,
+-      logger: this.logger,
+-      snapshotPollIntervalSeconds: this.env.TRIGGER_SNAPSHOT_POLL_INTERVAL_SECONDS,
+-      onPoll: this.fetchAndProcessSnapshotChanges.bind(this),
+-    }).start();
+-
+-    this.notifier = new RunNotifier({
+-      runFriendlyId: this.runFriendlyId,
+-      supervisorSocket: this.supervisorSocket,
+-      onNotify: this.fetchAndProcessSnapshotChanges.bind(this),
+-      logger: this.logger,
+-    }).start();
+-
+-    const [startError, start] = await tryCatch(
+-      this.startAttempt({ isWarmStart: runOpts.isWarmStart })
+-    );
+-
+-    if (startError) {
+-      this.sendDebugLog("failed to start attempt", { error: startError.message });
+-
+-      this.shutdownExecution("failed to start attempt");
+-      return;
+-    }
+-
+-    const [executeError] = await tryCatch(
+-      this.executeRunWrapper({ ...start, isWarmStart: runOpts.isWarmStart })
+-    );
+-
+-    if (executeError) {
+-      this.sendDebugLog("failed to execute run", { error: executeError.message });
+-
+-      this.shutdownExecution("failed to execute run");
+-      return;
+-    }
+-
+-    // This is here for safety, but it
+-    this.shutdownExecution("execute call finished");
+-  }
+-
+-  private async executeRunWrapper({
+-    run,
+-    snapshot,
+-    envVars,
+-    execution,
+-    metrics,
+-    isWarmStart,
+-    isImmediateRetry,
+-  }: WorkloadRunAttemptStartResponseBody & {
+-    metrics: TaskRunExecutionMetrics;
+-    isWarmStart?: boolean;
+-    isImmediateRetry?: boolean;
+-  }) {
+-    this.currentTaskRunEnv = envVars;
+-
+-    const [executeError] = await tryCatch(
+-      this.executeRun({
+-        run,
+-        snapshot,
+-        envVars,
+-        execution,
+-        metrics,
+-        isWarmStart,
+-        isImmediateRetry,
+-      })
+-    );
+-
+-    if (!executeError) {
+-      return;
+-    }
+-
+-    if (executeError instanceof SuspendedProcessError) {
+-      this.sendDebugLog("execution was suspended", {
+-        run: run.friendlyId,
+-        snapshot: snapshot.friendlyId,
+-        error: executeError.message,
+-      });
+-
+-      return;
+-    }
+-
+-    if (executeError instanceof ExecutionAbortError) {
+-      this.sendDebugLog("execution was aborted", {
+-        run: run.friendlyId,
+-        snapshot: snapshot.friendlyId,
+-        error: executeError.message,
+-      });
+-
+-      return;
+-    }
+-
+-    this.sendDebugLog("error while executing attempt", {
+-      error: executeError.message,
+-      runId: run.friendlyId,
+-      snapshotId: snapshot.friendlyId,
+-    });
+-
+-    const completion = {
+-      id: execution.run.id,
+-      ok: false,
+-      retry: undefined,
+-      error: TaskRunProcess.parseExecuteError(executeError),
+-    } satisfies TaskRunFailedExecutionResult;
+-
+-    const [completeError] = await tryCatch(this.complete({ completion }));
+-
+-    if (completeError) {
+-      this.sendDebugLog("failed to complete run", { error: completeError.message });
+-    }
+-  }
+-
+-  private async executeRun({
+-    run,
+-    snapshot,
+-    envVars,
+-    execution,
+-    metrics,
+-    isWarmStart,
+-    isImmediateRetry,
+-  }: WorkloadRunAttemptStartResponseBody & {
+-    metrics: TaskRunExecutionMetrics;
+-    isWarmStart?: boolean;
+-    isImmediateRetry?: boolean;
+-  }) {
+-    if (isImmediateRetry) {
+-      await this.taskRunProcessProvider.handleImmediateRetry();
+-    }
+-
+-    const taskRunEnv = this.currentTaskRunEnv ?? envVars;
+-
+-    if (!this.taskRunProcess || this.taskRunProcess.isBeingKilled) {
+-      this.sendDebugLog("getting new task run process", { runId: execution.run.id });
+-      this.taskRunProcess = await this.taskRunProcessProvider.getProcess({
+-        taskRunEnv: { ...taskRunEnv, TRIGGER_PROJECT_REF: execution.project.ref },
+-        isWarmStart,
+-      });
+-    } else {
+-      this.sendDebugLog("using prepared task run process", { runId: execution.run.id });
+-    }
+-
+-    this.attachTaskRunProcessHandlers(this.taskRunProcess);
+-
+-    this.sendDebugLog("executing task run process", { runId: execution.run.id });
+-
+-    const abortHandler = async () => {
+-      this.sendDebugLog("execution aborted during task run, cleaning up process", {
+-        runId: execution.run.id,
+-      });
+-
+-      if (this.taskRunProcess) {
+-        await this.taskRunProcessProvider.handleProcessAbort(this.taskRunProcess);
+-      }
+-    };
+-
+-    // Set up an abort handler that will cleanup the task run process
+-    this.executionAbortController.signal.addEventListener("abort", abortHandler);
+-
+-    const completion = await this.taskRunProcess.execute(
+-      {
+-        payload: {
+-          execution,
+-          traceContext: execution.run.traceContext ?? {},
+-          metrics,
+-        },
+-        messageId: run.friendlyId,
+-        env: envVars,
+-      },
+-      isWarmStart
+-    );
+-
+-    this.executionAbortController.signal.removeEventListener("abort", abortHandler);
+-
+-    // If we get here, the task completed normally
+-    this.sendDebugLog("completed run attempt", { attemptSuccess: completion.ok });
+-
+-    // Return the process to the provider - this handles all cleanup logic
+-    const [returnError] = await tryCatch(
+-      this.taskRunProcessProvider.returnProcess(this.taskRunProcess)
+-    );
+-
+-    if (returnError) {
+-      this.sendDebugLog("failed to return task run process, submitting completion anyway", {
+-        error: returnError.message,
+-      });
+-    }
+-
+-    const [completionError] = await tryCatch(this.complete({ completion }));
+-
+-    if (completionError) {
+-      this.sendDebugLog("failed to complete run", { error: completionError.message });
+-    }
+-  }
+-
+-  private async complete({ completion }: { completion: TaskRunExecutionResult }): Promise<void> {
+-    if (!this.runFriendlyId || !this.snapshotManager) {
+-      throw new Error("cannot complete run: missing run or snapshot manager");
+-    }
+-
+-    this.isCompletingRun = true;
+-
+-    const completionResult = await this.httpClient.completeRunAttempt(
+-      this.runFriendlyId,
+-      this.snapshotManager.snapshotId,
+-      { completion }
+-    );
+-
+-    if (!completionResult.success) {
+-      throw new Error(`failed to submit completion: ${completionResult.error}`);
+-    }
+-
+-    await this.handleCompletionResult({
+-      completion,
+-      result: completionResult.data.result,
+-    });
+-  }
+-
+-  private async handleCompletionResult({
+-    completion,
+-    result,
+-  }: {
+-    completion: TaskRunExecutionResult;
+-    result: CompleteRunAttemptResult;
+-  }) {
+-    this.sendDebugLog(`completion result: ${result.attemptStatus}`, {
+-      attemptSuccess: completion.ok,
+-      attemptStatus: result.attemptStatus,
+-      snapshotId: result.snapshot.friendlyId,
+-      runId: result.run.friendlyId,
+-    });
+-
+-    const snapshotStatus = this.convertAttemptStatusToSnapshotStatus(result.attemptStatus);
+-
+-    // Update our snapshot ID to match the completion result to ensure any subsequent API calls use the correct snapshot
+-    this.updateSnapshotAfterCompletion(result.snapshot.friendlyId, snapshotStatus);
+-
+-    const { attemptStatus } = result;
+-
+-    switch (attemptStatus) {
+-      case "RUN_FINISHED":
+-      case "RUN_PENDING_CANCEL":
+-      case "RETRY_QUEUED": {
+-        return;
+-      }
+-      case "RETRY_IMMEDIATELY": {
+-        if (attemptStatus !== "RETRY_IMMEDIATELY") {
+-          return;
+-        }
+-
+-        if (completion.ok) {
+-          throw new Error("Should retry but completion OK.");
+-        }
+-
+-        if (!completion.retry) {
+-          throw new Error("Should retry but missing retry params.");
+-        }
+-
+-        await this.retryImmediately({ retryOpts: completion.retry });
+-        return;
+-      }
+-      default: {
+-        assertExhaustive(attemptStatus);
+-      }
+-    }
+-  }
+-
+-  private updateSnapshotAfterCompletion(snapshotId: string, status: TaskRunExecutionStatus) {
+-    this.snapshotManager?.updateSnapshot(snapshotId, status);
+-    this.snapshotPoller?.updateSnapshotId(snapshotId);
+-  }
+-
+-  private convertAttemptStatusToSnapshotStatus(
+-    attemptStatus: CompleteRunAttemptResult["attemptStatus"]
+-  ): TaskRunExecutionStatus {
+-    switch (attemptStatus) {
+-      case "RUN_FINISHED":
+-        return "FINISHED";
+-      case "RUN_PENDING_CANCEL":
+-        return "PENDING_CANCEL";
+-      case "RETRY_QUEUED":
+-        return "QUEUED";
+-      case "RETRY_IMMEDIATELY":
+-        return "EXECUTING";
+-      default:
+-        assertExhaustive(attemptStatus);
+-    }
+-  }
+-
+-  private measureExecutionMetrics({
+-    attemptCreatedAt,
+-    dequeuedAt,
+-    podScheduledAt,
+-  }: {
+-    attemptCreatedAt: number;
+-    dequeuedAt?: number;
+-    podScheduledAt?: number;
+-  }): TaskRunExecutionMetrics {
+-    const metrics: TaskRunExecutionMetrics = [
+-      {
+-        name: "start",
+-        event: "create_attempt",
+-        timestamp: attemptCreatedAt,
+-        duration: Date.now() - attemptCreatedAt,
+-      },
+-    ];
+-
+-    if (dequeuedAt) {
+-      metrics.push({
+-        name: "start",
+-        event: "dequeue",
+-        timestamp: dequeuedAt,
+-        duration: 0,
+-      });
+-    }
+-
+-    if (podScheduledAt) {
+-      metrics.push({
+-        name: "start",
+-        event: "pod_scheduled",
+-        timestamp: podScheduledAt,
+-        duration: 0,
+-      });
+-    }
+-
+-    return metrics;
+-  }
+-
+-  private async retryImmediately({ retryOpts }: { retryOpts: TaskRunExecutionRetry }) {
+-    this.sendDebugLog("retrying run immediately", {
+-      timestamp: retryOpts.timestamp,
+-      delay: retryOpts.delay,
+-    });
+-
+-    const delay = retryOpts.timestamp - Date.now();
+-
+-    if (delay > 0) {
+-      // Wait for retry delay to pass
+-      await sleep(delay);
+-    }
+-
+-    // Start and execute next attempt
+-    const [startError, start] = await tryCatch(
+-      this.enableIgnoreSnapshotChanges(() => this.startAttempt({ isWarmStart: true }))
+-    );
+-
+-    if (startError) {
+-      this.sendDebugLog("failed to start attempt for retry", { error: startError.message });
+-
+-      this.shutdownExecution("retryImmediately: failed to start attempt");
+-      return;
+-    }
+-
+-    const [executeError] = await tryCatch(
+-      this.executeRunWrapper({ ...start, isWarmStart: true, isImmediateRetry: true })
+-    );
+-
+-    if (executeError) {
+-      this.sendDebugLog("failed to execute run for retry", { error: executeError.message });
+-
+-      this.shutdownExecution("retryImmediately: failed to execute run");
+-      return;
+-    }
+-  }
+-
+-  private async enableIgnoreSnapshotChanges<T>(fn: () => Promise<T>): Promise<T> {
+-    this.ignoreSnapshotChanges = true;
+-    try {
+-      return await fn();
+-    } finally {
+-      this.ignoreSnapshotChanges = false;
+-    }
+-  }
+-
+-  /**
+-   * Restores a suspended execution from PENDING_EXECUTING
+-   */
+-  private async restore(): Promise<void> {
+-    this.sendDebugLog("restoring execution");
+-
+-    if (!this.runFriendlyId || !this.snapshotManager) {
+-      throw new Error("Cannot restore: missing run or snapshot manager");
+-    }
+-
+-    // Short delay to give websocket time to reconnect
+-    await sleep(100);
+-
+-    // Process any env overrides
+-    await this.processEnvOverrides("restore");
+-
+-    const continuationResult = await this.httpClient.continueRunExecution(
+-      this.runFriendlyId,
+-      this.snapshotManager.snapshotId
+-    );
+-
+-    if (!continuationResult.success) {
+-      // Check if we need to refresh metadata due to connection error
+-      if (continuationResult.isConnectionError) {
+-        this.sendDebugLog("restore: connection error detected, refreshing metadata");
+-        await this.processEnvOverrides("restore connection error");
+-
+-        // Retry the continuation after refreshing metadata
+-        const retryResult = await this.httpClient.continueRunExecution(
+-          this.runFriendlyId,
+-          this.snapshotManager.snapshotId
+-        );
+-
+-        if (!retryResult.success) {
+-          throw new Error(retryResult.error);
+-        }
+-      } else {
+-        throw new Error(continuationResult.error);
+-      }
+-    }
+-
+-    // Track restore count
+-    this.restoreCount++;
+-  }
+-
+-  private async exitTaskRunProcessWithoutFailingRun({
+-    flush,
+-    reason,
+-  }: {
+-    flush: boolean;
+-    reason: string;
+-  }) {
+-    await this.taskRunProcessProvider.suspendProcess(flush, this.taskRunProcess);
+-
+-    // No services should be left running after this line - let's make sure of it
+-    this.shutdownExecution(`exitTaskRunProcessWithoutFailingRun: ${reason}`);
+-  }
+-
+-  /**
+-   * Processes env overrides from the metadata service. Generally called when we're resuming from a suspended state.
+-   */
+-  public async processEnvOverrides(
+-    reason?: string,
+-    shouldPollForSnapshotChanges?: boolean
+-  ): Promise<{
+-    overrides: Metadata;
+-    runnerIdChanged?: boolean;
+-    supervisorChanged?: boolean;
+-  } | null> {
+-    if (!this.metadataClient) {
+-      return null;
+-    }
+-
+-    const previousRunnerId = this.env.TRIGGER_RUNNER_ID;
+-    const previousSupervisorUrl = this.env.TRIGGER_SUPERVISOR_API_URL;
+-
+-    const [error, overrides] = await this.metadataClient.getEnvOverrides();
+-
+-    if (error) {
+-      this.sendDebugLog("[override] failed to fetch", {
+-        reason,
+-        error: error.message,
+-      });
+-      return null;
+-    }
+-
+-    if (overrides.TRIGGER_RUN_ID && overrides.TRIGGER_RUN_ID !== this.runFriendlyId) {
+-      this.sendDebugLog("[override] run ID mismatch, ignoring overrides", {
+-        reason,
+-        currentRunId: this.runFriendlyId,
+-        incomingRunId: overrides.TRIGGER_RUN_ID,
+-      });
+-      return null;
+-    }
+-
+-    this.sendDebugLog(`[override] processing: ${reason}`, {
+-      overrides,
+-      currentEnv: this.env.raw,
+-    });
+-
+-    // Override the env with the new values
+-    this.env.override(overrides);
+-
+-    // Check if runner ID changed
+-    const newRunnerId = this.env.TRIGGER_RUNNER_ID;
+-    const runnerIdChanged = previousRunnerId !== newRunnerId;
+-
+-    // Check if supervisor URL changed
+-    const newSupervisorUrl = this.env.TRIGGER_SUPERVISOR_API_URL;
+-    const supervisorChanged = previousSupervisorUrl !== newSupervisorUrl;
+-
+-    // Update services with new values
+-    if (overrides.TRIGGER_SNAPSHOT_POLL_INTERVAL_SECONDS) {
+-      this.snapshotPoller?.updateInterval(this.env.TRIGGER_SNAPSHOT_POLL_INTERVAL_SECONDS * 1000);
+-    }
+-    if (
+-      overrides.TRIGGER_SUPERVISOR_API_PROTOCOL ||
+-      overrides.TRIGGER_SUPERVISOR_API_DOMAIN ||
+-      overrides.TRIGGER_SUPERVISOR_API_PORT
+-    ) {
+-      this.httpClient.updateApiUrl(this.env.TRIGGER_SUPERVISOR_API_URL);
+-    }
+-    if (overrides.TRIGGER_RUNNER_ID) {
+-      this.httpClient.updateRunnerId(this.env.TRIGGER_RUNNER_ID);
+-    }
+-
+-    // Poll for snapshot changes immediately
+-    if (shouldPollForSnapshotChanges) {
+-      this.sendDebugLog("[override] polling for snapshot changes", { reason });
+-      this.fetchAndProcessSnapshotChanges("restore").catch(() => {});
+-    }
+-
+-    return {
+-      overrides,
+-      runnerIdChanged,
+-      supervisorChanged,
+-    };
+-  }
+-
+-  private async onHeartbeat() {
+-    if (!this.runFriendlyId) {
+-      this.sendDebugLog("heartbeat: missing run ID");
+-      return;
+-    }
+-
+-    if (!this.snapshotManager) {
+-      this.sendDebugLog("heartbeat: missing snapshot manager");
+-      return;
+-    }
+-
+-    this.sendDebugLog("heartbeat");
+-
+-    const response = await this.httpClient.heartbeatRun(
+-      this.runFriendlyId,
+-      this.snapshotManager.snapshotId
+-    );
+-
+-    if (!response.success) {
+-      this.sendDebugLog("heartbeat: failed", { error: response.error });
+-
+-      // Check if we need to refresh metadata due to connection error
+-      if (response.isConnectionError) {
+-        this.sendDebugLog("heartbeat: connection error detected, refreshing metadata");
+-        await this.processEnvOverrides("heartbeat connection error");
+-      }
+-    }
+-
+-    this.lastHeartbeat = new Date();
+-  }
+-
+-  private sendDebugLog(
+-    message: string,
+-    properties?: SendDebugLogOptions["properties"],
+-    runIdOverride?: string
+-  ) {
+-    this.logger.sendDebugLog({
+-      runId: runIdOverride ?? this.runFriendlyId,
+-      message: `[execution] ${message}`,
+-      properties: {
+-        ...properties,
+-        runId: this.runFriendlyId,
+-        snapshotId: this.currentSnapshotFriendlyId,
+-        executionId: this.id,
+-        executionRestoreCount: this.restoreCount,
+-        lastHeartbeat: this.lastHeartbeat?.toISOString(),
+-      },
+-    });
+-  }
+-
+-  private sendRuntimeDebugLog(
+-    message: string,
+-    properties?: SendDebugLogOptions["properties"],
+-    runIdOverride?: string
+-  ) {
+-    this.logger.sendDebugLog({
+-      runId: runIdOverride ?? this.runFriendlyId,
+-      message: `[runtime] ${message}`,
+-      print: false,
+-      properties: {
+-        ...properties,
+-        runId: this.runFriendlyId,
+-        snapshotId: this.currentSnapshotFriendlyId,
+-        executionId: this.id,
+-        executionRestoreCount: this.restoreCount,
+-        lastHeartbeat: this.lastHeartbeat?.toISOString(),
+-      },
+-    });
+-  }
+-
+-  private set suspendable(suspendable: boolean) {
+-    this.snapshotManager?.setSuspendable(suspendable).catch((error) => {
+-      this.sendDebugLog("failed to set suspendable", { error: error.message });
+-    });
+-  }
+-
+-  // Ensure we can only set this once
+-  private set runFriendlyId(id: string) {
+-    if (this._runFriendlyId) {
+-      throw new Error("Run ID already set");
+-    }
+-
+-    this._runFriendlyId = id;
+-  }
+-
+-  public get runFriendlyId(): string | undefined {
+-    return this._runFriendlyId;
+-  }
+-
+-  public get currentSnapshotFriendlyId(): string | undefined {
+-    return this.snapshotManager?.snapshotId;
+-  }
+-
+-  public get taskRunEnv(): Record<string, string> | undefined {
+-    return this.currentTaskRunEnv;
+-  }
+-
+-  public get metrics() {
+-    return {
+-      execution: {
+-        restoreCount: this.restoreCount,
+-        lastHeartbeat: this.lastHeartbeat,
+-      },
+-      poller: this.snapshotPoller?.metrics,
+-      notifier: this.notifier?.metrics,
+-    };
+-  }
+-
+-  get isAborted() {
+-    return this.executionAbortController.signal.aborted;
+-  }
+-
+-  private abortExecution() {
+-    if (this.isAborted) {
+-      this.sendDebugLog("execution already aborted");
+-      return;
+-    }
+-
+-    this.executionAbortController.abort();
+-    this.shutdownExecution("abortExecution");
+-  }
+-
+-  private shutdownExecution(reason: string) {
+-    if (this.isShuttingDown) {
+-      this.sendDebugLog(`[shutdown] ${reason} (already shutting down)`, {
+-        firstShutdownReason: this.shutdownReason,
+-      });
+-      return;
+-    }
+-
+-    this.sendDebugLog(`[shutdown] ${reason}`);
+-
+-    this.isShuttingDown = true;
+-    this.shutdownReason = reason;
+-
+-    this.snapshotPoller?.stop();
+-    this.snapshotManager?.stop();
+-    this.notifier?.stop();
+-
+-    this.taskRunProcess?.unsafeDetachEvtHandlers();
+-  }
+-
+-  private async handleSuspendable(suspendableSnapshot: SnapshotState) {
+-    this.sendDebugLog("handleSuspendable", { suspendableSnapshot });
+-
+-    if (!this.snapshotManager) {
+-      this.sendDebugLog("handleSuspendable: missing snapshot manager", { suspendableSnapshot });
+-      return;
+-    }
+-
+-    // Ensure this is the current snapshot
+-    if (suspendableSnapshot.id !== this.currentSnapshotFriendlyId) {
+-      this.sendDebugLog("snapshot changed before cleanup, abort", {
+-        suspendableSnapshot,
+-        currentSnapshotId: this.currentSnapshotFriendlyId,
+-      });
+-      this.abortExecution();
+-      return;
+-    }
+-
+-    // First cleanup the task run process
+-    const [error] = await tryCatch(this.taskRunProcess?.cleanup(false));
+-
+-    if (error) {
+-      this.sendDebugLog("failed to cleanup task run process, carrying on", {
+-        suspendableSnapshot,
+-        error: error.message,
+-      });
+-    }
+-
+-    // Double check snapshot hasn't changed after cleanup
+-    if (suspendableSnapshot.id !== this.currentSnapshotFriendlyId) {
+-      this.sendDebugLog("snapshot changed after cleanup, abort", {
+-        suspendableSnapshot,
+-        currentSnapshotId: this.currentSnapshotFriendlyId,
+-      });
+-      this.abortExecution();
+-      return;
+-    }
+-
+-    if (!this.runFriendlyId) {
+-      this.sendDebugLog("missing run ID for suspension, abort", { suspendableSnapshot });
+-      this.abortExecution();
+-      return;
+-    }
+-
+-    // Call the suspend API with the current snapshot ID
+-    const suspendResult = await this.httpClient.suspendRun(
+-      this.runFriendlyId,
+-      suspendableSnapshot.id
+-    );
+-
+-    if (!suspendResult.success) {
+-      this.sendDebugLog("suspension request failed, staying alive 🎶", {
+-        suspendableSnapshot,
+-        error: suspendResult.error,
+-      });
+-
+-      // This is fine, we'll wait for the next status change
+-      return;
+-    }
+-
+-    if (!suspendResult.data.ok) {
+-      this.sendDebugLog("suspension request returned error, staying alive 🎶", {
+-        suspendableSnapshot,
+-        error: suspendResult.data.error,
+-      });
+-
+-      // This is fine, we'll wait for the next status change
+-      return;
+-    }
+-
+-    this.sendDebugLog("suspending, any day now 🚬", { suspendableSnapshot });
+-  }
+-
+-  /**
+-   * Fetches the latest execution data and enqueues snapshot changes. Used by both poller and notification handlers.
+-   * @param source string - where this call originated (e.g. 'poller', 'notification')
+-   */
+-  public async fetchAndProcessSnapshotChanges(source: string): Promise<void> {
+-    if (!this.runFriendlyId) {
+-      this.sendDebugLog(`fetchAndProcessSnapshotChanges: missing runFriendlyId`, { source });
+-      return;
+-    }
+-
+-    // Use the last processed snapshot as the since parameter
+-    const sinceSnapshotId = this.currentSnapshotFriendlyId;
+-
+-    if (!sinceSnapshotId) {
+-      this.sendDebugLog(`fetchAndProcessSnapshotChanges: missing sinceSnapshotId`, { source });
+-      return;
+-    }
+-
+-    const response = await this.httpClient.getSnapshotsSince(this.runFriendlyId, sinceSnapshotId);
+-
+-    if (!response.success) {
+-      this.sendDebugLog(`fetchAndProcessSnapshotChanges: failed to get snapshots since`, {
+-        source,
+-        error: response.error,
+-      });
+-
+-      if (response.isConnectionError) {
+-        // Log this separately to make it more visible
+-        this.sendDebugLog(
+-          "fetchAndProcessSnapshotChanges: connection error detected, refreshing metadata"
+-        );
+-      }
+-
+-      // Always trigger metadata refresh on snapshot fetch errors
+-      await this.processEnvOverrides("snapshots since error");
+-      return;
+-    }
+-
+-    const { snapshots } = response.data;
+-
+-    if (!snapshots.length) {
+-      return;
+-    }
+-
+-    const [error] = await tryCatch(this.enqueueSnapshotChangesAndWait(snapshots));
+-
+-    if (error) {
+-      this.sendDebugLog(
+-        `fetchAndProcessSnapshotChanges: failed to enqueue and process snapshot change`,
+-        {
+-          source,
+-          error: error.message,
+-        }
+-      );
+-      return;
+-    }
+-  }
+-}
++    }
+\ No newline at end of file
+diff --git a/packages/cli-v3/src/entryPoints/managed/snapshot.test.ts b/packages/cli-v3/src/entryPoints/managed/snapshot.test.ts
+index a3dbab3..5c07749 100644
+--- a/packages/cli-v3/src/entryPoints/managed/snapshot.test.ts
++++ b/packages/cli-v3/src/entryPoints/managed/snapshot.test.ts
+@@ -391,404 +391,4 @@ describe("SnapshotManager", () => {
+         executionTimes.push({ start, end, type: `snapshot:${data.snapshot.friendlyId}` });
+         currentlyExecuting = false;
+       },
+-      onSuspendable: async (state) => {
+-        if (currentlyExecuting) {
+-          throw new Error("Handler executed while another handler was running");
+-        }
+-        currentlyExecuting = true;
+-        handlerExecutionCount++;
+-
+-        const start = Date.now();
+-        executionOrder.push(`suspendable:${state.id}`);
+-        await setTimeout(Math.random() * 20); // Random delay
+-        const end = Date.now();
+-
+-        executionTimes.push({ start, end, type: `suspendable:${state.id}` });
+-        currentlyExecuting = false;
+-      },
+-    });
+-
+-    // Test empty snapshot IDs
+-    await manager.handleSnapshotChanges([createRunExecutionData({ snapshotId: "" })]);
+-    expect(executionOrder).toEqual([]);
+-
+-    // Create a very long queue of mixed changes
+-    const promises: Promise<void>[] = [];
+-
+-    // Add 50 mixed changes
+-    for (let i = 1; i <= 50; i++) {
+-      if (i % 2 === 0) {
+-        promises.push(
+-          manager.handleSnapshotChanges([createRunExecutionData({ snapshotId: `snapshot-${i}` })])
+-        );
+-      } else {
+-        promises.push(manager.setSuspendable(i % 4 === 1));
+-      }
+-    }
+-
+-    // Add rapid toggling of suspendable state
+-    for (let i = 0; i < 20; i++) {
+-      promises.push(manager.setSuspendable(i % 2 === 0));
+-    }
+-
+-    // Add overlapping snapshot changes
+-    const snapshotIds = ["A", "B", "C", "D", "E"];
+-    for (const id of snapshotIds) {
+-      for (let i = 0; i < 5; i++) {
+-        promises.push(
+-          manager.handleSnapshotChanges([
+-            createRunExecutionData({ snapshotId: `snapshot-${id}-${i}` }),
+-          ])
+-        );
+-      }
+-    }
+-
+-    await Promise.all(promises);
+-
+-    // Verify handler execution exclusivity
+-    for (let i = 1; i < executionTimes.length; i++) {
+-      const previous = executionTimes[i - 1]!;
+-      const current = executionTimes[i]!;
+-      expect(current.start).toBeGreaterThanOrEqual(previous.end);
+-    }
+-
+-    // Verify all handlers executed in sequence
+-    expect(currentlyExecuting).toBe(false);
+-
+-    // Verify suspendable state is correctly maintained
+-    const finalSuspendableState = manager.suspendable;
+-    const lastSuspendableChange = executionOrder
+-      .filter((entry) => entry.startsWith("suspendable:"))
+-      .pop();
+-
+-    // The last recorded suspendable change should match the final state
+-    if (finalSuspendableState) {
+-      expect(lastSuspendableChange).toBeDefined();
+-    }
+-
+-    // Verify snapshot ordering
+-    const snapshotExecutions = executionOrder
+-      .filter((entry) => entry.startsWith("snapshot:"))
+-      .map((entry) => entry.split(":")[1]);
+-
+-    // Each snapshot should be greater than the previous one
+-    for (let i = 1; i < snapshotExecutions.length; i++) {
+-      expect(snapshotExecutions[i]! > snapshotExecutions[i - 1]!).toBe(true);
+-    }
+-  });
+-
+-  it("should handle queue processing and remaining edge cases", async () => {
+-    const executionOrder: string[] = [];
+-    let processingCount = 0;
+-
+-    const manager = new SnapshotManager({
+-      runnerId: "test-runner-1",
+-      runFriendlyId: "test-run-1",
+-      initialSnapshotId: "snapshot-1",
+-      initialStatus: "PENDING_EXECUTING",
+-      logger: mockLogger,
+-      onSnapshotChange: async (data) => {
+-        processingCount++;
+-        executionOrder.push(`snapshot:${data.snapshot.friendlyId}`);
+-        await setTimeout(10);
+-        processingCount--;
+-      },
+-      onSuspendable: async (state) => {
+-        processingCount++;
+-        executionOrder.push(`suspendable:${state.id}`);
+-        await setTimeout(10);
+-        processingCount--;
+-      },
+-    });
+-
+-    // Test parallel queue processing prevention
+-    const parallelPromises = Array.from({ length: 5 }, (_, i) =>
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: `parallel-${i}`,
+-          executionStatus: "EXECUTING",
+-        }),
+-      ])
+-    );
+-
+-    // Add some suspendable changes in the middle
+-    parallelPromises.push(manager.setSuspendable(true));
+-    parallelPromises.push(manager.setSuspendable(false));
+-
+-    // Add more snapshot changes
+-    parallelPromises.push(
+-      ...Array.from({ length: 5 }, (_, i) =>
+-        manager.handleSnapshotChanges([
+-          createRunExecutionData({
+-            snapshotId: `parallel-${i + 5}`,
+-            executionStatus: "EXECUTING",
+-          }),
+-        ])
+-      )
+-    );
+-
+-    await Promise.all(parallelPromises);
+-
+-    // Verify processingCount never exceeded 1
+-    expect(processingCount).toBe(0);
+-
+-    // Test edge case: snapshot ID comparison with special characters
+-    const specialCharPromises = [
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: "snapshot-1!",
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: "snapshot-1@",
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: "snapshot-1#",
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-    ];
+-
+-    await Promise.all(specialCharPromises);
+-
+-    // Test edge case: very long snapshot IDs
+-    const longIdPromises = [
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: "a".repeat(1000),
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-      manager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          snapshotId: "b".repeat(1000),
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-    ];
+-
+-    await Promise.all(longIdPromises);
+-
+-    // Test edge case: rapid queue changes during processing
+-    let isProcessing = false;
+-    const rapidChangeManager = new SnapshotManager({
+-      runnerId: "test-runner-1",
+-      runFriendlyId: "test-run-2",
+-      initialSnapshotId: "snapshot-1",
+-      initialStatus: "PENDING_EXECUTING",
+-      logger: mockLogger,
+-      onSnapshotChange: async (data) => {
+-        if (isProcessing) {
+-          throw new Error("Parallel processing detected");
+-        }
+-        isProcessing = true;
+-        await setTimeout(50); // Longer delay to test queue changes during processing
+-        executionOrder.push(`rapid:${data.snapshot.friendlyId}`);
+-        isProcessing = false;
+-      },
+-      onSuspendable: async () => {},
+-    });
+-
+-    // Start processing a snapshot
+-    const initialPromise = rapidChangeManager.handleSnapshotChanges([
+-      createRunExecutionData({
+-        runId: "test-run-2",
+-        snapshotId: "snapshot-2",
+-        executionStatus: "EXECUTING",
+-      }),
+-    ]);
+-
+-    // Queue more changes while the first one is processing
+-    await setTimeout(10);
+-    const queuePromises = [
+-      rapidChangeManager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          runId: "test-run-2",
+-          snapshotId: "snapshot-3",
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-      rapidChangeManager.handleSnapshotChanges([
+-        createRunExecutionData({
+-          runId: "test-run-2",
+-          snapshotId: "snapshot-4",
+-          executionStatus: "EXECUTING",
+-        }),
+-      ]),
+-    ];
+-
+-    await Promise.all([initialPromise, ...queuePromises]);
+-
+-    // Verify the rapid changes were processed in order
+-    const rapidChanges = executionOrder.filter((entry) => entry.startsWith("rapid:"));
+-    expect(rapidChanges).toEqual(["rapid:snapshot-2", "rapid:snapshot-3", "rapid:snapshot-4"]);
+-  });
+-
+-  it("should detect restore and not deprecate restored runner", async () => {
+-    // Mock MetadataClient
+-    let runnerId = "test-runner-1";
+-    const mockMetadataClient = {
+-      getEnvOverrides: vi.fn().mockImplementation(() => {
+-        return Promise.resolve([null, { TRIGGER_RUNNER_ID: runnerId }]);
+-      }),
+-    };
+-
+-    const onSnapshotChange = vi.fn();
+-    const manager = new SnapshotManager({
+-      runnerId: "test-runner-1",
+-      runFriendlyId: "test-run-1",
+-      initialSnapshotId: "snapshot-1",
+-      initialStatus: "PENDING_EXECUTING",
+-      logger: mockLogger,
+-      metadataClient: mockMetadataClient as any,
+-      onSnapshotChange,
+-      onSuspendable: async () => {},
+-    });
+-
+-    // Simulate some basic snapshot changes
+-    await manager.handleSnapshotChanges([
+-      createRunExecutionData({ snapshotId: "snapshot-2", executionStatus: "EXECUTING" }),
+-      createRunExecutionData({
+-        snapshotId: "snapshot-3",
+-        executionStatus: "EXECUTING_WITH_WAITPOINTS",
+-      }),
+-    ]);
+-
+-    // Should call onSnapshotChange with deprecated = false
+-    expect(onSnapshotChange).toHaveBeenCalledWith(
+-      expect.objectContaining({ snapshot: expect.objectContaining({ friendlyId: "snapshot-3" }) }),
+-      false
+-    );
+-
+-    // Reset the mock
+-    onSnapshotChange.mockClear();
+-
+-    // Simulate a series of snapshot changes with deprecation markers and a restored runner
+-    // (standard checkpoint / restore flow)
+-    runnerId = "test-runner-2";
+-    await manager.handleSnapshotChanges([
+-      createRunExecutionData({ snapshotId: "snapshot-4", executionStatus: "SUSPENDED" }),
+-      createRunExecutionData({ snapshotId: "snapshot-5", executionStatus: "QUEUED" }),
+-      createRunExecutionData({ snapshotId: "snapshot-6", executionStatus: "EXECUTING" }),
+-    ]);
+-
+-    // Should call onSnapshotChange with deprecated = false
+-    expect(onSnapshotChange).toHaveBeenCalledWith(
+-      expect.objectContaining({ snapshot: expect.objectContaining({ friendlyId: "snapshot-6" }) }),
+-      false
+-    );
+-
+-    // Reset the mock
+-    onSnapshotChange.mockClear();
+-
+-    // Simulate a new snapshot with a deprecation marker in previous snapshots, but no restore
+-    await manager.handleSnapshotChanges([
+-      createRunExecutionData({ snapshotId: "snapshot-7", executionStatus: "QUEUED" }),
+-      createRunExecutionData({ snapshotId: "snapshot-8", executionStatus: "EXECUTING" }),
+-    ]);
+-    // Should call onSnapshotChange with deprecated = true
+-    expect(onSnapshotChange).toHaveBeenCalledWith(
+-      expect.objectContaining({ snapshot: expect.objectContaining({ friendlyId: "snapshot-8" }) }),
+-      true
+-    );
+-  });
+-
+-  it("should handle deprecated snapshot race condition - avoid false positives from stale polls", async () => {
+-    const onSnapshotChange = vi.fn();
+-
+-    // Mock MetadataClient to simulate runner ID change (restore detected) on first call
+-    let isFirstCall = true;
+-    const mockMetadataClient = {
+-      getEnvOverrides: vi.fn().mockImplementation(() => {
+-        if (isFirstCall) {
+-          isFirstCall = false;
+-          return Promise.resolve([null, { TRIGGER_RUNNER_ID: "test-runner-2" }]); // Different runner ID = restore
+-        }
+-        return Promise.resolve([null, { TRIGGER_RUNNER_ID: "test-runner-2" }]); // Same runner ID afterward
+-      }),
+-    };
+-
+-    const manager = new SnapshotManager({
+-      runnerId: "test-runner-1",
+-      runFriendlyId: "test-run-1",
+-      initialSnapshotId: "snapshot-1",
+-      initialStatus: "EXECUTING_WITH_WAITPOINTS",
+-      logger: mockLogger,
+-      metadataClient: mockMetadataClient as any,
+-      onSnapshotChange,
+-      onSuspendable: mockSuspendableHandler,
+-    });
+-
+-    // First update: Process restore transition with deprecated statuses (normal case)
+-    // This simulates: EXECUTING_WITH_WAITPOINTS -> [SUSPENDED, QUEUED] -> PENDING_EXECUTING
+-    await manager.handleSnapshotChanges([
+-      createRunExecutionData({ snapshotId: "snapshot-suspended", executionStatus: "SUSPENDED" }),
+-      createRunExecutionData({ snapshotId: "snapshot-queued", executionStatus: "QUEUED" }),
+-      createRunExecutionData({ snapshotId: "snapshot-2", executionStatus: "PENDING_EXECUTING" }),
+-    ]);
+-
+-    // First call should be deprecated=false (restore detected)
+-    expect(onSnapshotChange).toHaveBeenCalledWith(
+-      expect.objectContaining({ snapshot: expect.objectContaining({ friendlyId: "snapshot-2" }) }),
+-      false
+-    );
+-
+-    onSnapshotChange.mockClear();
+-
+-    // Second update: Should only get new snapshot (race condition case)
+-    // This simulates a stale poll that returns: getSnapshotsSince(snapshot-1) -> [SUSPENDED, QUEUED, snapshot-2, snapshot-3]
+-    // The SUSPENDED/QUEUED should be ignored as already seen
+-    await manager.handleSnapshotChanges([
+-      createRunExecutionData({ snapshotId: "snapshot-suspended", executionStatus: "SUSPENDED" }), // Already seen
+-      createRunExecutionData({ snapshotId: "snapshot-queued", executionStatus: "QUEUED" }), // Already seen
+-      createRunExecutionData({ snapshotId: "snapshot-2", executionStatus: "PENDING_EXECUTING" }), // Already processed
+-      createRunExecutionData({ snapshotId: "snapshot-3", executionStatus: "EXECUTING" }), // New
+-    ]);
+-
+-    // Should call onSnapshotChange with deprecated = false (no new deprecated snapshots)
+-    expect(onSnapshotChange).toHaveBeenCalledWith(
+-      expect.objectContaining({ snapshot: expect.objectContaining({ friendlyId: "snapshot-3" }) }),
+-      false
+-    );
+-  });
+-});
+-
+-// Helper to generate RunExecutionData with sensible defaults
+-function createRunExecutionData(
+-  overrides: {
+-    runId?: string;
+-    runFriendlyId?: string;
+-    snapshotId?: string;
+-    snapshotFriendlyId?: string;
+-    executionStatus?: TaskRunExecutionStatus;
+-    description?: string;
+-  } = {}
+-): RunExecutionData {
+-  const runId = overrides.runId ?? "test-run-1";
+-  const runFriendlyId = overrides.runFriendlyId ?? runId;
+-  const snapshotId = overrides.snapshotId ?? "snapshot-1";
+-  const snapshotFriendlyId = overrides.snapshotFriendlyId ?? snapshotId;
+-
+-  return {
+-    version: "1" as const,
+-    run: {
+-      id: runId,
+-      friendlyId: runFriendlyId,
+-      status: "EXECUTING",
+-      attemptNumber: 1,
+-    },
+-    snapshot: {
+-      id: snapshotId,
+-      friendlyId: snapshotFriendlyId,
+-      executionStatus: overrides.executionStatus ?? "EXECUTING",
+-      description: overrides.description ?? "Test snapshot",
+-      createdAt: new Date(),
+-    },
+-    completedWaitpoints: [],
+-  };
+-}
++      on
+\ No newline at end of file
+diff --git a/packages/cli-v3/src/entryPoints/managed/snapshot.ts b/packages/cli-v3/src/entryPoints/managed/snapshot.ts
+index 9703ea8..47a5185 100644
+--- a/packages/cli-v3/src/entryPoints/managed/snapshot.ts
++++ b/packages/cli-v3/src/entryPoints/managed/snapshot.ts
+@@ -49,10 +49,6 @@ export class SnapshotManager {
+   private changeQueue: QueuedChangeItem[] = [];
+   private isProcessingQueue = false;
+ 
+-  // Track seen deprecated snapshots to prevent false positives
+-  private seenDeprecatedSnapshotIds: string[] = [];
+-  private readonly maxSeenDeprecatedSnapshotIds = 50;
+-
+   constructor(opts: SnapshotManagerOptions) {
+     this.runFriendlyId = opts.runFriendlyId;
+     this.runnerId = opts.runnerId;
+@@ -288,13 +284,9 @@ export class SnapshotManager {
+ 
+         // Check if any previous snapshot is QUEUED or SUSPENDED
+         const deprecatedStatus: TaskRunExecutionStatus[] = ["QUEUED", "SUSPENDED"];
+-        const deprecatedSnapshots = previousSnapshots.filter((snap) => {
+-          const isDeprecated = deprecatedStatus.includes(snap.snapshot.executionStatus);
+-          const previouslySeen = this.seenDeprecatedSnapshotIds.some(
+-            (s) => s === snap.snapshot.friendlyId
+-          );
+-          return isDeprecated && !previouslySeen;
+-        });
++        const deprecatedSnapshots = previousSnapshots.filter((snap) =>
++          deprecatedStatus.includes(snap.snapshot.executionStatus)
++        );
+ 
+         let deprecated = false;
+         if (deprecatedSnapshots.length > 0) {
+@@ -306,18 +298,6 @@ export class SnapshotManager {
+           } else {
+             deprecated = true;
+           }
+-
+-          // Add the deprecated snapshot IDs to the seen list
+-          this.seenDeprecatedSnapshotIds.push(
+-            ...deprecatedSnapshots.map((s) => s.snapshot.friendlyId)
+-          );
+-
+-          if (this.seenDeprecatedSnapshotIds.length > this.maxSeenDeprecatedSnapshotIds) {
+-            // Only keep the latest maxSeenDeprecatedSnapshotIds
+-            this.seenDeprecatedSnapshotIds = this.seenDeprecatedSnapshotIds.slice(
+-              -this.maxSeenDeprecatedSnapshotIds
+-            );
+-          }
+         }
+ 
+         const { snapshot } = latestSnapshot;
+@@ -413,4 +393,4 @@ export class SnapshotManager {
+       },
+     });
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/v3/runEngineWorker/workload/http.ts b/packages/core/src/v3/runEngineWorker/workload/http.ts
+index 93fa7bf..a8c6f75 100644
+--- a/packages/core/src/v3/runEngineWorker/workload/http.ts
++++ b/packages/core/src/v3/runEngineWorker/workload/http.ts
+@@ -52,58 +52,18 @@ export class WorkloadHttpClient {
+     });
+   }
+ 
+-  private isConnectionError(error: string): boolean {
+-    const connectionErrors = [
+-      "Connection error",
+-      "ECONNREFUSED",
+-      "ETIMEDOUT",
+-      "ENOTFOUND",
+-      "ECONNRESET",
+-      "EHOSTUNREACH",
+-      "ENETUNREACH",
+-      "EPIPE",
+-      "ECONNABORTED",
+-    ];
+-    return connectionErrors.some((errType) => error.includes(errType));
+-  }
+-
+-  private async withConnectionErrorDetection<T>(
+-    operation: () => Promise<{ success: true; data: T } | { success: false; error: string }>
+-  ): Promise<
+-    { success: true; data: T } | { success: false; error: string; isConnectionError?: boolean }
+-  > {
+-    const result = await operation();
+-
+-    if (result.success) {
+-      return result;
+-    }
+-
+-    // Check if this is a connection error
+-    if (this.isConnectionError(result.error)) {
+-      return {
+-        ...result,
+-        isConnectionError: true,
+-      };
+-    }
+-
+-    return result;
+-  }
+-
+   async heartbeatRun(runId: string, snapshotId: string, body?: WorkloadHeartbeatRequestBody) {
+-    return this.withConnectionErrorDetection(() =>
+-      wrapZodFetch(
+-        WorkloadHeartbeatResponseBody,
+-        `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/${snapshotId}/heartbeat`,
+-        {
+-          method: "POST",
+-          headers: {
+-            ...this.defaultHeaders(),
+-            "Content-Type": "application/json",
+-          },
+-          body: JSON.stringify(body ?? {}),
+-          signal: AbortSignal.timeout(10_000), // 10 second timeout
+-        }
+-      )
++    return wrapZodFetch(
++      WorkloadHeartbeatResponseBody,
++      `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/${snapshotId}/heartbeat`,
++      {
++        method: "POST",
++        headers: {
++          ...this.defaultHeaders(),
++          "Content-Type": "application/json",
++        },
++        body: JSON.stringify(body ?? {}),
++      }
+     );
+   }
+ 
+@@ -121,17 +81,15 @@ export class WorkloadHttpClient {
+   }
+ 
+   async continueRunExecution(runId: string, snapshotId: string) {
+-    return this.withConnectionErrorDetection(() =>
+-      wrapZodFetch(
+-        WorkloadContinueRunExecutionResponseBody,
+-        `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/${snapshotId}/continue`,
+-        {
+-          method: "GET",
+-          headers: {
+-            ...this.defaultHeaders(),
+-          },
+-        }
+-      )
++    return wrapZodFetch(
++      WorkloadContinueRunExecutionResponseBody,
++      `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/${snapshotId}/continue`,
++      {
++        method: "GET",
++        headers: {
++          ...this.defaultHeaders(),
++        },
++      }
+     );
+   }
+ 
+@@ -172,18 +130,15 @@ export class WorkloadHttpClient {
+   }
+ 
+   async getSnapshotsSince(runId: string, snapshotId: string) {
+-    return this.withConnectionErrorDetection(() =>
+-      wrapZodFetch(
+-        WorkloadRunSnapshotsSinceResponseBody,
+-        `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/since/${snapshotId}`,
+-        {
+-          method: "GET",
+-          headers: {
+-            ...this.defaultHeaders(),
+-          },
+-          signal: AbortSignal.timeout(10_000), // 10 second timeout
+-        }
+-      )
++    return wrapZodFetch(
++      WorkloadRunSnapshotsSinceResponseBody,
++      `${this.apiUrl}/api/v1/workload-actions/runs/${runId}/snapshots/since/${snapshotId}`,
++      {
++        method: "GET",
++        headers: {
++          ...this.defaultHeaders(),
++        },
++      }
+     );
+   }
+ 
+@@ -223,4 +178,4 @@ export class WorkloadHttpClient {
+       }
+     );
+   }
+-}
++}
+\ No newline at end of file

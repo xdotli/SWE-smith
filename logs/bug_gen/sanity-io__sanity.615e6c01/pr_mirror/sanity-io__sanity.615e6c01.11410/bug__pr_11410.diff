@@ -1,0 +1,418 @@
+diff --git a/packages/@sanity/cli/src/commands/blueprints/configBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/configBlueprintsCommand.ts
+index a4d1ad0..f35cb05 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/configBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/configBlueprintsCommand.ts
+@@ -2,10 +2,9 @@ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+ Options
+-  --edit, -e           Modify the configuration interactively, or directly when combined with ID flags.
+-  --project-id <id>    Directly set the Project ID in the configuration. Requires --edit flag
+-  --stack-id <id>      Directly set the Stack ID in the configuration. Requires --edit flag
+-  --verbose            Output verbose logs
++  --edit, -e           Edit the configuration
++  --test, -t           Test the configuration
++  --project-id <id>    Project ID to use
+ 
+ Examples:
+   # View current configuration
+@@ -13,9 +12,18 @@ Examples:
+ 
+   # Edit configuration
+   sanity blueprints config --edit
++
++  # Test configuration
++  sanity blueprints config --test
++
++  # Edit and test configuration
++  sanity blueprints config -et
+ `
+ 
+ export interface BlueprintsConfigFlags {
++  'test-config'?: boolean
++  'test'?: boolean
++  't'?: boolean
+   'edit'?: boolean
+   'e'?: boolean
+   'project-id'?: string
+@@ -24,7 +32,6 @@ export interface BlueprintsConfigFlags {
+   'stack-id'?: string
+   'stackId'?: string
+   'stack'?: string
+-  'verbose'?: boolean
+ }
+ 
+ const defaultFlags: BlueprintsConfigFlags = {
+@@ -35,7 +42,7 @@ const configBlueprintsCommand: CliCommandDefinition<BlueprintsConfigFlags> = {
+   name: 'config',
+   group: 'blueprints',
+   helpText,
+-  signature: '[--edit] [--project-id <id>] [--stack-id <id>] [--verbose]',
++  signature: '[--edit] [-e] [--test] [-t] [--project-id <id>]',
+   description: 'View or edit local Blueprints configuration',
+ 
+   async action(args, context) {
+@@ -67,8 +74,8 @@ const configBlueprintsCommand: CliCommandDefinition<BlueprintsConfigFlags> = {
+       flags: {
+         'project-id': flags['project-id'] ?? flags.projectId ?? flags.project,
+         'stack-id': flags['stack-id'] ?? flags.stackId ?? flags.stack,
++        'test-config': flags['test-config'] ?? flags.test ?? flags.t,
+         'edit': flags.edit ?? flags.e,
+-        'verbose': flags.verbose,
+       },
+     })
+ 
+@@ -76,4 +83,4 @@ const configBlueprintsCommand: CliCommandDefinition<BlueprintsConfigFlags> = {
+   },
+ }
+ 
+-export default configBlueprintsCommand
++export default configBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/deployBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/deployBlueprintsCommand.ts
+index 68b84c3..a0d6627 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/deployBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/deployBlueprintsCommand.ts
+@@ -2,7 +2,7 @@ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+ Options
+-  --no-wait    Do not wait for Stack deployment to complete
++  --no-wait    Do not wait for deployment to complete
+ 
+ Examples:
+   # Deploy the current blueprint
+@@ -25,7 +25,7 @@ const deployBlueprintsCommand: CliCommandDefinition<BlueprintsDeployFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '[--no-wait]',
+-  description: 'Deploy a Blueprint',
++  description: 'Deploy a Blueprint to create or update a Stack',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -60,4 +60,4 @@ const deployBlueprintsCommand: CliCommandDefinition<BlueprintsDeployFlags> = {
+   },
+ }
+ 
+-export default deployBlueprintsCommand
++export default deployBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/destroyBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/destroyBlueprintsCommand.ts
+index 16f5371..b4ed600 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/destroyBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/destroyBlueprintsCommand.ts
+@@ -2,8 +2,6 @@ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+ Options
+-  --project-id   Project associated with the Stack
+-  --stack-id     Stack ID to destroy (defaults to current Stack)
+   --force, -f    Force destroy without confirmation
+   --no-wait      Do not wait for destroy to complete
+ 
+@@ -38,9 +36,8 @@ const destroyBlueprintsCommand: CliCommandDefinition<BlueprintsDestroyFlags> = {
+   name: 'destroy',
+   group: 'blueprints',
+   helpText,
+-  signature: '[--project-id <value> --stack-id <value> --force] [--no-wait]',
+-  description:
+-    'Destroy a Blueprint Stack deployment and its resources (will not delete local files)',
++  signature: '[--force] [-f] [--no-wait]',
++  description: 'Destroy a Blueprint deployment',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -78,4 +75,4 @@ const destroyBlueprintsCommand: CliCommandDefinition<BlueprintsDestroyFlags> = {
+   },
+ }
+ 
+-export default destroyBlueprintsCommand
++export default destroyBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/doctorBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/doctorBlueprintsCommand.ts
+index 8769bdc..d2e5da0 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/doctorBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/doctorBlueprintsCommand.ts
+@@ -1,9 +1,6 @@
+ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+-Options
+-  --verbose  Provide detailed information about issues
+-
+ Examples:
+   # Check the health of the current Blueprint project
+   sanity blueprints doctor --verbose
+@@ -23,7 +20,7 @@ const doctorBlueprintsCommand: CliCommandDefinition<BlueprintsDoctorFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '[--verbose]',
+-  description: 'Diagnose potential issues with Blueprint configuration',
++  description: 'Check the health of a Blueprint project',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -56,4 +53,4 @@ const doctorBlueprintsCommand: CliCommandDefinition<BlueprintsDoctorFlags> = {
+   },
+ }
+ 
+-export default doctorBlueprintsCommand
++export default doctorBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/infoBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/infoBlueprintsCommand.ts
+index c07546e..64fc178 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/infoBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/infoBlueprintsCommand.ts
+@@ -19,7 +19,7 @@ const infoBlueprintsCommand: CliCommandDefinition<BlueprintsInfoFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '',
+-  description: 'Show information about a Blueprint Stack deployment',
++  description: 'Retrieve information about a Blueprint Stack',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -52,4 +52,4 @@ const infoBlueprintsCommand: CliCommandDefinition<BlueprintsInfoFlags> = {
+   },
+ }
+ 
+-export default infoBlueprintsCommand
++export default infoBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/initBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/initBlueprintsCommand.ts
+index 04f301b..df02de3 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/initBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/initBlueprintsCommand.ts
+@@ -5,11 +5,8 @@ Arguments
+   [dir]  Path to initialize the Blueprint in
+ 
+ Options
+-  --blueprint-type, --type <json>    Blueprint manifest type to use for the Blueprint (json|js|ts)
+-  --project-id <id>                  Sanity Project ID to use for the Blueprint
+-  --stack-id <id>                    Existing Stack ID to use for the Blueprint
+-  --stack-name <id>                  Name to use for a NEW Stack
+-  --verbose                          Verbose output
++  --blueprint-type, --type <json>    Type of Blueprint to create
++  --project-id <id>                  Project ID to use
+ 
+ Examples:
+   # Create a new Blueprint project in the current directory
+@@ -35,7 +32,6 @@ export interface BlueprintsInitFlags {
+   'stack'?: string
+   'stack-name'?: string
+   'name'?: string
+-  'verbose'?: boolean
+ }
+ 
+ const defaultFlags: BlueprintsInitFlags = {
+@@ -47,7 +43,7 @@ const initBlueprintsCommand: CliCommandDefinition<BlueprintsInitFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '[dir] [--blueprint-type <type>] [--project-id <id>]',
+-  description: 'Initialize a new Blueprint',
++  description: 'Initialize a new Blueprint manifest file',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -93,7 +89,6 @@ const initBlueprintsCommand: CliCommandDefinition<BlueprintsInitFlags> = {
+         'project-id': flags['project-id'] ?? flags.projectId ?? flags.project,
+         'stack-id': flags['stack-id'] ?? flags.stackId ?? flags.stack,
+         'stack-name': flags['stack-name'] ?? flags.name,
+-        'verbose': flags.verbose,
+       },
+     })
+ 
+@@ -101,4 +96,4 @@ const initBlueprintsCommand: CliCommandDefinition<BlueprintsInitFlags> = {
+   },
+ }
+ 
+-export default initBlueprintsCommand
++export default initBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/logsBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/logsBlueprintsCommand.ts
+index 7fc865a..5c96693 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/logsBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/logsBlueprintsCommand.ts
+@@ -2,7 +2,7 @@ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+ Options
+-  --watch, -w    Watch for new Stack logs (streaming mode)
++  --watch, -w    Watch for new logs (streaming mode)
+ 
+ Examples:
+   # Show logs for the current Stack
+@@ -26,7 +26,7 @@ const logsBlueprintsCommand: CliCommandDefinition<BlueprintsLogsFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '[--watch] [-w]',
+-  description: 'Display logs for a Blueprint Stack deployment',
++  description: 'Display logs for the current Blueprint Stack',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -63,4 +63,4 @@ const logsBlueprintsCommand: CliCommandDefinition<BlueprintsLogsFlags> = {
+   },
+ }
+ 
+-export default logsBlueprintsCommand
++export default logsBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/planBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/planBlueprintsCommand.ts
+index 3ba2a0e..78920b1 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/planBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/planBlueprintsCommand.ts
+@@ -3,19 +3,12 @@ import {type CliCommandDefinition} from '../../types'
+ const helpText = `
+ Safe to run at any time. Will not modify any Resources.
+ 
+-Options
+-  --version Verbose output
+-
+ Examples:
+   # Show deployment plan for the current Blueprint
+   sanity blueprints plan
+ `
+ 
+ export interface BlueprintsPlanFlags {
+-  verbose?: boolean
+-}
+-
+-const defaultFlags: BlueprintsPlanFlags = {
+   //
+ }
+ 
+@@ -24,11 +17,10 @@ const planBlueprintsCommand: CliCommandDefinition<BlueprintsPlanFlags> = {
+   group: 'blueprints',
+   helpText,
+   signature: '',
+-  description: 'Enumerate resources to be deployed - will not modify any resources',
++  description: 'Enumerate Resources to be deployed',
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+-    const flags = {...defaultFlags, ...args.extOptions}
+ 
+     const client = apiClient({
+       requireUser: true,
+@@ -50,13 +42,10 @@ const planBlueprintsCommand: CliCommandDefinition<BlueprintsPlanFlags> = {
+ 
+     const {success, error} = await blueprintPlanCore({
+       ...cmdConfig.value,
+-      flags: {
+-        verbose: flags.verbose,
+-      },
+     })
+ 
+     if (!success) throw new Error(error)
+   },
+ }
+ 
+-export default planBlueprintsCommand
++export default planBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/blueprints/stacksBlueprintsCommand.ts b/packages/@sanity/cli/src/commands/blueprints/stacksBlueprintsCommand.ts
+index 1320264..c9d238b 100644
+--- a/packages/@sanity/cli/src/commands/blueprints/stacksBlueprintsCommand.ts
++++ b/packages/@sanity/cli/src/commands/blueprints/stacksBlueprintsCommand.ts
+@@ -2,7 +2,7 @@ import {type CliCommandDefinition} from '../../types'
+ 
+ const helpText = `
+ Options
+-  --project-id <id>       Project ID to use
++  --project-id <id>    Project ID to use
+ 
+ Examples:
+   # List all Stacks for the current Project
+@@ -16,7 +16,6 @@ export interface BlueprintsStacksFlags {
+   'project-id'?: string
+   'projectId'?: string
+   'project'?: string
+-  'verbose'?: boolean
+ }
+ 
+ const defaultFlags: BlueprintsStacksFlags = {
+@@ -27,9 +26,9 @@ const stacksBlueprintsCommand: CliCommandDefinition<BlueprintsStacksFlags> = {
+   name: 'stacks',
+   group: 'blueprints',
+   helpText,
+-  signature: '[--project-id <value>]',
+-  description: 'List all Blueprint Stacks',
+-  hideFromHelp: false,
++  signature: '[--project-id <id>]',
++  description: 'List all Blueprint Stacks for the current Project',
++  hideFromHelp: true,
+ 
+   async action(args, context) {
+     const {apiClient, output} = context
+@@ -57,7 +56,6 @@ const stacksBlueprintsCommand: CliCommandDefinition<BlueprintsStacksFlags> = {
+       ...cmdConfig.value,
+       flags: {
+         'project-id': flags['project-id'] ?? flags.projectId ?? flags.project,
+-        'verbose': flags.verbose,
+       },
+     })
+ 
+@@ -65,4 +63,4 @@ const stacksBlueprintsCommand: CliCommandDefinition<BlueprintsStacksFlags> = {
+   },
+ }
+ 
+-export default stacksBlueprintsCommand
++export default stacksBlueprintsCommand
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/src/commands/index.ts b/packages/@sanity/cli/src/commands/index.ts
+index 771600d..6ea4ccc 100644
+--- a/packages/@sanity/cli/src/commands/index.ts
++++ b/packages/@sanity/cli/src/commands/index.ts
+@@ -9,7 +9,7 @@ import infoBlueprintsCommand from './blueprints/infoBlueprintsCommand'
+ import initBlueprintsCommand from './blueprints/initBlueprintsCommand'
+ import logsBlueprintsCommand from './blueprints/logsBlueprintsCommand'
+ import planBlueprintsCommand from './blueprints/planBlueprintsCommand'
+-import stacksBlueprintsCommand from './blueprints/stacksBlueprintsCommand'
++import listBlueprintsCommand from './blueprints/stacksBlueprintsCommand'
+ import codemodCommand from './codemod/codemodCommand'
+ import debugCommand from './debug/debugCommand'
+ import browseCommand from './docs/browseCommand'
+@@ -82,7 +82,7 @@ export const baseCommands: (CliCommandDefinition | CliCommandGroupDefinition)[]
+   doctorBlueprintsCommand,
+   infoBlueprintsCommand,
+   initBlueprintsCommand,
++  listBlueprintsCommand,
+   logsBlueprintsCommand,
+   planBlueprintsCommand,
+-  stacksBlueprintsCommand,
+-]
++]
+\ No newline at end of file
+diff --git a/packages/@sanity/cli/test/blueprints.test.ts b/packages/@sanity/cli/test/blueprints.test.ts
+index 3728707..6c68025 100644
+--- a/packages/@sanity/cli/test/blueprints.test.ts
++++ b/packages/@sanity/cli/test/blueprints.test.ts
+@@ -300,17 +300,11 @@ describe('blueprints commands with mocked cores', () => {
+ 
+   describe('plan command', () => {
+     it('should call blueprintPlanCore with blueprint', async () => {
+-      const args: CliCommandArguments = {
+-        ...emptyArgs,
+-        extOptions: {verbose: true},
+-      }
+-
+-      // sanity blueprints plan --verbose
+-      await planBlueprintsCommand.action(args, mockContext)
++      // sanity blueprints plan
++      await planBlueprintsCommand.action(emptyArgs, mockContext)
+ 
+       expect(mockCores.blueprintPlanCore).toHaveBeenCalledWith({
+         ...config,
+-        flags: {verbose: true},
+       })
+     })
+   })
+@@ -333,4 +327,4 @@ describe('blueprints commands with mocked cores', () => {
+       })
+     })
+   })
+-})
++})
+\ No newline at end of file

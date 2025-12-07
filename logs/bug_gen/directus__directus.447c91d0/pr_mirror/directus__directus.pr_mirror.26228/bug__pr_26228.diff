@@ -1,0 +1,127 @@
+diff --git a/api/src/telemetry/utils/get-settings.test.ts b/api/src/telemetry/utils/get-settings.test.ts
+index f5281fa..2cbc216 100644
+--- a/api/src/telemetry/utils/get-settings.test.ts
++++ b/api/src/telemetry/utils/get-settings.test.ts
+@@ -1,22 +1,20 @@
+ import type { Knex } from 'knex';
+ import { describe, expect, it, vi } from 'vitest';
+ import { getSettings } from './get-settings.js';
+-import { SettingsService } from '../../services/settings.js';
+-
+-vi.mock('../../utils/get-schema.js');
+-vi.mock('../../services/settings.js');
+-
+-const mockDb: Knex = {} as Knex;
+ 
+ describe('getSettings', () => {
+ 	it('should return settings when they exist in the database', async () => {
+-		vi.mocked(SettingsService.prototype.readSingleton).mockResolvedValue({
+-			project_id: 'test-project-id',
+-			mcp_enabled: true,
+-			mcp_allow_deletes: false,
+-			mcp_system_prompt_enabled: true,
+-			visual_editor_urls: ['https://example.com', 'https://example.org'],
+-		} as any);
++		const mockDb = {
++			select: vi.fn().mockReturnThis(),
++			from: vi.fn().mockReturnThis(),
++			first: vi.fn().mockResolvedValue({
++				project_id: 'test-project-id',
++				mcp_enabled: true,
++				mcp_allow_deletes: false,
++				mcp_system_prompt_enabled: true,
++				visual_editor_urls: '["https://example.com","https://example.org"]',
++			}),
++		} as unknown as Knex;
+ 
+ 		const result = await getSettings(mockDb);
+ 
+@@ -30,11 +28,15 @@ describe('getSettings', () => {
+ 	});
+ 
+ 	it('should coerce missing values to defaults when they are not set', async () => {
+-		vi.mocked(SettingsService.prototype.readSingleton).mockResolvedValue({
+-			project_id: 'test-project-id',
+-			// booleans omitted on purpose to ensure handles undefined
+-			visual_editor_urls: null,
+-		} as any);
++		const mockDb = {
++			select: vi.fn().mockReturnThis(),
++			from: vi.fn().mockReturnThis(),
++			first: vi.fn().mockResolvedValue({
++				project_id: 'test-project-id',
++				// booleans omitted on purpose to ensure toBoolean handles undefined
++				visual_editor_urls: null,
++			}),
++		} as unknown as Knex;
+ 
+ 		const result = await getSettings(mockDb);
+ 
+@@ -46,4 +48,14 @@ describe('getSettings', () => {
+ 			visual_editor_urls: 0,
+ 		});
+ 	});
+-});
++
++	it('should handle unexpected database errors gracefully', async () => {
++		const mockDb = {
++			select: vi.fn().mockReturnThis(),
++			from: vi.fn().mockReturnThis(),
++			first: vi.fn().mockRejectedValue(new Error('Database error')),
++		} as unknown as Knex;
++
++		await expect(getSettings(mockDb)).rejects.toThrow('Database error');
++	});
++});
+\ No newline at end of file
+diff --git a/api/src/telemetry/utils/get-settings.ts b/api/src/telemetry/utils/get-settings.ts
+index 3cc9cb9..17b3618 100644
+--- a/api/src/telemetry/utils/get-settings.ts
++++ b/api/src/telemetry/utils/get-settings.ts
+@@ -1,5 +1,4 @@
+-import { SettingsService } from '../../services/settings.js';
+-import { getSchema } from '../../utils/get-schema.js';
++import { toBoolean } from '@directus/utils';
+ import type { Knex } from 'knex';
+ 
+ export type TelemetrySettings = {
+@@ -10,29 +9,17 @@ export type TelemetrySettings = {
+ 	visual_editor_urls: number;
+ };
+ 
+-type DatabaseSettings = {
+-	project_id: string;
+-	mcp_enabled?: boolean;
+-	mcp_allow_deletes?: boolean;
+-	mcp_system_prompt_enabled?: boolean;
+-	visual_editor_urls?: { url: string }[];
+-};
+-
+ export const getSettings = async (db: Knex): Promise<TelemetrySettings> => {
+-	const settingsService = new SettingsService({
+-		knex: db,
+-		schema: await getSchema({ database: db }),
+-	});
+-
+-	const settings = (await settingsService.readSingleton({
+-		fields: ['project_id', 'mcp_enabled', 'mcp_allow_deletes', 'mcp_system_prompt_enabled', 'visual_editor_urls'],
+-	})) as DatabaseSettings;
++	const settings = await db
++		.select('project_id', 'mcp_enabled', 'mcp_allow_deletes', 'mcp_system_prompt_enabled', 'visual_editor_urls')
++		.from('directus_settings')
++		.first();
+ 
+ 	return {
+ 		project_id: settings.project_id,
+-		mcp_enabled: settings?.mcp_enabled || false,
+-		mcp_allow_deletes: settings?.mcp_allow_deletes || false,
+-		mcp_system_prompt_enabled: settings?.mcp_system_prompt_enabled || false,
+-		visual_editor_urls: settings.visual_editor_urls?.length || 0,
++		mcp_enabled: toBoolean(settings?.mcp_enabled),
++		mcp_allow_deletes: toBoolean(settings?.mcp_allow_deletes),
++		mcp_system_prompt_enabled: toBoolean(settings?.mcp_system_prompt_enabled),
++		visual_editor_urls: settings.visual_editor_urls ? JSON.parse(settings.visual_editor_urls).length : 0,
+ 	};
+-};
++};
+\ No newline at end of file

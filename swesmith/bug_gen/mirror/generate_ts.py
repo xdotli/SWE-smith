@@ -75,16 +75,16 @@ worker_tempdirs = {}
 def should_attempt_recovery(inst, repo):
     """
     Attempt if the following criteria are met:
-    * Fewer than 8 TypeScript files are changed
-    * Fewer than 500 lines are changed
-    * No changed file is >10000 lines
+    * Fewer than 20 TypeScript files are changed (increased from 8)
+    * Fewer than 1000 lines are changed (increased from 500)
+    * No changed file is >50000 lines (increased from 10000)
     """
     patch = PatchSet(inst[KEY_PATCH])
     num_ts_edited = len([x for x in patch if x.path.endswith(TS_EXTENSIONS)])
     if num_ts_edited == 0:
         return False, "No TypeScript/TSX files changed"
-    if num_ts_edited > 8:
-        return False, "Too many files changed (>8 files)"
+    if num_ts_edited > 20:
+        return False, "Too many files changed (>20 files)"
     lines_changed = 0
     for file_diff in patch:
         if file_diff.is_binary_file:
@@ -94,12 +94,12 @@ def should_attempt_recovery(inst, repo):
             # Skip over edits to files that don't exist
             continue
         file_content = open(file_path).read()
-        if len(file_content.splitlines()) > 10000:
-            return False, "Changed file is too long (>10000 lines)"
+        if len(file_content.splitlines()) > 50000:
+            return False, "Changed file is too long (>50000 lines)"
         lines_changed += file_diff.added + file_diff.removed
     if lines_changed == 0:
         return False, "No lines changed (no changed file exists)"
-    if lines_changed > 500:
+    if lines_changed > 1000:
         return False, "Too many lines changed"
     return True, None
 

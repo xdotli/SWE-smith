@@ -1,0 +1,689 @@
+diff --git a/.changeset/funny-months-wonder.md b/.changeset/funny-months-wonder.md
+new file mode 100644
+index 0000000000000..9e6f4194bb249
+--- /dev/null
++++ b/.changeset/funny-months-wonder.md
+@@ -0,0 +1,6 @@
++---
++'@directus/types': patch
++'@directus/api': patch
++---
++
++Fixed aliases on GQL M2A filters
+diff --git a/api/src/services/graphql/schema/parse-query.ts b/api/src/services/graphql/schema/parse-query.ts
+index a31198738c7f2..86ac294030a5b 100644
+--- a/api/src/services/graphql/schema/parse-query.ts
++++ b/api/src/services/graphql/schema/parse-query.ts
+@@ -138,10 +138,10 @@ export async function getQuery(
+ 
+ 	if (collection) {
+ 		if (query.filter) {
+-			query.filter = filterReplaceM2A(query.filter, collection, schema);
++			query.filter = filterReplaceM2A(query.filter, collection, schema, { aliasMap: query.alias });
+ 		}
+ 
+-		query.deep = filterReplaceM2ADeep(query.deep, collection, schema);
++		query.deep = filterReplaceM2ADeep(query.deep, collection, schema, { aliasMap: query.alias });
+ 	}
+ 
+ 	validateQuery(query);
+diff --git a/api/src/services/graphql/utils/filter-replace-m2a.test.ts b/api/src/services/graphql/utils/filter-replace-m2a.test.ts
+index ecfb982c5ab20..57a6ef03afd16 100644
+--- a/api/src/services/graphql/utils/filter-replace-m2a.test.ts
++++ b/api/src/services/graphql/utils/filter-replace-m2a.test.ts
+@@ -1,5 +1,5 @@
+ import { RelationBuilder, SchemaBuilder } from '@directus/schema-builder';
+-import { expect, test } from 'vitest';
++import { describe, expect, test } from 'vitest';
+ import { filterReplaceM2A, filterReplaceM2ADeep } from './filter-replace-m2a.js';
+ 
+ const schema = new SchemaBuilder()
+@@ -22,87 +22,128 @@ const schema = new SchemaBuilder()
+ 	})
+ 	.build();
+ 
+-test('empty filter', () => {
+-	const result = filterReplaceM2A({}, 'article', { collections: {}, relations: [] });
++describe('filterReplaceM2A', () => {
++	test('empty filter', () => {
++		const result = filterReplaceM2A({}, 'article', { collections: {}, relations: [] });
+ 
+-	expect(result).toEqual({});
+-});
++		expect(result).toEqual({});
++	});
++
++	test('filter with aliases field', () => {
++		const result = filterReplaceM2A(
++			{
++				id: { _eq: 1 },
++				aliased_blocks: {
++					anyitem__text: {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
++			},
++			'article',
++			schema,
++			{ aliasMap: { aliased_blocks: 'blocks' } },
++		);
+ 
+-test('filter with no relations', () => {
+-	const result = filterReplaceM2A(
+-		{
++		expect(result).toEqual({
++			id: { _eq: 1 },
++			aliased_blocks: {
++				'anyitem:text': {
++					id: { _eq: 1 },
++					content: { _eq: 'Hello World' },
++				},
++			},
++		});
++	});
++
++	test('filter with no relations', () => {
++		const result = filterReplaceM2A(
++			{
++				id: {
++					_eq: 1,
++				},
++				some: {
++					_eq: 'value',
++				},
++			},
++			'article',
++			{ collections: {}, relations: [] },
++		);
++
++		expect(result).toEqual({
+ 			id: {
+ 				_eq: 1,
+ 			},
+ 			some: {
+ 				_eq: 'value',
+ 			},
+-		},
+-		'article',
+-		{ collections: {}, relations: [] },
+-	);
+-
+-	expect(result).toEqual({
+-		id: {
+-			_eq: 1,
+-		},
+-		some: {
+-			_eq: 'value',
+-		},
++		});
+ 	});
+-});
+ 
+-test('filter with a m2o relation', () => {
+-	const result = filterReplaceM2A(
+-		{
++	test('filter with a m2o relation', () => {
++		const result = filterReplaceM2A(
++			{
++				id: { _eq: 1 },
++				author: {
++					id: { _eq: 1 },
++					name: { _eq: 'John Doe' },
++				},
++			},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
+ 			id: { _eq: 1 },
+ 			author: {
+ 				id: { _eq: 1 },
+ 				name: { _eq: 'John Doe' },
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		id: { _eq: 1 },
+-		author: {
+-			id: { _eq: 1 },
+-			name: { _eq: 'John Doe' },
+-		},
++		});
+ 	});
+-});
+ 
+-test('filter with a a2o relation', () => {
+-	const result = filterReplaceM2A(
+-		{
++	test('filter with a a2o relation', () => {
++		const result = filterReplaceM2A(
++			{
++				id: { _eq: 1 },
++				blocks: {
++					anyitem__text: {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
++			},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
+ 			id: { _eq: 1 },
+ 			blocks: {
+-				anyitem__text: {
++				'anyitem:text': {
+ 					id: { _eq: 1 },
+ 					content: { _eq: 'Hello World' },
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		id: { _eq: 1 },
+-		blocks: {
+-			'anyitem:text': {
++		});
++	});
++
++	test('filter with a fake a2o relation', () => {
++		const result = filterReplaceM2A(
++			{
+ 				id: { _eq: 1 },
+-				content: { _eq: 'Hello World' },
++				blocks: {
++					item__text: {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
+ 			},
+-		},
+-	});
+-});
++			'article',
++			schema,
++		);
+ 
+-test('filter with a fake a2o relation', () => {
+-	const result = filterReplaceM2A(
+-		{
++		expect(result).toEqual({
+ 			id: { _eq: 1 },
+ 			blocks: {
+ 				item__text: {
+@@ -110,57 +151,57 @@ test('filter with a fake a2o relation', () => {
+ 					content: { _eq: 'Hello World' },
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		id: { _eq: 1 },
+-		blocks: {
+-			item__text: {
+-				id: { _eq: 1 },
+-				content: { _eq: 'Hello World' },
+-			},
+-		},
++		});
+ 	});
+-});
+ 
+-test('filter with a a2o relation inside _and', () => {
+-	const result = filterReplaceM2A(
+-		{
++	test('filter with a a2o relation inside _and', () => {
++		const result = filterReplaceM2A(
++			{
++				_and: [
++					{
++						blocks: {
++							anyitem__text: {
++								id: { _eq: 1 },
++								content: { _eq: 'Hello World' },
++							},
++						},
++					},
++				],
++			},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
+ 			_and: [
+ 				{
+ 					blocks: {
+-						anyitem__text: {
++						'anyitem:text': {
+ 							id: { _eq: 1 },
+ 							content: { _eq: 'Hello World' },
+ 						},
+ 					},
+ 				},
+ 			],
+-		},
+-		'article',
+-		schema,
+-	);
++		});
++	});
+ 
+-	expect(result).toEqual({
+-		_and: [
++	test('filter with a a2o relation and wrong target collection', () => {
++		const result = filterReplaceM2A(
+ 			{
++				id: { _eq: 1 },
+ 				blocks: {
+-					'anyitem:text': {
++					anyitem__wrong: {
+ 						id: { _eq: 1 },
+ 						content: { _eq: 'Hello World' },
+ 					},
+ 				},
+ 			},
+-		],
+-	});
+-});
++			'article',
++			schema,
++		);
+ 
+-test('filter with a a2o relation and wrong target collection', () => {
+-	const result = filterReplaceM2A(
+-		{
++		expect(result).toEqual({
+ 			id: { _eq: 1 },
+ 			blocks: {
+ 				anyitem__wrong: {
+@@ -168,79 +209,171 @@ test('filter with a a2o relation and wrong target collection', () => {
+ 					content: { _eq: 'Hello World' },
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		id: { _eq: 1 },
+-		blocks: {
+-			anyitem__wrong: {
+-				id: { _eq: 1 },
+-				content: { _eq: 'Hello World' },
+-			},
+-		},
++		});
+ 	});
+ });
+ 
+-test('deep with filter', () => {
+-	const result = filterReplaceM2ADeep(
+-		{
++describe('filterReplaceM2aDeep', () => {
++	test('empty filter', () => {
++		const result = filterReplaceM2ADeep({}, 'article', { collections: {}, relations: [] });
++
++		expect(result).toEqual({});
++	});
++
++	test('deep with filter', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				blocks: {
++					_filter: {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
++			},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
+ 			blocks: {
+ 				_filter: {
+ 					id: { _eq: 1 },
+ 					content: { _eq: 'Hello World' },
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		blocks: {
+-			_filter: {
+-				id: { _eq: 1 },
+-				content: { _eq: 'Hello World' },
++		});
++	});
++
++	test('filter with aliased relation', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				aliased_blocks: {
++					_filter: {
++						anyitem__text: {
++							id: { _eq: 1 },
++							content: { _eq: 'Hello World' },
++						},
++					},
++				},
+ 			},
+-		},
++			'article',
++			schema,
++			{ aliasMap: { aliased_blocks: 'blocks' } },
++		);
++
++		expect(result).toEqual({
++			aliased_blocks: {
++				_filter: {
++					'anyitem:text': {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
++			},
++		});
+ 	});
+-});
+ 
+-test('deep with filter having a2o', () => {
+-	const result = filterReplaceM2ADeep(
+-		{
+-			blocks: {
++	test('filter with nested aliased relation', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				aliased_blocks: {
++					article_id: {
++						_alias: { aliased_blocks: 'blocks' },
++						aliased_blocks: {
++							_filter: {
++								anyitem__text: {
++									id: { _eq: 1 },
++									content: { _eq: 'Hello World' },
++								},
++							},
++						},
++					},
++					_filter: {
++						anyitem__text: {
++							id: { _eq: 1 },
++							content: { _eq: 'Hello World' },
++						},
++					},
++				},
++			},
++			'article',
++			schema,
++			{ aliasMap: { aliased_blocks: 'blocks' } },
++		);
++
++		expect(result).toEqual({
++			aliased_blocks: {
++				article_id: {
++					_alias: {
++						aliased_blocks: 'blocks',
++					},
++					aliased_blocks: {
++						_filter: {
++							'anyitem:text': {
++								id: { _eq: 1 },
++								content: { _eq: 'Hello World' },
++							},
++						},
++					},
++				},
+ 				_filter: {
+-					anyitem__text: {
++					'anyitem:text': {
+ 						id: { _eq: 1 },
+ 						content: { _eq: 'Hello World' },
+ 					},
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		blocks: {
+-			_filter: {
+-				'anyitem:text': {
+-					id: { _eq: 1 },
+-					content: { _eq: 'Hello World' },
++		});
++	});
++
++	test('deep with filter having a2o', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				blocks: {
++					_filter: {
++						anyitem__text: {
++							id: { _eq: 1 },
++							content: { _eq: 'Hello World' },
++						},
++					},
+ 				},
+ 			},
+-		},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
++			blocks: {
++				_filter: {
++					'anyitem:text': {
++						id: { _eq: 1 },
++						content: { _eq: 'Hello World' },
++					},
++				},
++			},
++		});
+ 	});
+-});
+ 
+-test('deep with nested filter having a2o', () => {
+-	const result = filterReplaceM2ADeep(
+-		{
++	test('deep with nested filter having a2o', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				blocks: {
++					anyitem__text: {
++						blocks: {
++							_filter: {
++								id: { _eq: 1 },
++							},
++						},
++					},
++				},
++			},
++			'article',
++			schema,
++		);
++
++		expect(result).toEqual({
+ 			blocks: {
+-				anyitem__text: {
++				'anyitem:text': {
+ 					blocks: {
+ 						_filter: {
+ 							id: { _eq: 1 },
+@@ -248,27 +381,26 @@ test('deep with nested filter having a2o', () => {
+ 					},
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		blocks: {
+-			'anyitem:text': {
+-				blocks: {
++		});
++	});
++
++	test('deep with filter having a2o on wrong deep', () => {
++		const result = filterReplaceM2ADeep(
++			{
++				wrong: {
+ 					_filter: {
+-						id: { _eq: 1 },
++						anyitem__text: {
++							id: { _eq: 1 },
++							content: { _eq: 'Hello World' },
++						},
+ 					},
+ 				},
+ 			},
+-		},
+-	});
+-});
++			'article',
++			schema,
++		);
+ 
+-test('deep with filter having a2o on wrong deep', () => {
+-	const result = filterReplaceM2ADeep(
+-		{
++		expect(result).toEqual({
+ 			wrong: {
+ 				_filter: {
+ 					anyitem__text: {
+@@ -277,19 +409,6 @@ test('deep with filter having a2o on wrong deep', () => {
+ 					},
+ 				},
+ 			},
+-		},
+-		'article',
+-		schema,
+-	);
+-
+-	expect(result).toEqual({
+-		wrong: {
+-			_filter: {
+-				anyitem__text: {
+-					id: { _eq: 1 },
+-					content: { _eq: 'Hello World' },
+-				},
+-			},
+-		},
++		});
+ 	});
+ });
+diff --git a/api/src/services/graphql/utils/filter-replace-m2a.ts b/api/src/services/graphql/utils/filter-replace-m2a.ts
+index 3b264402a4e40..a14ce0d7f2266 100644
+--- a/api/src/services/graphql/utils/filter-replace-m2a.ts
++++ b/api/src/services/graphql/utils/filter-replace-m2a.ts
+@@ -1,34 +1,43 @@
+-import type { Filter, NestedDeepQuery, SchemaOverview } from '@directus/types';
++import type { DeepQuery, Filter, NestedDeepQuery, Query, SchemaOverview } from '@directus/types';
+ import { getRelation } from '@directus/utils';
+ import { getRelationType } from '../../../utils/get-relation-type.js';
+ 
+-export function filterReplaceM2A(filter_arg: Filter, collection: string, schema: SchemaOverview): any {
++export function filterReplaceM2A(
++	filter_arg: Filter,
++	collection: string,
++	schema: SchemaOverview,
++	options?: { aliasMap?: Query['alias'] },
++): any {
+ 	const filter: any = filter_arg;
+ 
+ 	for (const key in filter) {
+-		const [field, any_collection] = key.split('__');
++		const parts = key.split('__');
++		let field = parts[0];
++		const any_collection = parts[1];
+ 
+ 		if (!field) continue;
+ 
++		field = options?.aliasMap?.[field] ?? field;
++
+ 		const relation = getRelation(schema.relations, collection, field);
+ 		const type = relation ? getRelationType({ relation, collection, field }) : null;
+ 
+ 		if (type === 'o2m' && relation) {
+-			filter[key] = filterReplaceM2A(filter[key], relation.collection, schema);
++			filter[key] = filterReplaceM2A(filter[key], relation.collection, schema, options);
+ 		} else if (type === 'm2o' && relation) {
+-			filter[key] = filterReplaceM2A(filter[key], relation.related_collection!, schema);
++			filter[key] = filterReplaceM2A(filter[key], relation.related_collection!, schema, options);
+ 		} else if (
+ 			type === 'a2o' &&
+ 			relation &&
+ 			any_collection &&
+ 			relation.meta?.one_allowed_collections?.includes(any_collection)
+ 		) {
+-			filter[`${field}:${any_collection}`] = filterReplaceM2A(filter[key], any_collection, schema);
++			filter[`${field}:${any_collection}`] = filterReplaceM2A(filter[key], any_collection, schema, options);
+ 			delete filter[key];
+ 		} else if (Array.isArray(filter[key])) {
+-			filter[key] = filter[key].map((item) => filterReplaceM2A(item, collection, schema));
++			filter[key] = filter[key].map((item) => filterReplaceM2A(item, collection, schema, options));
+ 		} else if (typeof filter[key] === 'object') {
+-			filter[key] = filterReplaceM2A(filter[key], collection, schema);
++			filter[key] = filterReplaceM2A(filter[key], collection, schema, options);
+ 		}
+ 	}
+ 
+@@ -39,15 +48,20 @@ export function filterReplaceM2ADeep(
+ 	deep_arg: NestedDeepQuery | null | undefined,
+ 	collection: string,
+ 	schema: SchemaOverview,
++	options?: { aliasMap?: Query['alias'] },
+ ) {
+ 	const deep: any = deep_arg;
+ 
+ 	for (const key in deep) {
+ 		if (key.startsWith('_') === false) {
+-			const [field, any_collection] = key.split('__');
++			const parts = key.split('__');
++			let field = parts[0];
++			const any_collection = parts[1];
+ 
+ 			if (!field) continue;
+ 
++			field = options?.aliasMap?.[field] || (deep as DeepQuery)._alias?.[field] || field;
++
+ 			const relation = getRelation(schema.relations, collection, field);
+ 
+ 			if (!relation) continue;
+diff --git a/packages/types/src/query.ts b/packages/types/src/query.ts
+index 36f5fcf250b2b..f7955e005abe5 100644
+--- a/packages/types/src/query.ts
++++ b/packages/types/src/query.ts
+@@ -19,6 +19,7 @@ export type Query = {
+ };
+ 
+ export type DeepQuery = {
++	_alias?: Record<string, string> | null;
+ 	_fields?: string[] | null;
+ 	_sort?: string[] | null;
+ 	_filter?: Filter | null;

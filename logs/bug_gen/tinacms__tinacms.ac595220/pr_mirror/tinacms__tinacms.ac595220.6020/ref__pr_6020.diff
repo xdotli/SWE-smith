@@ -1,0 +1,187 @@
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-content.md b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-content.md
+new file mode 100644
+index 0000000000..804ee8ae49
+--- /dev/null
++++ b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-content.md
+@@ -0,0 +1,10 @@
++---
++title: Original Title
++genre: drama
++rating: 7
++---
++
++
++This is the original content for Mr Bob Northwind's post about his company Northwind.
++
++The post talks about the company's growth and success in the market.
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-node.json b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-node.json
+new file mode 100644
+index 0000000000..9c817c6d86
+--- /dev/null
++++ b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/rename-document-node.json
+@@ -0,0 +1,39 @@
++{
++  "data": {
++    "updateDocument": {
++      "_values": {
++        "_collection": "post",
++        "_template": "post",
++        "title": "Original Title",
++        "genre": "drama",
++        "rating": 7,
++        "body": {
++          "type": "root",
++          "children": [
++            {
++              "type": "p",
++              "children": [
++                {
++                  "type": "text",
++                  "text": "This is the original content for Mr Bob Northwind's post about his company Northwind."
++                }
++              ]
++            },
++            {
++              "type": "p",
++              "children": [
++                {
++                  "type": "text",
++                  "text": "The post talks about the company's growth and success in the market."
++                }
++              ]
++            }
++          ]
++        }
++      },
++      "_sys": {
++        "title": ""
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/update-document-content.md b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-document-content.md
+similarity index 100%
+rename from packages/@tinacms/graphql/tests/document-update-mutation/update-document-content.md
+rename to packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-document-content.md
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/update-document-node.json b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-document-node.json
+similarity index 100%
+rename from packages/@tinacms/graphql/tests/document-update-mutation/update-document-node.json
+rename to packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-document-node.json
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/update-post-content.md b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-post-content.md
+similarity index 100%
+rename from packages/@tinacms/graphql/tests/document-update-mutation/update-post-content.md
+rename to packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-post-content.md
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/update-post-node.json b/packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-post-node.json
+similarity index 100%
+rename from packages/@tinacms/graphql/tests/document-update-mutation/update-post-node.json
+rename to packages/@tinacms/graphql/tests/document-update-mutation/expected-snapshots/update-post-node.json
+diff --git a/packages/@tinacms/graphql/tests/document-update-mutation/index.test.ts b/packages/@tinacms/graphql/tests/document-update-mutation/index.test.ts
+index fba816a152..19eb75e1e3 100644
+--- a/packages/@tinacms/graphql/tests/document-update-mutation/index.test.ts
++++ b/packages/@tinacms/graphql/tests/document-update-mutation/index.test.ts
+@@ -44,14 +44,56 @@ it('updates document and validates bridge writes', async () => {
+   });
+ 
+   // Validate GraphQL response
+-  expect(format(result)).toMatchFileSnapshot('update-document-node.json');
++  expect(format(result)).toMatchFileSnapshot(
++    'expected-snapshots/update-document-node.json'
++  );
+ 
+   // Validate Bridge write operations
+   const writes = bridge.getWrites();
+   expect(writes.size).toBeGreaterThan(0);
+   expect(bridge.getWrite('posts/in.md')).toMatchFileSnapshot(
+-    'update-document-content.md'
++    'expected-snapshots/update-document-content.md'
++  );
++});
++
++const renameDocumentMutation = `
++  mutation {
++    updateDocument(
++      collection: "post",
++      relativePath: "in.md",
++      params: {
++        relativePath: "renamed-by-bob.md"
++      }
++    ) {
++      ...on Document { _values, _sys { title } }
++    }
++  }
++`;
++
++it('renames document using updateDocument mutation', async () => {
++  const { query, bridge } = await setupMutation(__dirname, config);
++
++  // Execute mutation to rename the document
++  const result = await query({
++    query: renameDocumentMutation,
++    variables: {},
++  });
++
++  // Validate GraphQL response
++  expect(format(result)).toMatchFileSnapshot(
++    'expected-snapshots/rename-document-node.json'
+   );
++
++  // Validate Bridge write operations
++  const writes = bridge.getWrites();
++  expect(writes.size).toBeGreaterThan(0);
++  expect(bridge.getWrite('posts/renamed-by-bob.md')).toMatchFileSnapshot(
++    'expected-snapshots/rename-document-content.md'
++  );
++
++  // Validate that original file was deleted
++  const deletes = bridge.getDeletes();
++  expect(deletes).toContain('posts/in.md');
+ });
+ 
+ const updatePostMutation = `
+@@ -94,12 +136,14 @@ it('updates document using updatePost mutation', async () => {
+   });
+ 
+   // Validate GraphQL response
+-  expect(format(result)).toMatchFileSnapshot('update-post-node.json');
++  expect(format(result)).toMatchFileSnapshot(
++    'expected-snapshots/update-post-node.json'
++  );
+ 
+   // Validate Bridge write operations
+   const writes = bridge.getWrites();
+   expect(writes.size).toBeGreaterThan(0);
+   expect(bridge.getWrite('posts/in.md')).toMatchFileSnapshot(
+-    'update-post-content.md'
++    'expected-snapshots/update-post-content.md'
+   );
+ });
+diff --git a/packages/@tinacms/graphql/tests/util.ts b/packages/@tinacms/graphql/tests/util.ts
+index 4f9651df02..0be935f589 100644
+--- a/packages/@tinacms/graphql/tests/util.ts
++++ b/packages/@tinacms/graphql/tests/util.ts
+@@ -18,6 +18,8 @@ class OutputBridge extends FilesystemBridge {
+ class MemoryCaptureBridge extends FilesystemBridge {
+   private writes: Map<string, string> = new Map();
+ 
++  private deletes: string[] = [];
++
+   // Read operations continue to use filesystem
+   async get(filepath: string): Promise<string> {
+     return super.get(filepath);
+@@ -36,6 +38,15 @@ class MemoryCaptureBridge extends FilesystemBridge {
+   getWrite(filepath: string): string | undefined {
+     return this.writes.get(filepath);
+   }
++
++  // Intercept delete operations, prevent them as they will prevent running tests twice.
++  async delete(filepath: string) {
++    this.deletes.push(filepath);
++  }
++
++  getDeletes(): string[] {
++    return [...this.deletes];
++  }
+ }
+ 
+ const dataSchema = z.object({

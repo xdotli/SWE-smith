@@ -1,0 +1,105 @@
+[
+  {
+    "number": 6208,
+    "title": "React color to react colorful migration",
+    "merged_at": "2025-12-05T01:13:50Z",
+    "test_files": [
+      "packages/tinacms/src/toolkit/fields/components/color-picker/block-widget.test.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-formatter.test.ts",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-input.test.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-utils.test.ts",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/sketch-widget.test.tsx"
+    ],
+    "code_files": [
+      "packages/@tinacms/schema-tools/src/types/index.ts",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/block-widget.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-formatter.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-input.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-picker.tsx",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/color-utils.ts",
+      "packages/tinacms/src/toolkit/fields/components/color-picker/sketch-widget.tsx",
+      "packages/tinacms/src/toolkit/fields/plugins/color-field-plugin.tsx"
+    ],
+    "total_files": 18,
+    "additions": 1072,
+    "deletions": 238
+  },
+  {
+    "number": 6131,
+    "title": "\u23ea Revert - Sonner alert notifications",
+    "merged_at": "2025-11-17T21:13:44Z",
+    "test_files": [
+      "packages/tinacms/src/toolkit/alerts/alerts.test.ts",
+      "packages/tinacms/src/toolkit/react-alerts/alerts.test.tsx"
+    ],
+    "code_files": [
+      "packages/tinacms/src/toolkit/alerts/alerts.ts",
+      "packages/tinacms/src/toolkit/components/ui/sonner.tsx",
+      "packages/tinacms/src/toolkit/react-alerts/alerts.tsx"
+    ],
+    "total_files": 8,
+    "additions": 119,
+    "deletions": 347
+  },
+  {
+    "number": 6126,
+    "title": "\u267b\ufe0f Refactor: Integrate Sonner for alert notifications",
+    "merged_at": "2025-11-17T06:19:55Z",
+    "test_files": [
+      "packages/tinacms/src/toolkit/alerts/alerts.test.ts",
+      "packages/tinacms/src/toolkit/react-alerts/alerts.test.tsx"
+    ],
+    "code_files": [
+      "packages/tinacms/src/toolkit/alerts/alerts.ts",
+      "packages/tinacms/src/toolkit/components/ui/sonner.tsx",
+      "packages/tinacms/src/toolkit/react-alerts/alerts.tsx"
+    ],
+    "total_files": 8,
+    "additions": 352,
+    "deletions": 114
+  },
+  {
+    "number": 6020,
+    "title": "GraphQL Test - Renaming documents",
+    "merged_at": "2025-10-22T23:52:48Z",
+    "test_files": [
+      "packages/@tinacms/graphql/tests/document-update-mutation/index.test.ts"
+    ],
+    "code_files": [
+      "packages/@tinacms/graphql/tests/util.ts"
+    ],
+    "total_files": 8,
+    "additions": 108,
+    "deletions": 4
+  },
+  {
+    "number": 5901,
+    "title": "\ud83d\udc1b Fix: content path trailing slash breaks indexer",
+    "merged_at": "2025-09-18T05:45:55Z",
+    "test_files": [
+      "packages/@tinacms/cli/src/utils/path.test.ts"
+    ],
+    "code_files": [
+      "packages/@tinacms/cli/src/next/config-manager.ts",
+      "packages/@tinacms/cli/src/utils/path.ts"
+    ],
+    "total_files": 6,
+    "additions": 180,
+    "deletions": 9
+  },
+  {
+    "number": 5947,
+    "title": "Sidebar - update tooltips",
+    "merged_at": "2025-08-08T01:13:54Z",
+    "test_files": [
+      "packages/tinacms/src/toolkit/components/tina-ui.test.tsx"
+    ],
+    "code_files": [
+      "packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx",
+      "packages/tinacms/src/toolkit/styles/button.tsx"
+    ],
+    "total_files": 4,
+    "additions": 27,
+    "deletions": 14
+  }
+]

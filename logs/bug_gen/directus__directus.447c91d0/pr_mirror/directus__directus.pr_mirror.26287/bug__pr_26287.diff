@@ -1,0 +1,112 @@
+diff --git a/.changeset/stale-onions-attend.md b/.changeset/stale-onions-attend.md
+deleted file mode 100644
+index 52af1e2..0000000
+--- a/.changeset/stale-onions-attend.md
++++ /dev/null
+@@ -1,5 +0,0 @@
+----
+-'@directus/app': patch
+----
+-
+-Added reactive primaryKey prop to useFlows composable
+diff --git a/app/src/composables/use-flows.test.ts b/app/src/composables/use-flows.test.ts
+index 8653159..b749c32 100644
+--- a/app/src/composables/use-flows.test.ts
++++ b/app/src/composables/use-flows.test.ts
+@@ -65,7 +65,7 @@ const mockOnRefresh = vi.fn();
+ 
+ const useFlowsOptions = {
+ 	collection: ref('test_collection'),
+-	primaryKey: ref('item_1'),
++	primaryKey: 'item_1',
+ 	location: 'collection' as const,
+ 	hasEdits: ref(true),
+ 	onRefreshCallback: mockOnRefresh,
+@@ -398,39 +398,4 @@ describe('runManualFlow', () => {
+ 
+ 		expect(mockOnRefresh).toHaveBeenCalledOnce();
+ 	});
+-
+-	test('calls runFlow with reactive primaryKey', async () => {
+-		const mockFlowsStore = {
+-			getManualFlowsForCollection: vi.fn().mockReturnValue(mockFlows),
+-		};
+-
+-		const testOptions = {
+-			...useFlowsOptions,
+-			primaryKey: ref('item_1'),
+-			hasEdits: ref(false),
+-			location: 'item' as const,
+-		};
+-
+-		vi.mocked(useFlowsStore).mockReturnValue(mockFlowsStore as any);
+-
+-		vi.mocked(api.post).mockResolvedValue({});
+-
+-		const { runManualFlow } = useFlows(testOptions);
+-
+-		await runManualFlow(mockFlows[1]!.id);
+-
+-		expect(api.post).toHaveBeenCalledWith(`/flows/trigger/${mockFlows[1]!.id}`, {
+-			collection: 'test_collection',
+-			keys: ['item_1'],
+-		});
+-
+-		testOptions.primaryKey.value = 'item_2';
+-
+-		await runManualFlow(mockFlows[1]!.id);
+-
+-		expect(api.post).toHaveBeenCalledWith(`/flows/trigger/${mockFlows[1]!.id}`, {
+-			collection: 'test_collection',
+-			keys: ['item_2'],
+-		});
+-	});
+-});
++});
+\ No newline at end of file
+diff --git a/app/src/composables/use-flows.ts b/app/src/composables/use-flows.ts
+index 09428d2..2844833 100644
+--- a/app/src/composables/use-flows.ts
++++ b/app/src/composables/use-flows.ts
+@@ -1,5 +1,5 @@
+ import api from '@/api';
+-import { computed, ref, provide, inject, unref, type Ref } from 'vue';
++import { computed, ref, provide, inject, type Ref } from 'vue';
+ import { FlowRaw, Item, PrimaryKey } from '@directus/types';
+ import { notify } from '@/utils/notify';
+ import { translate } from '@/utils/translate-object-values';
+@@ -12,7 +12,7 @@ import formatTitle from '@directus/format-title';
+ 
+ interface UseFlowsOptions {
+ 	collection: Ref<string>;
+-	primaryKey?: Ref<PrimaryKey | null>;
++	primaryKey?: PrimaryKey | null;
+ 	selection?: Ref<Item[]>;
+ 	location: 'collection' | 'item';
+ 	hasEdits?: Ref<boolean>;
+@@ -150,7 +150,7 @@ export function useFlows(options: UseFlowsOptions) {
+ 
+ 		function checkFlowDisabled(manualFlow: FlowRaw) {
+ 			if (location === 'item' || manualFlow.options?.requireSelection === false) return false;
+-			return !unref(primaryKey) && selection.value.length === 0;
++			return !primaryKey && selection.value.length === 0;
+ 		}
+ 
+ 		return manualFlows;
+@@ -231,8 +231,7 @@ export function useFlows(options: UseFlowsOptions) {
+ 					collection: collection.value,
+ 				});
+ 			} else {
+-				const pk = unref(primaryKey);
+-				const keys = pk ? [pk] : selection.value || [];
++				const keys = primaryKey ? [primaryKey] : selection.value || [];
+ 
+ 				await api.post(`/flows/trigger/${flowId}`, {
+ 					...confirmValues.value,
+@@ -276,4 +275,4 @@ export function useInjectRunManualFlow() {
+ 		runningFlows: ref<string[]>([]),
+ 		isActiveFlow: (_flowId: string) => false,
+ 	});
+-}
++}
+\ No newline at end of file

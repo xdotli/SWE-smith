@@ -1,0 +1,37 @@
+{
+    "cost": 0.028675000000000003,
+    "rewrites": {
+        "directus__directus.447c91d0/packages/utils/shared/sieve-functions.test.ts": {
+            "output": "import { expect, test } from 'vitest';\nimport { sieveFunctions } from './sieve-functions.js';\n\ntest('sieve primitive types', () => {\n\texpect(sieveFunctions(1)).toEqual(1);\n\texpect(sieveFunctions('ABC')).toEqual('ABC');\n\texpect(sieveFunctions(false)).toEqual(false);\n\texpect(sieveFunctions(undefined)).toEqual(undefined);\n\texpect(sieveFunctions(null)).toEqual(null);\n});\n\ntest('sieve flat object', () => {\n\texpect(\n\t\tsieveFunctions({\n\t\t\tabc: 'abc',\n\t\t\t'123': 123,\n\t\t\ttrue: true,\n\t\t\tfn: () => 1,\n\t\t}),\n\t).toEqual({\n\t\tabc: 'abc',\n\t\t'123': 123,\n\t\ttrue: true,\n\t\tfn: undefined,\n\t});\n});\n\ntest('sieve nested object', () => {\n\texpect(\n\t\tsieveFunctions({\n\t\t\tdeep: {\n\t\t\t\tabc: 'abc',\n\t\t\t\tnestedFn: () => undefined,\n\t\t\t},\n\t\t\tfn: () => 1,\n\t\t}),\n\t).toEqual({\n\t\tdeep: {\n\t\t\tabc: 'abc',\n\t\t\tnestedFn: undefined,\n\t\t},\n\t\tfn: undefined,\n\t});\n});\n\ntest('sieve flat array', () => {\n\texpect(sieveFunctions([123, 'ABC', false, () => null])).toEqual([123, 'ABC', false, undefined]);\n});\n\ntest('sieve nested array', () => {\n\texpect(sieveFunctions([() => null, [123, 'ABC', () => 123, false]])).toEqual([\n\t\tundefined,\n\t\t[123, 'ABC', undefined, false],\n\t]);\n});\n\ntest('sieve date', () => {\n\texpect(sieveFunctions(new Date())).toEqual({});\n});",
+            "output_extracted": "import { expect, test } from 'vitest';\nimport { sieveFunctions } from './sieve-functions.js';\n\ntest('sieve primitive types', () => {\n\texpect(sieveFunctions(1)).toEqual(1);\n\texpect(sieveFunctions('ABC')).toEqual('ABC');\n\texpect(sieveFunctions(false)).toEqual(false);\n\texpect(sieveFunctions(undefined)).toEqual(undefined);\n\texpect(sieveFunctions(null)).toEqual(null);\n});\n\ntest('sieve flat object', () => {\n\texpect(\n\t\tsieveFunctions({\n\t\t\tabc: 'abc',\n\t\t\t'123': 123,\n\t\t\ttrue: true,\n\t\t\tfn: () => 1,\n\t\t}),\n\t).toEqual({\n\t\tabc: 'abc',\n\t\t'123': 123,\n\t\ttrue: true,\n\t\tfn: undefined,\n\t});\n});\n\ntest('sieve nested object', () => {\n\texpect(\n\t\tsieveFunctions({\n\t\t\tdeep: {\n\t\t\t\tabc: 'abc',\n\t\t\t\tnestedFn: () => undefined,\n\t\t\t},\n\t\t\tfn: () => 1,\n\t\t}),\n\t).toEqual({\n\t\tdeep: {\n\t\t\tabc: 'abc',\n\t\t\tnestedFn: undefined,\n\t\t},\n\t\tfn: undefined,\n\t});\n});\n\ntest('sieve flat array', () => {\n\texpect(sieveFunctions([123, 'ABC', false, () => null])).toEqual([123, 'ABC', false, undefined]);\n});\n\ntest('sieve nested array', () => {\n\texpect(sieveFunctions([() => null, [123, 'ABC', () => 123, false]])).toEqual([\n\t\tundefined,\n\t\t[123, 'ABC', undefined, false],\n\t]);\n});\n\ntest('sieve date', () => {\n\texpect(sieveFunctions(new Date())).toEqual({});\n});",
+            "cost": 0.02023
+        },
+        "directus__directus.447c91d0/packages/utils/shared/sieve-functions.ts": {
+            "output": "export function sieveFunctions(data: unknown): unknown {\n\tif (typeof data === 'function') {\n\t\treturn undefined;\n\t} else if (Array.isArray(data)) {\n\t\treturn data.map(sieveFunctions);\n\t} else if (typeof data === 'object' && data !== null) {\n\t\treturn Object.fromEntries(Object.entries(data).map(([key, value]) => [key, sieveFunctions(value)]));\n\t}\n\n\treturn data;\n}",
+            "output_extracted": "export function sieveFunctions(data: unknown): unknown {\n\tif (typeof data === 'function') {\n\t\treturn undefined;\n\t} else if (Array.isArray(data)) {\n\t\treturn data.map(sieveFunctions);\n\t} else if (typeof data === 'object' && data !== null) {\n\t\treturn Object.fromEntries(Object.entries(data).map(([key, value]) => [key, sieveFunctions(value)]));\n\t}\n\n\treturn data;\n}",
+            "cost": 0.008445000000000001
+        }
+    },
+    "recover_status": "success",
+    "instance_ref": {
+        "repo": "directus/directus",
+        "instance_id": "directus__directus.pr_mirror.26234",
+        "base_commit": "5b9c5809c77ad154774057d63857aa34afa8de6a",
+        "patch": "diff --git a/.changeset/petite-beds-rhyme.md b/.changeset/petite-beds-rhyme.md\nnew file mode 100644\nindex 0000000000000..7a8d2d0dbb3c5\n--- /dev/null\n+++ b/.changeset/petite-beds-rhyme.md\n@@ -0,0 +1,5 @@\n+---\n+'@directus/utils': patch\n+---\n+\n+Preserved Error when passed to run-script operation\ndiff --git a/packages/utils/shared/sieve-functions.test.ts b/packages/utils/shared/sieve-functions.test.ts\nindex a07e33d126886..b753cc335c36d 100644\n--- a/packages/utils/shared/sieve-functions.test.ts\n+++ b/packages/utils/shared/sieve-functions.test.ts\n@@ -57,3 +57,26 @@ test('sieve nested array', () => {\n test('sieve date', () => {\n \texpect(sieveFunctions(new Date())).toEqual({});\n });\n+\n+test('sieve error', () => {\n+\tconst error = new Error('Test error message');\n+\tconst sieved = sieveFunctions(error);\n+\n+\texpect(sieved).toBe(error);\n+});\n+\n+test('sieve nested error in object', () => {\n+\tconst error = new Error('Nested error');\n+\n+\tconst obj = {\n+\t\tstatus: 'failed',\n+\t\terror: error,\n+\t\tfn: () => {},\n+\t};\n+\n+\tconst sieved = sieveFunctions(obj) as any;\n+\n+\texpect(sieved).toHaveProperty('status', obj.status);\n+\texpect(sieved.error).toBe(error);\n+\texpect(sieved.fn).toBe(undefined);\n+});\ndiff --git a/packages/utils/shared/sieve-functions.ts b/packages/utils/shared/sieve-functions.ts\nindex 995acab5039ca..bbfee79155bf9 100644\n--- a/packages/utils/shared/sieve-functions.ts\n+++ b/packages/utils/shared/sieve-functions.ts\n@@ -3,6 +3,8 @@ export function sieveFunctions(data: unknown): unknown {\n \t\treturn undefined;\n \t} else if (Array.isArray(data)) {\n \t\treturn data.map(sieveFunctions);\n+\t} else if (data instanceof Error) {\n+\t\treturn data;\n \t} else if (typeof data === 'object' && data !== null) {\n \t\treturn Object.fromEntries(Object.entries(data).map(([key, value]) => [key, sieveFunctions(value)]));\n \t}\n",
+        "test_patch": "",
+        "problem_statement": "## Scope\r\n\r\nWhat's changed:\r\n\r\n- Fixed `sieveFunctions` to preserve non-enumerable Error object properties (name, message, stack)\r\n- Error objects in run-script operations now retain all standard and custom properties\r\n\r\n## Potential Risks / Drawbacks:\r\n\r\n- None expected - this is a bug fix restoring the behavior before #25106\r\n\r\n## Tested Scenarios\r\n\r\n- Standard Error objects with name, message, stack properties\r\n- Error objects with custom properties (code, status, extensions)\r\n- Nested Error objects within data structures\r\n- Functions are still properly removed from data\r\n\r\n## Checklist\r\n\r\n- [X] Added or updated tests\r\n- [ ] Documentation PR created [here](https://github.com/directus/docs) or not required\r\n- [ ] OpenAPI package PR created [here](https://github.com/directus/openapi) or not required\r\n\r\n---\r\n\r\nFixes #26207 \r\n",
+        "hints_text": "",
+        "created_at": "2025-11-20T19:07:25Z",
+        "pull_number": 26234,
+        "test_files": [
+            "packages/utils/shared/sieve-functions.test.ts"
+        ],
+        "code_files": [
+            "packages/utils/shared/sieve-functions.ts"
+        ],
+        "title": "Preserve Error when passed to run-script operation",
+        "additions": 0,
+        "deletions": 0,
+        "pr_mirror": "directus__directus.447c91d0"
+    }
+}

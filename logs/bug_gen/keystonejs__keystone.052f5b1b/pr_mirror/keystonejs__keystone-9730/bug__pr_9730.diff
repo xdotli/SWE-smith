@@ -1,0 +1,273 @@
+diff --git a/examples/actions/schema.ts b/examples/actions/schema.ts
+index 2ed99c523..ee46aaf15 100644
+--- a/examples/actions/schema.ts
++++ b/examples/actions/schema.ts
+@@ -37,7 +37,9 @@ export const lists = {
+     fields: {
+       title: text(),
+       content: text(),
+-      hidden: checkbox({
++      hidden: checkbox(),
++      votes: integer({ defaultValue: 0 }),
++      reportedAt: timestamp({
+         ui: {
+           itemView: {
+             fieldMode: ({ item, itemField }) => {
+@@ -49,8 +51,6 @@ export const lists = {
+           },
+         },
+       }),
+-      votes: integer({ defaultValue: 0, ...readOnly }),
+-      reportedAt: timestamp({ ...readOnly }),
+     },
+     actions: {
+       vote: {
+@@ -112,11 +112,11 @@ export const lists = {
+           messages: {
+             promptTitle: 'Report {singular}',
+             promptTitleMany: 'Report {count} {singular|plural}',
+-            prompt: 'Are you sure you want to report “{itemLabel}”?',
++            prompt: 'Are you sure you want to report "{itemLabel}"?',
+             promptMany: 'Are you sure you want to report {count} {singular|plural}?',
+             promptConfirmLabel: 'Yes, report',
+             promptConfirmLabelMany: 'Yes, report {count} {singular|plural}',
+-            fail: 'Could not report {singular} “{itemLabel}”',
++            fail: 'Could not report {singular} "{itemLabel}"',
+             failMany: 'Could not report {countFail} {singular|plural}',
+             success: '{Singular} reported',
+             successMany: 'Successfully reported {countSuccess} {singular|plural}',
+@@ -141,4 +141,4 @@ export const lists = {
+       },
+     },
+   }),
+-} satisfies Lists
++} satisfies Lists
+\ No newline at end of file
+diff --git a/packages/core/src/fields/types/checkbox/views/index.tsx b/packages/core/src/fields/types/checkbox/views/index.tsx
+index 7ccf76fba..b94b6a678 100644
+--- a/packages/core/src/fields/types/checkbox/views/index.tsx
++++ b/packages/core/src/fields/types/checkbox/views/index.tsx
+@@ -3,7 +3,6 @@ import { Icon } from '@keystar/ui/icon'
+ import { checkIcon } from '@keystar/ui/icon/icons/checkIcon'
+ import { Text, VisuallyHidden } from '@keystar/ui/typography'
+ 
+-import { entriesTyped } from '../../../../lib/core/utils'
+ import type {
+   CellComponent,
+   FieldController,
+@@ -11,6 +10,7 @@ import type {
+   FieldProps,
+   SimpleFieldTypeInfo,
+ } from '../../../../types'
++import { entriesTyped } from '../../../../lib/core/utils'
+ 
+ export function Field({ field, value, onChange, autoFocus }: FieldProps<typeof controller>) {
+   return (
+@@ -94,4 +94,4 @@ export function controller(
+       },
+     },
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/lib/admin-meta-graphql.ts b/packages/core/src/lib/admin-meta-graphql.ts
+index 1695ccb72..3d5b06f19 100644
+--- a/packages/core/src/lib/admin-meta-graphql.ts
++++ b/packages/core/src/lib/admin-meta-graphql.ts
+@@ -86,7 +86,7 @@ const KeystoneAdminUIFieldMeta = g.object<FieldMetaSource>()({
+           }),
+           isRequired: g.field({
+             type: g.nonNull(g.JSON),
+-            resolve({ listKey, fieldKey, itemView, item, itemField }, _, context) {
++            resolve({ item, fieldKey, itemView, itemField, listKey }, _, context) {
+               const { isRequired } = itemView
+               if (typeof isRequired !== 'function') return isRequired
+               return isRequired({
+@@ -316,12 +316,7 @@ const KeystoneAdminUIListMeta = g.object<ListMetaSource>()({
+     path: g.field({ type: g.nonNull(g.String) }),
+ 
+     labelField: g.field({ type: g.nonNull(g.String) }),
+-    fields: g.field({
+-      resolve: ({ fields, item }) => {
+-        return fields.map(f => ({ ...f, item, itemField: item?.[f.key] ?? null }))
+-      },
+-      type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldMeta))),
+-    }),
++    fields: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldMeta))) }),
+     groups: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldGroupMeta))) }),
+     actions: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIActionMeta))) }),
+     graphql: g.field({ type: g.nonNull(KeystoneAdminUIGraphQL) }),
+@@ -357,14 +352,8 @@ const adminMeta = g.object<AdminMetaSource>()({
+             item: null,
+           }
+         }
+-        // WARNING: do not use sudo
+         const item = await context.db[key].findOne({ where: { id: itemId } })
+-        if (!item) {
+-          return {
+-            ...source.listsByKey[key],
+-            item: null,
+-          }
+-        }
++        if (!item) return null
+         return {
+           ...source.listsByKey[key],
+           item,
+@@ -390,4 +379,4 @@ export const KeystoneMeta = g.object<{ adminMeta: AdminMetaSource }>()({
+       },
+     }),
+   },
+-})
++})
+\ No newline at end of file
+diff --git a/tests2/omit.test.ts b/tests2/omit.test.ts
+index c5a21fcb7..ab61d8b01 100644
+--- a/tests2/omit.test.ts
++++ b/tests2/omit.test.ts
+@@ -73,13 +73,13 @@ const fieldsMatrix = [
+ 
+ function makeList({
+   fields,
+-  defaultIsFilterable,
+-  defaultIsOrderable,
++  isFilterable,
++  isOrderable,
+   omit,
+ }: {
+   fields: typeof fieldsMatrix
+-  defaultIsFilterable: boolean
+-  defaultIsOrderable: boolean
++  isFilterable: boolean
++  isOrderable: boolean
+   omit:
+     | boolean
+     | {
+@@ -89,22 +89,21 @@ function makeList({
+         delete: boolean
+       }
+ }) {
+-  const prefix =
+-    `List${fields.length}_Filt${yn(defaultIsFilterable)}_Ord${yn(defaultIsOrderable)}` as const
+-  const name__ = `${prefix}_Omit${
++  const prefix = `List${fields.length}_Filt${yn(isFilterable)}_Ord${yn(isOrderable)}` as const
++  const __name = `${prefix}_Omit${
+     typeof omit !== 'object'
+       ? yn(omit)
+       : [omit.query, omit.create, omit.update, omit.delete].map(yn).join('')
+   }`
+ 
+   return {
+-    name__,
++    __name,
+     access: allowAll,
+     fields: Object.fromEntries(fields),
+-    defaultIsFilterable,
+-    defaultIsOrderable,
++    defaultIsFilterable: isFilterable,
++    defaultIsOrderable: isOrderable,
+     graphql: {
+-      plural: name__ + 's',
++      plural: __name + 's',
+       omit,
+     },
+   } as const
+@@ -112,15 +111,10 @@ function makeList({
+ 
+ const listsMatrix = [
+   ...(function* () {
+-    for (const defaultIsFilterable of [false, true]) {
+-      for (const defaultIsOrderable of [false, true]) {
++    for (const isFilterable of [false, true]) {
++      for (const isOrderable of [false, true]) {
+         for (const omit of [false, true]) {
+-          yield makeList({
+-            fields: fieldsMatrix,
+-            defaultIsFilterable,
+-            defaultIsOrderable,
+-            omit,
+-          })
++          yield makeList({ fields: fieldsMatrix, isFilterable, isOrderable, omit })
+         }
+ 
+         for (const query of [false, true]) {
+@@ -129,8 +123,8 @@ const listsMatrix = [
+               for (const delete_ of [false, true]) {
+                 yield makeList({
+                   fields: fieldsMatrix,
+-                  defaultIsFilterable,
+-                  defaultIsOrderable,
++                  isFilterable,
++                  isOrderable,
+                   omit: {
+                     query,
+                     create,
+@@ -141,8 +135,8 @@ const listsMatrix = [
+ 
+                 yield makeList({
+                   fields: [],
+-                  defaultIsFilterable,
+-                  defaultIsOrderable,
++                  isFilterable,
++                  isOrderable,
+                   omit: {
+                     query,
+                     create,
+@@ -162,24 +156,24 @@ const listsMatrix = [
+ // TODO: FIXME: skip for now, MySQL has a limit on the number of indexes
+ if (dbProvider !== 'mysql') {
+   listsMatrix.push({
+-    name__: 'RelatedToAll',
++    __name: 'RelatedToAll',
+     access: allowAll,
+     fields: Object.fromEntries(
+       (function* () {
+         for (const l of listsMatrix) {
+           // WARNING: if names exceed some length, expect duplicate _AB_unique index errors
+           yield [
+-            `R${l.name__}_one`,
++            `R${l.__name}_one`,
+             relationship({
+-              ref: l.name__,
++              ref: l.__name,
+               many: false,
+             }),
+           ] as const
+ 
+           yield [
+-            `R${l.name__}_many`,
++            `R${l.__name}_many`,
+             relationship({
+-              ref: l.name__,
++              ref: l.__name,
+               many: true,
+             }),
+           ] as const
+@@ -340,18 +334,15 @@ describe(`Omit (${dbProvider})`, () => {
+ 
+   const suite = setupTestSuite({
+     config: {
+-      lists: Object.fromEntries(listsMatrix.map(({ name__: __name, ...l }) => [__name, list(l)])),
++      lists: Object.fromEntries(listsMatrix.map(({ __name, ...l }) => [__name, list(l)])),
+     },
+   })
+ 
+   const data = suite().then(async ({ context }) => await introspectSchema(context))
+-  const dataInternal = suite().then(
+-    async ({ context }) => await introspectSchema(context.internal())
+-  )
+-  const dataSudo = suite().then(async ({ context }) => await introspectSchema(context.sudo()))
++  const sudoData = suite().then(async ({ context }) => await introspectSchema(context.sudo()))
+ 
+   for (const l of listsMatrix) {
+-    const listName = l.name__
++    const listName = l.__name
+     const omit = l.graphql.omit
+ 
+     // common context is configurable
+@@ -404,4 +395,4 @@ describe(`Omit (${dbProvider})`, () => {
+       })
+     })
+   }
+-})
++})
+\ No newline at end of file

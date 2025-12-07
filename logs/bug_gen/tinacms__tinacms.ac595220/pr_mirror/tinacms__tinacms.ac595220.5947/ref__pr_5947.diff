@@ -1,0 +1,145 @@
+diff --git a/.changeset/old-brooms-lie.md b/.changeset/old-brooms-lie.md
+new file mode 100644
+index 0000000000..cb0cda9766
+--- /dev/null
++++ b/.changeset/old-brooms-lie.md
+@@ -0,0 +1,5 @@
++---
++"tinacms": patch
++---
++
++Sidebar - updated tooltips, show editing panel is now orange for visibility/branding
+diff --git a/packages/tinacms/src/toolkit/components/tina-ui.test.tsx b/packages/tinacms/src/toolkit/components/tina-ui.test.tsx
+index 25044fe201..39892e28b5 100644
+--- a/packages/tinacms/src/toolkit/components/tina-ui.test.tsx
++++ b/packages/tinacms/src/toolkit/components/tina-ui.test.tsx
+@@ -36,7 +36,7 @@ describe('TinaUI', () => {
+           </TinaCMSProvider>
+         );
+ 
+-        app.getByLabelText('opens cms sidebar');
++        app.getByLabelText('Show editing panel');
+       });
+     });
+     describe('when sidebar is false', () => {
+@@ -63,7 +63,7 @@ describe('TinaUI', () => {
+           </TinaCMSProvider>
+         );
+ 
+-        const sidebarButton = app.queryByLabelText('opens cms sidebar');
++        const sidebarButton = app.queryByLabelText('Show editing panel');
+         expect(sidebarButton).toBeNull();
+       });
+     });
+@@ -93,7 +93,7 @@ describe('TinaUI', () => {
+           </TinaCMSProvider>
+         );
+ 
+-        const sidebarButton = app.queryByLabelText('opens cms sidebar');
++        const sidebarButton = app.queryByLabelText('Show editing panel');
+         expect(sidebarButton).toBeNull();
+       });
+       it('does not remount children when cms is toggled', () => {
+@@ -151,7 +151,7 @@ describe('TinaUI', () => {
+           </TinaCMSProvider>
+         );
+ 
+-        const sidebarButton = app.queryByLabelText('opens cms sidebar');
++        const sidebarButton = app.queryByLabelText('Show editing panel');
+         expect(sidebarButton).toBeNull();
+       });
+     });
+diff --git a/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx b/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx
+index beb1fea34e..e3d4eaac4b 100644
+--- a/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx
++++ b/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx
+@@ -243,10 +243,7 @@ const Sidebar = ({
+         <SidebarWrapper>
+           <EditButton />
+           <SidebarBody>
+-            <SidebarHeader
+-              isLocalMode={cms.api?.tina?.isLocalMode}
+-              branchingEnabled={branchingEnabled}
+-            />
++            <SidebarHeader isLocalMode={cms.api?.tina?.isLocalMode} />
+             <FormsView loadingPlaceholder={sidebar.loadingPlaceholder} />
+             {activeScreen && (
+               <ScreenPluginModal
+@@ -365,7 +362,7 @@ const updateBodyDisplacement = ({
+   }
+ };
+ 
+-const SidebarHeader = ({ branchingEnabled, isLocalMode }) => {
++const SidebarHeader = ({ isLocalMode }) => {
+   const { toggleSidebarOpen, toggleMenu } = React.useContext(SidebarContext);
+ 
+   return (
+@@ -395,10 +392,11 @@ const SidebarHeader = ({ branchingEnabled, isLocalMode }) => {
+             <BranchPreviewButton />
+ 
+             <button
++              type='button'
+               className='p-2 hover:bg-gray-100 transition-colors duration-150 ease-in-out rounded'
+               onClick={toggleSidebarOpen}
+-              title='Close sidebar'
+-              aria-label='Close sidebar'
++              title='Hide editing panel'
++              aria-label='Hide editing panel'
+             >
+               <PiSidebarSimpleLight className='h-6 w-auto text-gray-600' />
+             </button>
+@@ -486,7 +484,7 @@ const EditButton = ({}) => {
+   return (
+     <Button
+       rounded='right'
+-      variant='secondary'
++      variant='accent'
+       size='custom'
+       onClick={toggleSidebarOpen}
+       className={`z-chrome absolute top-6 right-0 translate-x-full text-sm h-10 px-3 transition-all duration-300 ${
+@@ -494,7 +492,8 @@ const EditButton = ({}) => {
+           ? 'opacity-0 ease-in pointer-events-none'
+           : 'ease-out pointer-events-auto'
+       }`}
+-      aria-label='opens cms sidebar'
++      title='Show editing panel'
++      aria-label='Show editing panel'
+     >
+       <PiSidebarSimpleLight className='h-6 w-auto' />
+     </Button>
+diff --git a/packages/tinacms/src/toolkit/styles/button.tsx b/packages/tinacms/src/toolkit/styles/button.tsx
+index c73326c418..a5f0f8b56f 100644
+--- a/packages/tinacms/src/toolkit/styles/button.tsx
++++ b/packages/tinacms/src/toolkit/styles/button.tsx
+@@ -3,7 +3,14 @@ import { cn } from '../../lib/utils';
+ 
+ export interface ButtonProps
+   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+-  variant?: 'primary' | 'secondary' | 'white' | 'ghost' | 'danger' | 'custom';
++  variant?:
++    | 'primary'
++    | 'secondary'
++    | 'white'
++    | 'ghost'
++    | 'danger'
++    | 'accent'
++    | 'custom';
+   as?: React.ElementType;
+   href?: string;
+   target?: string;
+@@ -34,6 +41,7 @@ export const Button = ({
+     white: `shadow text-gray-500 hover:text-blue-500 bg-white hover:bg-gray-50 border border-gray-100`,
+     ghost: `text-gray-500 hover:text-blue-500 hover:shadow border border-transparent border-0 hover:border hover:border-gray-200 bg-transparent`,
+     danger: `shadow text-white bg-red-500 hover:bg-red-600 focus:ring-red-500`,
++    accent: `shadow text-white bg-orange-500 hover:bg-orange-600 focus:ring-orange-500`,
+     custom: '',
+   };
+   const state = busy ? `busy` : disabled ? `disabled` : `default`;
+@@ -88,6 +96,7 @@ export const IconButton = ({
+     secondary: `shadow text-gray-500 hover:text-blue-500 bg-gray-50 hover:bg-white border border-gray-200`,
+     white: `shadow text-gray-500 hover:text-blue-500 bg-white hover:bg-gray-50 border border-gray-200`,
+     ghost: `text-gray-500 hover:text-blue-500 hover:shadow border border-transparent hover:border-gray-200 bg-transparent`,
++    accent: `shadow text-white bg-orange-500 hover:bg-orange-600 focus:ring-orange-500`,
+   };
+   const state = busy ? `busy` : disabled ? `disabled` : `default`;
+   const stateClasses = {

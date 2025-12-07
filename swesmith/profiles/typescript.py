@@ -471,6 +471,134 @@ RUN pnpm install
         return parse_log_jest(log)
 
 
+@dataclass
+class TinacmsTinacmsAc595220(TypeScriptProfile):
+    """TinaCMS - Git-backed CMS with 141+ Vitest tests."""
+    owner: str = "tinacms"
+    repo: str = "tinacms"
+    commit: str = "ac595220"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_vitest(log)
+
+
+@dataclass
+class SanityIoSanity615e6c01(TypeScriptProfile):
+    """Sanity - Content platform with GROQ query tests (447+ Vitest + Playwright tests)."""
+    owner: str = "sanity-io"
+    repo: str = "sanity"
+    commit: str = "615e6c01"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800  # 30 min for comprehensive test suite
+    timeout_ref: int = 3600  # 1 hour for full suite
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_vitest(log)
+
+
+@dataclass
+class KeystonejsKeystone052f5b1b(TypeScriptProfile):
+    """Keystone - Headless CMS with document editor and 142+ Vitest tests."""
+    owner: str = "keystonejs"
+    repo: str = "keystone"
+    commit: str = "052f5b1bfdc76868125722ea385c59ffae7eb000"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test"
+    timeout: int = 1800
+    timeout_ref: int = 3600
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_vitest(log)
+
+
+@dataclass
+class TriggerdotdevTriggerd1c3bfb9(TypeScriptProfile):
+    """Trigger.dev - Background jobs platform with comprehensive Vitest tests."""
+    owner: str = "triggerdotdev"
+    repo: str = "trigger.dev"
+    commit: str = "d1c3bfb9c98a94269654550de65c809012dc2001"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm test -- --run"
+    timeout: int = 1800  # 30 min for monorepo tests
+    timeout_ref: int = 3600  # 1 hour for full suite
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm turbo
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout {self.commit}
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_vitest(log)
+
+
+@dataclass
+class DirectusDirectus447c91d0(TypeScriptProfile):
+    """Directus - Headless CMS with 582+ Vitest tests for API logic."""
+    owner: str = "directus"
+    repo: str = "directus"
+    commit: str = "447c91d0"
+    test_cmd: str = "NODE_OPTIONS='--max-old-space-size=8192' pnpm --recursive --filter '!tests-blackbox' test"
+    timeout: int = 1800  # 30 min for comprehensive test suite
+    timeout_ref: int = 3600  # 1 hour for full suite
+
+    @property
+    def dockerfile(self):
+        return f"""FROM node:20-bullseye
+RUN apt update && apt install -y git
+RUN npm install -g pnpm
+RUN git clone https://github.com/{self.mirror_name} /testbed
+WORKDIR /testbed
+RUN git checkout main
+ENV NODE_OPTIONS="--max-old-space-size=8192"
+RUN pnpm install
+"""
+
+    def log_parser(self, log: str):
+        return parse_log_vitest(log)
+
+
 # Register all TypeScript profiles with the global registry
 from swesmith.profiles.base import registry
 

@@ -1,0 +1,117 @@
+diff --git a/packages/core/src/fields/types/relationship/views/useApolloQuery.ts b/packages/core/src/fields/types/relationship/views/useApolloQuery.ts
+index 5cf30b1c1..eafa69fbf 100644
+--- a/packages/core/src/fields/types/relationship/views/useApolloQuery.ts
++++ b/packages/core/src/fields/types/relationship/views/useApolloQuery.ts
+@@ -1,5 +1,4 @@
+ import { useEffect, useMemo, useState } from 'react'
+-import isDeepEqual from 'fast-deep-equal'
+ 
+ import type { ListMeta, ListSortDescriptor } from '../../../../types'
+ import {
+@@ -64,11 +63,14 @@ export function useApolloQuery(args: {
+   const manipulatedSearch =
+     state.kind === 'one' && state.value?.label === debouncedSearch ? '' : debouncedSearch
+ 
+-  const searchFilter = useSearchFilter(manipulatedSearch, list, searchFields)
++  // TODO: rewrite
+   const _where = {
+-    OR: searchFilter,
++    OR: useSearchFilter(manipulatedSearch, list, searchFields),
+   }
+-  const where = args.filter ? { AND: [_where, args.filter] } : _where
++  // memo is used for referential stability, not for performance
++  const where = useMemo(() => {
++    return args.filter ? { AND: [_where, args.filter] } : _where
++  }, [args.filter, _where])
+ 
+   const orderBy = useMemo(() => {
+     return args.sort ? { [args.sort.field]: args.sort.direction.toLowerCase() } : undefined
+@@ -127,7 +129,7 @@ export function useApolloQuery(args: {
+       !loading &&
+       skip &&
+       data.items.length < count &&
+-      (!isDeepEqual(lastFetchMore?.where, where) ||
++      (lastFetchMore?.where !== where ||
+         lastFetchMore?.list !== list ||
+         lastFetchMore?.skip !== skip)
+     ) {
+@@ -182,4 +184,4 @@ function getLoadingState(options: { loading: boolean; search: string }): Loading
+   return 'idle'
+ }
+ 
+-type LoadingState = 'loading' | 'sorting' | 'loadingMore' | 'error' | 'idle' | 'filtering'
++type LoadingState = 'loading' | 'sorting' | 'loadingMore' | 'error' | 'idle' | 'filtering'
+\ No newline at end of file
+diff --git a/tests/admin-ui-tests/relations.test.ts b/tests/admin-ui-tests/relations.test.ts
+index 3a3690868..00040e8ba 100644
+--- a/tests/admin-ui-tests/relations.test.ts
++++ b/tests/admin-ui-tests/relations.test.ts
+@@ -1,6 +1,6 @@
+ import type { Browser, Page } from 'playwright'
+ import { expect } from 'playwright/test'
+-import { adminUITests, callGraphQL } from './utils'
++import { adminUITests } from './utils'
+ 
+ const gql = ([str]: TemplateStringsArray) => str
+ 
+@@ -79,33 +79,7 @@ adminUITests('./tests/test-projects/basic', browserType => {
+     await expect(page.getByText('A task')).toBeHidden()
+   })
+ 
+-  test("the combobox having to paginate doesn't break the page", async () => {
+-    await callGraphQL(
+-      gql`
+-        mutation ($data: [PersonCreateInput!]!) {
+-          createPeople(data: $data) {
+-            id
+-          }
+-        }
+-      `,
+-      {
+-        data: [
+-          { name: 'User to pick' },
+-          ...Array.from({ length: 100 }, (_, i) => ({ name: `User ${i}` })),
+-        ],
+-      }
+-    )
+-
+-    await page.goto(`http://localhost:3000/tasks/create`)
+-    await page.getByRole('textbox', { name: 'Label' }).fill('some task')
+-    await page.getByRole('combobox', { name: 'Assigned To' }).click()
+-    await page.getByRole('button', { name: 'Show suggestions Assigned To' }).click()
+-    await page.getByText('User to pick').click()
+-    await page.getByRole('button', { name: 'Create' }).click()
+-    await expect(page.getByText('Task created')).toBeVisible()
+-  })
+-
+   afterAll(async () => {
+     await browser.close()
+   })
+-})
++})
+\ No newline at end of file
+diff --git a/tests/admin-ui-tests/utils.ts b/tests/admin-ui-tests/utils.ts
+index d74d8c7dd..dd78749ea 100644
+--- a/tests/admin-ui-tests/utils.ts
++++ b/tests/admin-ui-tests/utils.ts
+@@ -160,18 +160,4 @@ export async function spawnCommand3(cwd: string, commands: string[], waitOn: str
+     },
+     exited: exitPromise,
+   }
+-}
+-
+-// TODO: use elsewhere in tests
+-export async function callGraphQL(query: string, variables?: Record<string, any>) {
+-  const result = await fetch('http://localhost:3000/api/graphql', {
+-    method: 'POST',
+-    headers: { 'Content-Type': 'application/json' },
+-    body: JSON.stringify({
+-      query,
+-      variables,
+-    }),
+-  }).then(res => res.json())
+-  expect(result.errors).toBeUndefined()
+-  return result.data
+-}
++}
+\ No newline at end of file

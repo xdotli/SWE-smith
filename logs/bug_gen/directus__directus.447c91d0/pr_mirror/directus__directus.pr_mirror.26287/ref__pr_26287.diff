@@ -1,0 +1,129 @@
+diff --git a/.changeset/stale-onions-attend.md b/.changeset/stale-onions-attend.md
+new file mode 100644
+index 0000000000000..52af1e2e93ebc
+--- /dev/null
++++ b/.changeset/stale-onions-attend.md
+@@ -0,0 +1,5 @@
++---
++'@directus/app': patch
++---
++
++Added reactive primaryKey prop to useFlows composable
+diff --git a/app/src/composables/use-flows.test.ts b/app/src/composables/use-flows.test.ts
+index dea978def3f68..86531596b851e 100644
+--- a/app/src/composables/use-flows.test.ts
++++ b/app/src/composables/use-flows.test.ts
+@@ -65,7 +65,7 @@ const mockOnRefresh = vi.fn();
+ 
+ const useFlowsOptions = {
+ 	collection: ref('test_collection'),
+-	primaryKey: 'item_1',
++	primaryKey: ref('item_1'),
+ 	location: 'collection' as const,
+ 	hasEdits: ref(true),
+ 	onRefreshCallback: mockOnRefresh,
+@@ -398,4 +398,39 @@ describe('runManualFlow', () => {
+ 
+ 		expect(mockOnRefresh).toHaveBeenCalledOnce();
+ 	});
++
++	test('calls runFlow with reactive primaryKey', async () => {
++		const mockFlowsStore = {
++			getManualFlowsForCollection: vi.fn().mockReturnValue(mockFlows),
++		};
++
++		const testOptions = {
++			...useFlowsOptions,
++			primaryKey: ref('item_1'),
++			hasEdits: ref(false),
++			location: 'item' as const,
++		};
++
++		vi.mocked(useFlowsStore).mockReturnValue(mockFlowsStore as any);
++
++		vi.mocked(api.post).mockResolvedValue({});
++
++		const { runManualFlow } = useFlows(testOptions);
++
++		await runManualFlow(mockFlows[1]!.id);
++
++		expect(api.post).toHaveBeenCalledWith(`/flows/trigger/${mockFlows[1]!.id}`, {
++			collection: 'test_collection',
++			keys: ['item_1'],
++		});
++
++		testOptions.primaryKey.value = 'item_2';
++
++		await runManualFlow(mockFlows[1]!.id);
++
++		expect(api.post).toHaveBeenCalledWith(`/flows/trigger/${mockFlows[1]!.id}`, {
++			collection: 'test_collection',
++			keys: ['item_2'],
++		});
++	});
+ });
+diff --git a/app/src/composables/use-flows.ts b/app/src/composables/use-flows.ts
+index 5db04b47c5a25..09428d2fea657 100644
+--- a/app/src/composables/use-flows.ts
++++ b/app/src/composables/use-flows.ts
+@@ -1,5 +1,5 @@
+ import api from '@/api';
+-import { computed, ref, provide, inject, type Ref } from 'vue';
++import { computed, ref, provide, inject, unref, type Ref } from 'vue';
+ import { FlowRaw, Item, PrimaryKey } from '@directus/types';
+ import { notify } from '@/utils/notify';
+ import { translate } from '@/utils/translate-object-values';
+@@ -12,7 +12,7 @@ import formatTitle from '@directus/format-title';
+ 
+ interface UseFlowsOptions {
+ 	collection: Ref<string>;
+-	primaryKey?: PrimaryKey | null;
++	primaryKey?: Ref<PrimaryKey | null>;
+ 	selection?: Ref<Item[]>;
+ 	location: 'collection' | 'item';
+ 	hasEdits?: Ref<boolean>;
+@@ -150,7 +150,7 @@ export function useFlows(options: UseFlowsOptions) {
+ 
+ 		function checkFlowDisabled(manualFlow: FlowRaw) {
+ 			if (location === 'item' || manualFlow.options?.requireSelection === false) return false;
+-			return !primaryKey && selection.value.length === 0;
++			return !unref(primaryKey) && selection.value.length === 0;
+ 		}
+ 
+ 		return manualFlows;
+@@ -231,7 +231,8 @@ export function useFlows(options: UseFlowsOptions) {
+ 					collection: collection.value,
+ 				});
+ 			} else {
+-				const keys = primaryKey ? [primaryKey] : selection.value || [];
++				const pk = unref(primaryKey);
++				const keys = pk ? [pk] : selection.value || [];
+ 
+ 				await api.post(`/flows/trigger/${flowId}`, {
+ 					...confirmValues.value,
+diff --git a/app/src/modules/content/routes/item.vue b/app/src/modules/content/routes/item.vue
+index e2805771de963..cbed86fcc16ae 100644
+--- a/app/src/modules/content/routes/item.vue
++++ b/app/src/modules/content/routes/item.vue
+@@ -304,7 +304,7 @@ watch(
+ 
+ const { flowDialogsContext, manualFlows, provideRunManualFlow } = useFlows({
+ 	collection,
+-	primaryKey: actualPrimaryKey.value,
++	primaryKey: actualPrimaryKey,
+ 	location: 'item',
+ 	hasEdits,
+ 	onRefreshCallback: refresh,
+diff --git a/app/src/views/private/components/overlay-item.vue b/app/src/views/private/components/overlay-item.vue
+index 0f16dc55e6290..5afae6a4c3a4d 100644
+--- a/app/src/views/private/components/overlay-item.vue
++++ b/app/src/views/private/components/overlay-item.vue
+@@ -244,7 +244,7 @@ const overlayItemContentProps = computed(() => {
+ 
+ const { provideRunManualFlow } = useFlows({
+ 	collection,
+-	primaryKey: primaryKey.value,
++	primaryKey: primaryKey,
+ 	location: 'item',
+ 	hasEdits,
+ 	onRefreshCallback: refresh,

@@ -1,0 +1,1910 @@
+diff --git a/apps/webapp/app/services/realtime/redisRealtimeStreams.server.ts b/apps/webapp/app/services/realtime/redisRealtimeStreams.server.ts
+index 25fb2d0..45d80c1 100644
+--- a/apps/webapp/app/services/realtime/redisRealtimeStreams.server.ts
++++ b/apps/webapp/app/services/realtime/redisRealtimeStreams.server.ts
+@@ -204,52 +204,20 @@ export class RedisRealtimeStreams implements StreamIngestor, StreamResponder {
+       },
+     })
+       .pipeThrough(
+-        // Transform 1: Buffer partial lines across Redis entries
+-        (() => {
+-          let buffer = "";
+-          let lastRedisId = "0";
+-
+-          return new TransformStream<StreamChunk, StreamChunk & { line: string }>({
+-            transform(chunk, controller) {
+-              if (chunk.type === "ping") {
+-                controller.enqueue(chunk as any);
+-              } else if (chunk.type === "data" || chunk.type === "legacy-data") {
+-                // Buffer partial lines: accumulate until we see newlines
+-                buffer += chunk.data;
+-
+-                // Split on newlines
+-                const lines = buffer.split("\n");
+-
+-                // The last element might be incomplete, hold it back in buffer
+-                buffer = lines.pop() || "";
+-
+-                // Emit complete lines with the Redis ID of the chunk that completed them
+-                for (const line of lines) {
+-                  if (line.trim().length > 0) {
+-                    controller.enqueue({
+-                      ...chunk,
+-                      line,
+-                    });
+-                  }
+-                }
+-
+-                // Update last Redis ID for next iteration
+-                lastRedisId = chunk.redisId;
+-              }
+-            },
+-            flush(controller) {
+-              // On stream end, emit any leftover buffered text
+-              if (buffer.trim().length > 0) {
+-                controller.enqueue({
+-                  type: "data",
+-                  redisId: lastRedisId,
+-                  data: "",
+-                  line: buffer.trim(),
+-                });
++        // Transform 1: Split data content by newlines, preserving metadata
++        new TransformStream<StreamChunk, StreamChunk & { line?: string }>({
++          transform(chunk, controller) {
++            if (chunk.type === "ping") {
++              controller.enqueue(chunk);
++            } else if (chunk.type === "data" || chunk.type === "legacy-data") {
++              // Split data by newlines, emit separate chunks with same metadata
++              const lines = chunk.data.split("\n").filter((line) => line.trim().length > 0);
++              for (const line of lines) {
++                controller.enqueue({ ...chunk, line });
+               }
+-            },
+-          });
+-        })()
++            }
++          },
++        })
+       )
+       .pipeThrough(
+         // Transform 2: Format as SSE
+@@ -466,4 +434,4 @@ export class RedisRealtimeStreams implements StreamIngestor, StreamResponder {
+       });
+     }
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/apps/webapp/test/redisRealtimeStreams.test.ts b/apps/webapp/test/redisRealtimeStreams.test.ts
+index 0511754..27a70f8 100644
+--- a/apps/webapp/test/redisRealtimeStreams.test.ts
++++ b/apps/webapp/test/redisRealtimeStreams.test.ts
+@@ -445,1080 +445,4 @@ describe("RedisRealtimeStreams", () => {
+       const mockRequest = new Request("http://localhost/test");
+       const abortController = new AbortController();
+ 
+-      const response = await redisRealtimeStreams.streamResponse(
+-        mockRequest,
+-        runId,
+-        streamId,
+-        abortController.signal
+-      );
+-
+-      expect(response.status).toBe(200);
+-
+-      // Read the stream
+-      const reader = response.body!.getReader();
+-      const decoder = new TextDecoder();
+-      const receivedData: string[] = [];
+-
+-      let done = false;
+-      while (!done && receivedData.length < 2) {
+-        const { value, done: streamDone } = await reader.read();
+-        done = streamDone;
+-
+-        if (value) {
+-          const text = decoder.decode(value);
+-          const events = text.split("\n\n").filter((event) => event.trim());
+-          for (const event of events) {
+-            const lines = event.split("\n");
+-            for (const line of lines) {
+-              if (line.startsWith("data: ")) {
+-                const data = line.substring(6).trim();
+-                if (data) {
+-                  receivedData.push(data);
+-                }
+-              }
+-            }
+-          }
+-        }
+-      }
+-
+-      // Cancel the stream
+-      abortController.abort();
+-      reader.releaseLock();
+-
+-      // Verify we received both legacy chunks
+-      expect(receivedData.length).toBe(2);
+-      expect(receivedData[0]).toBe("legacy chunk 1");
+-      expect(receivedData[1]).toBe("legacy chunk 2");
+-
+-      // getLastChunkIndex should return -1 for legacy format (no chunkIndex field)
+-      const lastChunkIndex = await redisRealtimeStreams.getLastChunkIndex(
+-        runId,
+-        streamId,
+-        "default"
+-      );
+-      expect(lastChunkIndex).toBe(-1);
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should handle concurrent ingestion to the same stream",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_concurrent_test";
+-      const streamId = "concurrent-stream";
+-
+-      // Create two sets of chunks that will be ingested concurrently
+-      const chunks1 = [
+-        JSON.stringify({ source: "A", chunk: 0, data: "A-chunk 0" }),
+-        JSON.stringify({ source: "A", chunk: 1, data: "A-chunk 1" }),
+-        JSON.stringify({ source: "A", chunk: 2, data: "A-chunk 2" }),
+-      ];
+-
+-      const chunks2 = [
+-        JSON.stringify({ source: "B", chunk: 0, data: "B-chunk 0" }),
+-        JSON.stringify({ source: "B", chunk: 1, data: "B-chunk 1" }),
+-        JSON.stringify({ source: "B", chunk: 2, data: "B-chunk 2" }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-
+-      // Create two streams
+-      const stream1 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of chunks1) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      const stream2 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of chunks2) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      // Ingest both streams concurrently - both starting from chunk 0
+-      // Note: Using the same clientId will cause duplicate chunk indices (not recommended in practice)
+-      const [response1, response2] = await Promise.all([
+-        redisRealtimeStreams.ingestData(stream1, runId, streamId, "default", 0),
+-        redisRealtimeStreams.ingestData(stream2, runId, streamId, "default", 0),
+-      ]);
+-
+-      expect(response1.status).toBe(200);
+-      expect(response2.status).toBe(200);
+-
+-      // Verify both sets of chunks were stored
+-      const streamKey = `stream:${runId}:${streamId}`;
+-      const entries = await redis.xrange(streamKey, "-", "+");
+-
+-      // Should have 6 total chunks (3 from each stream)
+-      expect(entries.length).toBe(6);
+-
+-      // Verify we have chunks from both sources (though order may be interleaved)
+-      const sourceACounts = entries.filter(([_id, fields]) => {
+-        for (let j = 0; j < fields.length; j += 2) {
+-          if (fields[j] === "data" && fields[j + 1].includes('"source":"A"')) {
+-            return true;
+-          }
+-        }
+-        return false;
+-      });
+-
+-      const sourceBCounts = entries.filter(([_id, fields]) => {
+-        for (let j = 0; j < fields.length; j += 2) {
+-          if (fields[j] === "data" && fields[j + 1].includes('"source":"B"')) {
+-            return true;
+-          }
+-        }
+-        return false;
+-      });
+-
+-      expect(sourceACounts.length).toBe(3);
+-      expect(sourceBCounts.length).toBe(3);
+-
+-      // Note: Both streams write chunks 0, 1, 2, so we'll have duplicate indices
+-      // This is expected behavior - the last-write-wins with Redis XADD
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should handle concurrent ingestion with different clients and resume points",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_concurrent_resume_test";
+-      const streamId = "concurrent-resume-stream";
+-
+-      // Client A writes initial chunks 0-2
+-      const clientAInitial = [
+-        JSON.stringify({ client: "A", phase: "initial", chunk: 0 }),
+-        JSON.stringify({ client: "A", phase: "initial", chunk: 1 }),
+-        JSON.stringify({ client: "A", phase: "initial", chunk: 2 }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const streamA1 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAInitial) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamA1, runId, streamId, "client-A", 0);
+-
+-      // Client B writes initial chunks 0-1
+-      const clientBInitial = [
+-        JSON.stringify({ client: "B", phase: "initial", chunk: 0 }),
+-        JSON.stringify({ client: "B", phase: "initial", chunk: 1 }),
+-      ];
+-
+-      const streamB1 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientBInitial) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamB1, runId, streamId, "client-B", 0);
+-
+-      // Verify each client's initial state
+-      let lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      let lastChunkB = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-B");
+-      expect(lastChunkA).toBe(2);
+-      expect(lastChunkB).toBe(1);
+-
+-      // Now both clients resume concurrently from their own resume points
+-      const clientAResume = [
+-        JSON.stringify({ client: "A", phase: "resume", chunk: 3 }),
+-        JSON.stringify({ client: "A", phase: "resume", chunk: 4 }),
+-      ];
+-
+-      const clientBResume = [
+-        JSON.stringify({ client: "B", phase: "resume", chunk: 2 }),
+-        JSON.stringify({ client: "B", phase: "resume", chunk: 3 }),
+-      ];
+-
+-      const streamA2 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAResume) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      const streamB2 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientBResume) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      // Both resume concurrently from their own points
+-      const [response1, response2] = await Promise.all([
+-        redisRealtimeStreams.ingestData(streamA2, runId, streamId, "client-A", 3),
+-        redisRealtimeStreams.ingestData(streamB2, runId, streamId, "client-B", 2),
+-      ]);
+-
+-      expect(response1.status).toBe(200);
+-      expect(response2.status).toBe(200);
+-
+-      // Verify each client's final state
+-      lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      lastChunkB = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-B");
+-
+-      expect(lastChunkA).toBe(4); // Client A: chunks 0-4
+-      expect(lastChunkB).toBe(3); // Client B: chunks 0-3
+-
+-      // Verify total chunks in stream
+-      const streamKey = `stream:${runId}:${streamId}`;
+-      const entries = await redis.xrange(streamKey, "-", "+");
+-
+-      // 5 from client A (0-4) + 4 from client B (0-3) = 9 total
+-      expect(entries.length).toBe(9);
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should track chunk indices independently for different clients",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_multi_client_test";
+-      const streamId = "multi-client-stream";
+-
+-      // Client A writes chunks 0-2
+-      const clientAChunks = [
+-        JSON.stringify({ client: "A", chunk: 0, data: "A0" }),
+-        JSON.stringify({ client: "A", chunk: 1, data: "A1" }),
+-        JSON.stringify({ client: "A", chunk: 2, data: "A2" }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const streamA = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAChunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamA, runId, streamId, "client-A", 0);
+-
+-      // Client B writes chunks 0-1
+-      const clientBChunks = [
+-        JSON.stringify({ client: "B", chunk: 0, data: "B0" }),
+-        JSON.stringify({ client: "B", chunk: 1, data: "B1" }),
+-      ];
+-
+-      const streamB = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientBChunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamB, runId, streamId, "client-B", 0);
+-
+-      // Verify last chunk index for each client independently
+-      const lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      const lastChunkB = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-B");
+-
+-      expect(lastChunkA).toBe(2); // Client A wrote 3 chunks (0-2)
+-      expect(lastChunkB).toBe(1); // Client B wrote 2 chunks (0-1)
+-
+-      // Verify total chunks in stream (5 chunks total)
+-      const streamKey = `stream:${runId}:${streamId}`;
+-      const entries = await redis.xrange(streamKey, "-", "+");
+-
+-      expect(entries.length).toBe(5);
+-
+-      // Verify each chunk has correct clientId
+-      let clientACount = 0;
+-      let clientBCount = 0;
+-
+-      for (const [_id, fields] of entries) {
+-        let clientId: string | null = null;
+-        for (let j = 0; j < fields.length; j += 2) {
+-          if (fields[j] === "clientId") {
+-            clientId = fields[j + 1];
+-          }
+-        }
+-
+-        if (clientId === "client-A") clientACount++;
+-        if (clientId === "client-B") clientBCount++;
+-      }
+-
+-      expect(clientACount).toBe(3);
+-      expect(clientBCount).toBe(2);
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should handle one client resuming while another client is writing new chunks",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_client_resume_test";
+-      const streamId = "client-resume-stream";
+-
+-      // Client A writes initial chunks 0-2
+-      const clientAInitial = [
+-        JSON.stringify({ client: "A", chunk: 0 }),
+-        JSON.stringify({ client: "A", chunk: 1 }),
+-        JSON.stringify({ client: "A", chunk: 2 }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const streamA1 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAInitial) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamA1, runId, streamId, "client-A", 0);
+-
+-      // Verify client A's last chunk
+-      let lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      expect(lastChunkA).toBe(2);
+-
+-      // Client B writes chunks 0-1 (different client, independent sequence)
+-      const clientBChunks = [
+-        JSON.stringify({ client: "B", chunk: 0 }),
+-        JSON.stringify({ client: "B", chunk: 1 }),
+-      ];
+-
+-      const streamB = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientBChunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamB, runId, streamId, "client-B", 0);
+-
+-      // Verify client B's last chunk
+-      const lastChunkB = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-B");
+-      expect(lastChunkB).toBe(1);
+-
+-      // Client A resumes from chunk 3
+-      const clientAResume = [
+-        JSON.stringify({ client: "A", chunk: 3 }),
+-        JSON.stringify({ client: "A", chunk: 4 }),
+-      ];
+-
+-      const streamA2 = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAResume) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamA2, runId, streamId, "client-A", 3);
+-
+-      // Verify final state
+-      lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      expect(lastChunkA).toBe(4); // Client A now has chunks 0-4
+-
+-      // Client B's last chunk should be unchanged
+-      const lastChunkBAfter = await redisRealtimeStreams.getLastChunkIndex(
+-        runId,
+-        streamId,
+-        "client-B"
+-      );
+-      expect(lastChunkBAfter).toBe(1); // Still 1
+-
+-      // Verify stream has chunks from both clients
+-      const streamKey = `stream:${runId}:${streamId}`;
+-      const entries = await redis.xrange(streamKey, "-", "+");
+-
+-      // 5 from client A + 2 from client B = 7 total
+-      expect(entries.length).toBe(7);
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should return -1 for client that has never written to stream",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_client_not_found_test";
+-      const streamId = "client-not-found-stream";
+-
+-      // Client A writes some chunks
+-      const clientAChunks = [
+-        JSON.stringify({ client: "A", chunk: 0 }),
+-        JSON.stringify({ client: "A", chunk: 1 }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const streamA = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of clientAChunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(streamA, runId, streamId, "client-A", 0);
+-
+-      // Client A's last chunk should be 1
+-      const lastChunkA = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-A");
+-      expect(lastChunkA).toBe(1);
+-
+-      // Client B never wrote anything, should return -1
+-      const lastChunkB = await redisRealtimeStreams.getLastChunkIndex(runId, streamId, "client-B");
+-      expect(lastChunkB).toBe(-1);
+-
+-      // Cleanup
+-      const streamKey = `stream:${runId}:${streamId}`;
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should skip legacy END_SENTINEL entries when reading and finding last chunk",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_backward_compat_test";
+-      const streamId = "backward-compat-stream";
+-      const streamKey = `stream:${runId}:${streamId}`;
+-
+-      // Manually create a stream with mix of new format and legacy END_SENTINEL
+-      await redis.xadd(
+-        streamKey,
+-        "*",
+-        "clientId",
+-        "client-A",
+-        "chunkIndex",
+-        "0",
+-        "data",
+-        "chunk 0\n"
+-      );
+-      await redis.xadd(
+-        streamKey,
+-        "*",
+-        "clientId",
+-        "client-A",
+-        "chunkIndex",
+-        "1",
+-        "data",
+-        "chunk 1\n"
+-      );
+-      await redis.xadd(streamKey, "*", "data", "<<CLOSE_STREAM>>"); // Legacy END_SENTINEL
+-      await redis.xadd(
+-        streamKey,
+-        "*",
+-        "clientId",
+-        "client-A",
+-        "chunkIndex",
+-        "2",
+-        "data",
+-        "chunk 2\n"
+-      );
+-      await redis.xadd(streamKey, "*", "data", "<<CLOSE_STREAM>>"); // Another legacy END_SENTINEL
+-
+-      // getLastChunkIndex should skip END_SENTINELs and find chunk 2
+-      const lastChunkIndex = await redisRealtimeStreams.getLastChunkIndex(
+-        runId,
+-        streamId,
+-        "client-A"
+-      );
+-      expect(lastChunkIndex).toBe(2);
+-
+-      // streamResponse should skip END_SENTINELs and only return actual data
+-      const mockRequest = new Request("http://localhost/test");
+-      const abortController = new AbortController();
+-
+-      const response = await redisRealtimeStreams.streamResponse(
+-        mockRequest,
+-        runId,
+-        streamId,
+-        abortController.signal
+-      );
+-
+-      expect(response.status).toBe(200);
+-
+-      // Read the stream
+-      const reader = response.body!.getReader();
+-      const decoder = new TextDecoder();
+-      const receivedData: string[] = [];
+-
+-      let done = false;
+-      while (!done && receivedData.length < 3) {
+-        const { value, done: streamDone } = await reader.read();
+-        done = streamDone;
+-
+-        if (value) {
+-          const text = decoder.decode(value);
+-          const events = text.split("\n\n").filter((event) => event.trim());
+-          for (const event of events) {
+-            const lines = event.split("\n");
+-            for (const line of lines) {
+-              if (line.startsWith("data: ")) {
+-                const data = line.substring(6).trim();
+-                if (data) {
+-                  receivedData.push(data);
+-                }
+-              }
+-            }
+-          }
+-        }
+-      }
+-
+-      // Cancel the stream
+-      abortController.abort();
+-      reader.releaseLock();
+-
+-      // Should receive 3 chunks (END_SENTINELs skipped)
+-      expect(receivedData.length).toBe(3);
+-      expect(receivedData[0]).toBe("chunk 0");
+-      expect(receivedData[1]).toBe("chunk 1");
+-      expect(receivedData[2]).toBe("chunk 2");
+-
+-      // Cleanup
+-      await redis.del(streamKey);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should close stream after inactivity timeout",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-        inactivityTimeoutMs: 2000, // 2 seconds for faster test
+-      });
+-
+-      const runId = "run_inactivity_test";
+-      const streamId = "inactivity-stream";
+-
+-      // Write 2 chunks
+-      const chunks = [JSON.stringify({ chunk: 0 }), JSON.stringify({ chunk: 1 })];
+-
+-      const encoder = new TextEncoder();
+-      const stream = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of chunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(stream, runId, streamId, "default");
+-
+-      // Start streaming
+-      const mockRequest = new Request("http://localhost/test");
+-      const abortController = new AbortController();
+-
+-      const response = await redisRealtimeStreams.streamResponse(
+-        mockRequest,
+-        runId,
+-        streamId,
+-        abortController.signal
+-      );
+-
+-      expect(response.status).toBe(200);
+-
+-      // Read the stream
+-      const reader = response.body!.getReader();
+-      const decoder = new TextDecoder();
+-      const receivedData: string[] = [];
+-
+-      const startTime = Date.now();
+-      let streamClosed = false;
+-
+-      try {
+-        while (true) {
+-          const { value, done } = await reader.read();
+-
+-          if (done) {
+-            streamClosed = true;
+-            break;
+-          }
+-
+-          if (value) {
+-            const text = decoder.decode(value);
+-            const events = text.split("\n\n").filter((event) => event.trim());
+-            for (const event of events) {
+-              const lines = event.split("\n");
+-              for (const line of lines) {
+-                if (line.startsWith("data: ")) {
+-                  const data = line.substring(6).trim();
+-                  if (data) {
+-                    receivedData.push(data);
+-                  }
+-                }
+-              }
+-            }
+-          }
+-        }
+-      } catch (error) {
+-        // Expected to eventually close
+-      } finally {
+-        reader.releaseLock();
+-      }
+-
+-      const elapsedMs = Date.now() - startTime;
+-
+-      // Verify stream closed naturally
+-      expect(streamClosed).toBe(true);
+-
+-      // Should have received both chunks
+-      expect(receivedData.length).toBe(2);
+-
+-      // Should have closed after inactivity timeout + one BLOCK cycle
+-      // BLOCK time is 5000ms, so minimum time is ~5s (one full BLOCK timeout)
+-      // The inactivity is checked AFTER the BLOCK returns
+-      expect(elapsedMs).toBeGreaterThan(4000); // At least one BLOCK cycle
+-      expect(elapsedMs).toBeLessThan(8000); // But not more than 2 cycles
+-
+-      // Cleanup
+-      await redis.del(`stream:${runId}:${streamId}`);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should format response with event IDs from Redis stream",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_event_id_test";
+-      const streamId = "event-id-stream";
+-
+-      // Ingest some data with specific clientId
+-      const chunks = [
+-        JSON.stringify({ message: "chunk 0" }),
+-        JSON.stringify({ message: "chunk 1" }),
+-        JSON.stringify({ message: "chunk 2" }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const ingestStream = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of chunks) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(ingestStream, runId, streamId, "test-client-123");
+-
+-      // Stream the response
+-      const mockRequest = new Request("http://localhost/test");
+-      const abortController = new AbortController();
+-
+-      const response = await redisRealtimeStreams.streamResponse(
+-        mockRequest,
+-        runId,
+-        streamId,
+-        abortController.signal
+-      );
+-
+-      expect(response.status).toBe(200);
+-      expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+-
+-      // Read the stream
+-      const reader = response.body!.getReader();
+-      const decoder = new TextDecoder();
+-      const receivedEvents: Array<{ id: string; data: string }> = [];
+-
+-      let done = false;
+-      while (!done && receivedEvents.length < 3) {
+-        const { value, done: streamDone } = await reader.read();
+-        done = streamDone;
+-
+-        if (value) {
+-          const text = decoder.decode(value);
+-          // Split by double newline to get individual events
+-          const events = text.split("\n\n").filter((event) => event.trim());
+-
+-          for (const event of events) {
+-            const lines = event.split("\n");
+-            let id: string | null = null;
+-            let data: string | null = null;
+-
+-            for (const line of lines) {
+-              if (line.startsWith("id: ")) {
+-                id = line.substring(4);
+-              } else if (line.startsWith("data: ")) {
+-                data = line.substring(6);
+-              }
+-            }
+-
+-            if (id && data) {
+-              receivedEvents.push({ id, data });
+-            }
+-          }
+-        }
+-      }
+-
+-      // Cancel the stream
+-      abortController.abort();
+-      reader.releaseLock();
+-
+-      // Verify we received all chunks with correct event IDs
+-      expect(receivedEvents.length).toBe(3);
+-
+-      // Verify event IDs are Redis stream IDs (format: timestamp-sequence like "1234567890123-0")
+-      for (let i = 0; i < 3; i++) {
+-        expect(receivedEvents[i].id).toMatch(/^\d+-\d+$/);
+-        expect(receivedEvents[i].data).toBe(chunks[i]);
+-      }
+-
+-      // Verify IDs are in order (each ID should be > previous)
+-      expect(receivedEvents[1].id > receivedEvents[0].id).toBe(true);
+-      expect(receivedEvents[2].id > receivedEvents[1].id).toBe(true);
+-
+-      // Cleanup
+-      await redis.del(`stream:${runId}:${streamId}`);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should support resuming from Last-Event-ID",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_resume_test";
+-      const streamId = "resume-stream";
+-
+-      // Ingest data in two batches
+-      const firstBatch = [
+-        JSON.stringify({ batch: 1, chunk: 0 }),
+-        JSON.stringify({ batch: 1, chunk: 1 }),
+-        JSON.stringify({ batch: 1, chunk: 2 }),
+-      ];
+-
+-      const encoder = new TextEncoder();
+-      const firstStream = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of firstBatch) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(firstStream, runId, streamId, "client-A");
+-
+-      // Stream and read first batch
+-      const mockRequest1 = new Request("http://localhost/test");
+-      const abortController1 = new AbortController();
+-
+-      const response1 = await redisRealtimeStreams.streamResponse(
+-        mockRequest1,
+-        runId,
+-        streamId,
+-        abortController1.signal
+-      );
+-
+-      expect(response1.status).toBe(200);
+-
+-      const reader1 = response1.body!.getReader();
+-      const decoder1 = new TextDecoder();
+-      const firstEvents: Array<{ id: string; data: string }> = [];
+-
+-      let done1 = false;
+-      while (!done1 && firstEvents.length < 3) {
+-        const { value, done: streamDone } = await reader1.read();
+-        done1 = streamDone;
+-
+-        if (value) {
+-          const text = decoder1.decode(value);
+-          const events = text.split("\n\n").filter((event) => event.trim());
+-
+-          for (const event of events) {
+-            const lines = event.split("\n");
+-            let id: string | null = null;
+-            let data: string | null = null;
+-
+-            for (const line of lines) {
+-              if (line.startsWith("id: ")) {
+-                id = line.substring(4);
+-              } else if (line.startsWith("data: ")) {
+-                data = line.substring(6);
+-              }
+-            }
+-
+-            if (id && data) {
+-              firstEvents.push({ id, data });
+-            }
+-          }
+-        }
+-      }
+-
+-      abortController1.abort();
+-      reader1.releaseLock();
+-
+-      expect(firstEvents.length).toBe(3);
+-      const lastEventId = firstEvents[firstEvents.length - 1].id;
+-
+-      // Ingest second batch
+-      const secondBatch = [
+-        JSON.stringify({ batch: 2, chunk: 0 }),
+-        JSON.stringify({ batch: 2, chunk: 1 }),
+-      ];
+-
+-      const secondStream = new ReadableStream({
+-        start(controller) {
+-          for (const chunk of secondBatch) {
+-            controller.enqueue(encoder.encode(chunk + "\n"));
+-          }
+-          controller.close();
+-        },
+-      });
+-
+-      await redisRealtimeStreams.ingestData(secondStream, runId, streamId, "client-A");
+-
+-      // Resume streaming from lastEventId
+-      const mockRequest2 = new Request("http://localhost/test");
+-      const abortController2 = new AbortController();
+-
+-      const response2 = await redisRealtimeStreams.streamResponse(
+-        mockRequest2,
+-        runId,
+-        streamId,
+-        abortController2.signal,
+-        { lastEventId }
+-      );
+-
+-      expect(response2.status).toBe(200);
+-
+-      const reader2 = response2.body!.getReader();
+-      const decoder2 = new TextDecoder();
+-      const resumedEvents: Array<{ id: string; data: string }> = [];
+-
+-      let done2 = false;
+-      while (!done2 && resumedEvents.length < 2) {
+-        const { value, done: streamDone } = await reader2.read();
+-        done2 = streamDone;
+-
+-        if (value) {
+-          const text = decoder2.decode(value);
+-          const events = text.split("\n\n").filter((event) => event.trim());
+-
+-          for (const event of events) {
+-            const lines = event.split("\n");
+-            let id: string | null = null;
+-            let data: string | null = null;
+-
+-            for (const line of lines) {
+-              if (line.startsWith("id: ")) {
+-                id = line.substring(4);
+-              } else if (line.startsWith("data: ")) {
+-                data = line.substring(6);
+-              }
+-            }
+-
+-            if (id && data) {
+-              resumedEvents.push({ id, data });
+-            }
+-          }
+-        }
+-      }
+-
+-      abortController2.abort();
+-      reader2.releaseLock();
+-
+-      // Verify we only received the second batch (events after lastEventId)
+-      expect(resumedEvents.length).toBe(2);
+-      expect(resumedEvents[0].data).toBe(secondBatch[0]);
+-      expect(resumedEvents[1].data).toBe(secondBatch[1]);
+-
+-      // Verify the resumed events have IDs greater than lastEventId
+-      expect(resumedEvents[0].id > lastEventId).toBe(true);
+-      expect(resumedEvents[1].id > lastEventId).toBe(true);
+-
+-      // Cleanup
+-      await redis.del(`stream:${runId}:${streamId}`);
+-      await redis.quit();
+-    }
+-  );
+-
+-  redisTest(
+-    "Should handle chunks split mid-line (regression test)",
+-    { timeout: 30_000 },
+-    async ({ redisOptions }) => {
+-      const redis = new Redis(redisOptions);
+-      const redisRealtimeStreams = new RedisRealtimeStreams({
+-        redis: redisOptions,
+-      });
+-
+-      const runId = "run_split_test";
+-      const streamId = "test-split-stream";
+-
+-      // Simulate what happens in production: a JSON line split across multiple network chunks
+-      // This reproduces the issue where we see partial chunks like:
+-      // - "{\"timestamp\":"
+-      // - "1762880245493,\"chunkIndex\":780,\"data\":\"Chunk 781/1000\"}"
+-      const fullLine = JSON.stringify({
+-        timestamp: 1762880245493,
+-        chunkIndex: 780,
+-        data: "Chunk 781/1000",
+-      });
+-
+-      // Split the line at an arbitrary position (in the middle of the JSON)
+-      const splitPoint = 16; // Splits after '{"timestamp":'
+-      const chunk1 = fullLine.substring(0, splitPoint);
+-      const chunk2 = fullLine.substring(splitPoint);
+-
+-      // Create a ReadableStream that sends split chunks
+-      const encoder = new TextEncoder();
+-      const stream = new ReadableStream({
+-        start(controller) {
+-          controller.enqueue(encoder.encode(chunk1));
+-          controller.enqueue(encoder.encode(chunk2 + "\n")); // Add newline at end
+-          controller.close();
+-        },
+-      });
+-
+-      // Ingest the split data
+-      await redisRealtimeStreams.ingestData(stream, runId, streamId, "client1");
+-
+-      // Now consume the stream and verify we get the complete line, not split chunks
+-      const abortController = new AbortController();
+-      const response = await redisRealtimeStreams.streamResponse(
+-        new Request("http://localhost/test"),
+-        runId,
+-        streamId,
+-        abortController.signal
+-      );
+-
+-      const reader = response.body!.getReader();
+-      const decoder = new TextDecoder();
+-      let receivedData = "";
+-
+-      // Read all chunks from the response
+-      const readTimeout = setTimeout(() => {
+-        abortController.abort();
+-      }, 5000);
+-
+-      try {
+-        while (true) {
+-          const { done, value } = await reader.read();
+-          if (done) break;
+-
+-          receivedData += decoder.decode(value, { stream: true });
+-
+-          // Once we have data, we can stop
+-          if (receivedData.includes("data: ")) {
+-            break;
+-          }
+-        }
+-      } finally {
+-        clearTimeout(readTimeout);
+-        abortController.abort();
+-        reader.releaseLock();
+-      }
+-
+-      // Parse the SSE data
+-      const lines = receivedData.split("\n").filter((line) => line.startsWith("data: "));
+-
+-      // We should receive exactly ONE complete line, not two partial lines
+-      expect(lines.length).toBe(1);
+-
+-      // Extract the data (remove "data: " prefix)
+-      const dataLine = lines[0].substring(6);
+-
+-      // Verify it's the complete, valid JSON
+-      expect(dataLine).toBe(fullLine);
+-
+-      // Verify it parses correctly as JSON
+-      const parsed = JSON.parse(dataLine) as {
+-        timestamp: number;
+-        chunkIndex: number;
+-        data: string;
+-      };
+-      expect(parsed.timestamp).toBe(1762880245493);
+-      expect(parsed.chunkIndex).toBe(780);
+-      expect(parsed.data).toBe("Chunk 781/1000");
+-
+-      // Cleanup
+-      await redis.del(`stream:${runId}:${streamId}`);
+-      await redis.quit();
+-    }
+-  );
+-});
++      const response = await redisRealtimeStreams
+\ No newline at end of file
+diff --git a/references/realtime-streams/src/trigger/streams.ts b/references/realtime-streams/src/trigger/streams.ts
+index 388ff96..c18b185 100644
+--- a/references/realtime-streams/src/trigger/streams.ts
++++ b/references/realtime-streams/src/trigger/streams.ts
+@@ -431,739 +431,4 @@ const streamAppendTesterTask = task({
+ 
+     const testChunks = [];
+ 
+-    for await (const chunk of await testStream.read(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      testChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(testChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(testChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(testChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(testChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    await streamAppendChildTask.triggerAndWait(
+-      {},
+-      {},
+-      { clientConfig: { future: { v2RealtimeStreams: true } } }
+-    );
+-
+-    const childChunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, "child", { timeoutInSeconds: 5 })) {
+-      childChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(childChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(childChunks.includes("child chunk 1"), "Expected child chunk 1");
+-    assert.ok(childChunks.includes("child chunk 2"), "Expected child chunk 2");
+-    assert.ok(childChunks.includes("child chunk 3"), "Expected child chunk 3");
+-
+-    return {
+-      message: "Stream append completed",
+-    };
+-  },
+-});
+-
+-const streamAppendChildTask = task({
+-  id: "stream-append-child",
+-  run: async (payload: any, { ctx }) => {
+-    await streams.append("child", "child chunk 1", { target: ctx.run.parentTaskRunId });
+-    await streams.append("child", "child chunk 2", { target: "parent" });
+-    await streams.append("child", "child chunk 3", { target: "parent" });
+-  },
+-});
+-
+-const streamPipeTesterTask = task({
+-  id: "stream-pipe-tester",
+-  run: async (payload: any, { ctx }) => {
+-    const { waitUntilComplete } = streams.pipe(
+-      new ReadableStream({
+-        start(controller) {
+-          controller.enqueue("chunk 1");
+-          controller.enqueue("chunk 2");
+-          controller.enqueue("chunk 3");
+-          controller.close();
+-        },
+-      })
+-    );
+-
+-    await waitUntilComplete();
+-
+-    const chunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(chunks.length, 3, "Expected 3 chunks");
+-    assert.ok(chunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(chunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(chunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    const { waitUntilComplete: waitUntilComplete2 } = streams.pipe(
+-      "named",
+-      new ReadableStream({
+-        start(controller) {
+-          controller.enqueue("chunk 1");
+-          controller.enqueue("chunk 2");
+-          controller.enqueue("chunk 3");
+-          controller.close();
+-        },
+-      })
+-    );
+-
+-    await waitUntilComplete2();
+-
+-    const namedChunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, "named", { timeoutInSeconds: 5 })) {
+-      namedChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(namedChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(namedChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(namedChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(namedChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    const { waitUntilComplete: waitUntilComplete3 } = testStream.pipe(
+-      new ReadableStream({
+-        start(controller) {
+-          controller.enqueue("chunk 1");
+-          controller.enqueue("chunk 2");
+-          controller.enqueue("chunk 3");
+-          controller.close();
+-        },
+-      })
+-    );
+-
+-    await waitUntilComplete3();
+-
+-    const testChunks = [];
+-
+-    for await (const chunk of await testStream.read(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      testChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(testChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(testChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(testChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(testChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    return {
+-      message: "Stream pipe completed",
+-    };
+-  },
+-});
+-
+-const streamWriterTesterTask = task({
+-  id: "stream-writer-tester",
+-  run: async (payload: any, { ctx }) => {
+-    const { waitUntilComplete, stream } = streams.writer({
+-      execute: async ({ write, merge }) => {
+-        write("chunk 1");
+-        write("chunk 2");
+-        write("chunk 3");
+-      },
+-    });
+-
+-    await waitUntilComplete();
+-
+-    const chunks = [];
+-
+-    for await (const chunk of await streams.read<string>(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(chunks.length, 3, "Expected 3 chunks");
+-    assert.ok(chunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(chunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(chunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    const { waitUntilComplete: waitUntilComplete2 } = streams.writer("named", {
+-      execute: async ({ write, merge }) => {
+-        write("chunk 1");
+-        write("chunk 2");
+-        write("chunk 3");
+-      },
+-    });
+-
+-    await waitUntilComplete2();
+-
+-    const namedChunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, "named", { timeoutInSeconds: 5 })) {
+-      namedChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(namedChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(namedChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(namedChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(namedChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    const { waitUntilComplete: waitUntilComplete3 } = testStream.writer({
+-      execute: async ({ write, merge }) => {
+-        write("chunk 1");
+-        write("chunk 2");
+-        write("chunk 3");
+-      },
+-    });
+-
+-    await waitUntilComplete3();
+-
+-    const testChunks = [];
+-
+-    for await (const chunk of await testStream.read(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      testChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(testChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(testChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(testChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(testChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    const { waitUntilComplete: waitUntilComplete4 } = streams.writer("merging", {
+-      execute: async ({ write, merge }) => {
+-        merge(
+-          new ReadableStream({
+-            start(controller) {
+-              controller.enqueue("chunk 1");
+-              controller.enqueue("chunk 2");
+-              controller.enqueue("chunk 3");
+-              controller.close();
+-            },
+-          })
+-        );
+-      },
+-    });
+-
+-    await waitUntilComplete4();
+-
+-    const mergingChunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, "merging", { timeoutInSeconds: 5 })) {
+-      mergingChunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(mergingChunks.length, 3, "Expected 3 chunks");
+-    assert.ok(mergingChunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(mergingChunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(mergingChunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    return {
+-      message: "Stream writer completed",
+-    };
+-  },
+-});
+-
+-const streamWaitUntilTesterTask = task({
+-  id: "stream-wait-until-tester",
+-  run: async (payload: any, { ctx }) => {
+-    const result = await streamWaitUntilTesterChildTask.triggerAndWait(
+-      {},
+-      {},
+-      { clientConfig: { future: { v2RealtimeStreams: true } } }
+-    );
+-
+-    const chunks = [];
+-
+-    for await (const chunk of await streams.read(result.id, { timeoutInSeconds: 5 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    const generator = generateContinuousTokenStream(10, 100);
+-    const stream = createStreamFromGenerator(generator);
+-
+-    const expectedChunks = await convertReadableStreamToArray(stream);
+-
+-    assert.strictEqual(chunks.length, expectedChunks.length, "Expected chunks to be the same");
+-    assert.deepStrictEqual(chunks, expectedChunks, "Expected chunks to be the same");
+-
+-    return {
+-      message: "Stream wait until tester completed",
+-    };
+-  },
+-});
+-
+-const streamWaitUntilTesterChildTask = task({
+-  id: "stream-wait-until-tester",
+-  run: async (payload: any, { ctx }) => {
+-    const generator = generateContinuousTokenStream(10, 100);
+-    const stream = createStreamFromGenerator(generator);
+-
+-    streams.pipe(stream); // This should register with the waitUntil system
+-
+-    return;
+-  },
+-});
+-
+-const metadataTesterTask = task({
+-  id: "metadata-tester",
+-  run: async (payload: { parentId?: string }, { ctx }) => {
+-    await metadata.stream(
+-      "default",
+-      new ReadableStream({
+-        start(controller) {
+-          controller.enqueue("chunk 1");
+-          controller.enqueue("chunk 2");
+-          controller.enqueue("chunk 3");
+-          controller.close();
+-        },
+-      })
+-    );
+-
+-    const chunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, "default", { timeoutInSeconds: 5 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(chunks.length, 3, "Expected 3 chunks");
+-    assert.ok(chunks.includes("chunk 1"), "Expected chunk 1");
+-    assert.ok(chunks.includes("chunk 2"), "Expected chunk 2");
+-    assert.ok(chunks.includes("chunk 3"), "Expected chunk 3");
+-
+-    if (payload.parentId) {
+-      await metadata.parent.stream(
+-        "parent",
+-        new ReadableStream({
+-          start(controller) {
+-            controller.enqueue("chunk 1");
+-            controller.enqueue("chunk 2");
+-            controller.enqueue("chunk 3");
+-            controller.close();
+-          },
+-        })
+-      );
+-
+-      const parentChunks = [];
+-
+-      for await (const chunk of await streams.read(payload.parentId, "parent", {
+-        timeoutInSeconds: 5,
+-      })) {
+-        parentChunks.push(chunk);
+-      }
+-
+-      assert.strictEqual(parentChunks.length, 3, "Expected 3 chunks");
+-      assert.ok(parentChunks.includes("chunk 1"), "Expected chunk 1");
+-      assert.ok(parentChunks.includes("chunk 2"), "Expected chunk 2");
+-      assert.ok(parentChunks.includes("chunk 3"), "Expected chunk 3");
+-    } else {
+-      await metadataTesterTask.triggerAndWait(
+-        { parentId: ctx.run.id },
+-        {},
+-        { clientConfig: { future: { v2RealtimeStreams: true } } }
+-      );
+-    }
+-  },
+-});
+-
+-const streamReadTesterTask = task({
+-  id: "stream-read-tester",
+-  run: async (payload: any, { ctx }) => {
+-    const { waitUntilComplete } = streams.pipe(
+-      new ReadableStream({
+-        start(controller) {
+-          controller.enqueue("chunk 1");
+-          controller.enqueue("chunk 2");
+-          controller.enqueue("chunk 3");
+-          controller.enqueue("chunk 4");
+-          controller.enqueue("chunk 5");
+-          controller.enqueue("chunk 6");
+-          controller.close();
+-        },
+-      })
+-    );
+-
+-    await waitUntilComplete();
+-
+-    const chunks = [];
+-    for await (const chunk of await streams.read(ctx.run.id, { timeoutInSeconds: 5 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    assert.strictEqual(chunks.length, 6, "Expected 6 chunks");
+-
+-    // Now read starting from the 4th chunk
+-    // This only properly works with v2 realtime streams
+-    const chunks2 = [];
+-    for await (const chunk of await streams.read(ctx.run.id, {
+-      timeoutInSeconds: 5,
+-      startIndex: 3,
+-    })) {
+-      chunks2.push(chunk);
+-    }
+-
+-    assert.strictEqual(chunks2.length, 3, "Expected 3 chunks");
+-
+-    return {
+-      message: "Stream read tester completed",
+-    };
+-  },
+-});
+-
+-const streamsStressTesterTask = task({
+-  id: "streams-stress-tester",
+-  run: async (payload: { streamsVersion: "v1" | "v2" }, { ctx }) => {
+-    const stream = createStreamFromGenerator(generateContinuousTokenStream(60, 5));
+-
+-    const { waitUntilComplete } = streams.pipe(stream);
+-
+-    await waitUntilComplete();
+-
+-    const chunks = [];
+-
+-    for await (const chunk of await streams.read(ctx.run.id, { timeoutInSeconds: 10 })) {
+-      chunks.push(chunk);
+-    }
+-
+-    logger.info("Received chunks", {
+-      chunks: chunks.length,
+-      streamsVersion: payload.streamsVersion,
+-    });
+-
+-    switch (payload.streamsVersion) {
+-      case "v1": {
+-        break;
+-      }
+-      case "v2": {
+-        assert.ok(chunks.length > 2000, "Expected more than 2000 chunks");
+-        break;
+-      }
+-    }
+-
+-    return {
+-      message: "Streams stress tester completed",
+-    };
+-  },
+-});
+-
+-const endToEndLatencyTesterTask = task({
+-  id: "end-to-end-latency-tester",
+-  run: async (payload: any, { ctx }) => {
+-    console.log(
+-      `Starting end to end latency tester task for ${payload.streamsVersion} streams version`
+-    );
+-
+-    const stream = createStreamFromGenerator(generatePerformanceStream(1000, 10));
+-
+-    const { waitUntilComplete } = streams.pipe(stream);
+-
+-    const latencies = [];
+-
+-    const abortController = new AbortController();
+-
+-    for await (const chunk of await streams.read(ctx.run.id, {
+-      timeoutInSeconds: 120,
+-      signal: abortController.signal,
+-    })) {
+-      const performanceChunk = JSON.parse(chunk as any) as PerformanceChunk;
+-
+-      // Calculate the latency
+-      const latency = Date.now() - performanceChunk.timestamp;
+-
+-      latencies.push({ latency, index: performanceChunk.chunkIndex });
+-
+-      if (latencies.length === 1000) {
+-        console.log("1000 chunks received, aborting");
+-        abortController.abort();
+-      }
+-    }
+-
+-    await waitUntilComplete();
+-
+-    // Calculate the min, max, p50 and p95 latencies
+-    const minLatency = Math.min(...latencies.map((l) => l.latency));
+-    const maxLatency = Math.max(...latencies.map((l) => l.latency));
+-    const p50Latency = latencies.sort((a, b) => a.latency - b.latency)[
+-      Math.floor(latencies.length * 0.5)
+-    ];
+-    const p95Latency = latencies.sort((a, b) => a.latency - b.latency)[
+-      Math.floor(latencies.length * 0.95)
+-    ];
+-
+-    const p50LatencyValue = p50Latency.latency;
+-    const p95LatencyValue = p95Latency.latency;
+-
+-    console.log(`Min latency: ${minLatency}ms`);
+-    console.log(`Max latency: ${maxLatency}ms`);
+-    console.log(`P50 latency: ${p50LatencyValue}ms`);
+-    console.log(`P95 latency: ${p95LatencyValue}ms`);
+-
+-    return {
+-      message: "End to end latency tester completed",
+-    };
+-  },
+-});
+-
+-async function* generateLLMTokenStream(
+-  includePing: boolean = false,
+-  stallDurationMs: number = 10 * 60 * 1000
+-) {
+-  // Simulate initial LLM tokens (faster, like a real LLM)
+-  const initialTokens = [
+-    "Hello",
+-    " there",
+-    "!",
+-    " I'm",
+-    " going",
+-    " to",
+-    " tell",
+-    " you",
+-    " a",
+-    " story",
+-    ".",
+-    "\n",
+-    " Once",
+-    " upon",
+-    " a",
+-    " time",
+-  ];
+-
+-  // Stream initial tokens with realistic LLM timing
+-  for (const token of initialTokens) {
+-    await setTimeout(Math.random() * 10 + 5); // 5-15ms delay
+-    yield token;
+-  }
+-
+-  // "Stall" window - emit a token every 30 seconds
+-  const stallIntervalMs = 30 * 1000; // 30 seconds
+-  const stallTokenCount = Math.floor(stallDurationMs / stallIntervalMs);
+-  logger.info(
+-    `Entering stall window for ${stallDurationMs}ms (${
+-      stallDurationMs / 1000 / 60
+-    } minutes) - emitting ${stallTokenCount} tokens`
+-  );
+-
+-  for (let i = 0; i < stallTokenCount; i++) {
+-    await setTimeout(stallIntervalMs);
+-    if (includePing) {
+-      yield "."; // Emit a single period token every 30 seconds
+-    }
+-  }
+-
+-  logger.info("Resuming normal stream after stall window");
+-
+-  // Continue with more LLM tokens after stall
+-  const continuationTokens = [
+-    " there",
+-    " was",
+-    " a",
+-    " developer",
+-    " who",
+-    " needed",
+-    " to",
+-    " test",
+-    " streaming",
+-    ".",
+-    " They",
+-    " used",
+-    " Trigger",
+-    ".dev",
+-    " and",
+-    " it",
+-    " worked",
+-    " perfectly",
+-    "!",
+-  ];
+-
+-  for (const token of continuationTokens) {
+-    await setTimeout(Math.random() * 10 + 5); // 5-15ms delay
+-    yield token;
+-  }
+-}
+-
+-// Continuous stream: emit tokens at regular intervals for a specified duration
+-async function* generateContinuousTokenStream(durationSec: number, intervalMs: number) {
+-  const words = [
+-    "The",
+-    "quick",
+-    "brown",
+-    "fox",
+-    "jumps",
+-    "over",
+-    "the",
+-    "lazy",
+-    "dog",
+-    "while",
+-    "streaming",
+-    "tokens",
+-    "continuously",
+-    "at",
+-    "regular",
+-    "intervals",
+-    "to",
+-    "test",
+-    "real-time",
+-    "data",
+-    "flow",
+-  ];
+-
+-  const endTime = Date.now() + durationSec * 1000;
+-  let wordIndex = 0;
+-
+-  while (Date.now() < endTime) {
+-    await setTimeout(intervalMs);
+-    yield words[wordIndex % words.length] + " ";
+-    wordIndex++;
+-  }
+-
+-  yield "\n[Stream completed]";
+-}
+-
+-// Burst stream: emit rapid bursts of tokens with pauses between bursts
+-async function* generateBurstTokenStream(
+-  burstCount: number,
+-  tokensPerBurst: number,
+-  burstIntervalMs: number,
+-  pauseBetweenBurstsMs: number
+-) {
+-  const tokens = "abcdefghijklmnopqrstuvwxyz".split("");
+-
+-  for (let burst = 0; burst < burstCount; burst++) {
+-    yield `\n[Burst ${burst + 1}/${burstCount}] `;
+-
+-    // Emit tokens rapidly in this burst
+-    for (let token = 0; token < tokensPerBurst; token++) {
+-      await setTimeout(burstIntervalMs);
+-      yield tokens[token % tokens.length];
+-    }
+-
+-    // Pause between bursts (except after the last burst)
+-    if (burst < burstCount - 1) {
+-      await setTimeout(pauseBetweenBurstsMs);
+-    }
+-  }
+-
+-  yield "\n[All bursts completed]";
+-}
+-
+-// Slow steady stream: emit tokens at longer intervals over many minutes
+-async function* generateSlowSteadyTokenStream(durationMin: number, tokenIntervalSec: number) {
+-  const sentences = [
+-    "This is a slow and steady stream.",
+-    "Each token arrives after several seconds.",
+-    "Perfect for testing long-running connections.",
+-    "The stream maintains a consistent pace.",
+-    "Patience is key when testing reliability.",
+-    "Connections should remain stable throughout.",
+-    "This helps verify timeout handling.",
+-    "Real-world streams often have variable timing.",
+-    "Testing edge cases is important.",
+-    "Almost done with the slow stream test.",
+-  ];
+-
+-  const endTime = Date.now() + durationMin * 60 * 1000;
+-  let sentenceIndex = 0;
+-
+-  while (Date.now() < endTime) {
+-    const sentence = sentences[sentenceIndex % sentences.length];
+-    yield `${sentence} `;
+-
+-    sentenceIndex++;
+-    await setTimeout(tokenIntervalSec * 1000);
+-  }
+-
+-  yield "\n[Long stream completed successfully]";
+-}
+-
+-// Markdown stream: emit realistic markdown content as tokens (8 characters at a time)
+-async function* generateMarkdownTokenStream(tokenDelayMs: number) {
+-  const markdownContent =
+-    "# Streaming Markdown Example\n\n" +
+-    "This is a demonstration of **streaming markdown** content in real-time. The content is being generated *token by token*, simulating how an LLM might generate formatted text.\n\n" +
+-    "## Features\n\n" +
+-    "Here are some key features being tested:\n\n" +
+-    "- **Bold text** for emphasis\n" +
+-    "- *Italic text* for subtle highlighting\n" +
+-    "- `inline code` for technical terms\n" +
+-    "- [Links](https://trigger.dev) to external resources\n\n" +
+-    "### Code Examples\n\n" +
+-    "You can also stream code blocks:\n\n" +
+-    "```typescript\n" +
+-    'import { task, metadata } from "@trigger.dev/sdk";\n\n' +
+-    "export const myTask = task({\n" +
+-    '  id: "example-task",\n' +
+-    "  run: async (payload) => {\n" +
+-    '    const stream = await metadata.stream("output", myStream);\n' +
+-    "    \n" +
+-    "    for await (const chunk of stream) {\n" +
+-    "      console.log(chunk);\n" +
+-    "    }\n" +
+-    "    \n" +
+-    "    return { success: true };\n" +
+-    "  },\n" +
+-    "});\n" +
+-    "```\n\n" +
+-    "### Lists and Structure\n\n" +
+-    "Numbered lists work great too:\n\n" +
+-    "1. First item with important details\n" +
+-    "2. Second item with more context\n" +
+-    "3. Third item completing the sequence\n\n" +
+-    "#### Nested Content\n\n" +
+-    "> Blockquotes are useful for highlighting important information or quoting external sources.\n\n" +
+-    "You can combine **_bold and italic_** text, or use ~~strikethrough~~ for corrections.\n\n" +
+-    "## Technical Details\n\n" +
+-    "| Feature | Status | Notes |\n" +
+-    "|---------|--------|-------|\n" +
+-    "| Streaming | ✓ | Working perfectly |\n" +
+-    "| Markdown | ✓ | Full support |\n" +
+-    "| Realtime | ✓ | Sub-second latency |\n\n" +
+-    "### Conclusion\n\n" +
+-    "This markdown streaming scenario demonstrates how formatted content can be transmitted in real-time, maintaining proper structure and formatting throughout the stream.\n\n" +
+-    "---\n\n" +
+-    "*Generated with Trigger.dev realtime streams* 🚀\n";
+-
+-  // Stream tokens of 8 characters at a time with 5ms delay
+-  // Use Array.from() to properly handle Unicode characters
+-  const CHARACTERS_PER_TOKEN = 8;
+-  const DELAY_MS = 5;
+-
+-  const characters = Array.from(markdownContent);
+-
+-  for (let i = 0; i < characters.length; i += CHARACTERS_PER_TOKEN) {
+-    await setTimeout(DELAY_MS);
+-    yield characters.slice(i, i + CHARACTERS_PER_TOKEN).join("");
+-  }
+-}
+-
+-// Performance stream: emit JSON chunks with timestamps for latency measurement
+-async function* generatePerformanceStream(chunkCount: number, chunkIntervalMs: number) {
+-  for (let i = 0; i < chunkCount; i++) {
+-    await setTimeout(chunkIntervalMs);
+-
+-    const chunk: PerformanceChunk = {
+-      timestamp: Date.now(),
+-      chunkIndex: i,
+-      data: `Chunk ${i + 1}/${chunkCount}`,
+-    };
+-
+-    yield JSON.stringify(chunk);
+-  }
+-}
+-
+-// Convert to ReadableStream
+-function createStreamFromGenerator(generator: AsyncGenerator<string>) {
+-  return new ReadableStream({
+-    async start(controller) {
+-      for await (const chunk of generator) {
+-        controller.enqueue(chunk);
+-      }
+-
+-      controller.close();
+-    },
+-  });
+-}
+-
+-async function convertReadableStreamToArray<TPart>(
+-  stream: ReadableStream<TPart>
+-): Promise<TPart[]> {
+-  const chunks: TPart[] = [];
+-  const reader = stream.getReader();
+-  while (true) {
+-    const { done, value } = await reader.read();
+-    if (done) break;
+-    chunks.push(value);
+-  }
+-
+-  reader.releaseLock();
+-  return chunks;
+-}
++    for await (const chunk of await testStream.read(ctx.run.id, { timeoutInSeconds:
+\ No newline at end of file

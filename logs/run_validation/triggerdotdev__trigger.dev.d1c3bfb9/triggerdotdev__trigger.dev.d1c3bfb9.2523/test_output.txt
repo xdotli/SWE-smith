@@ -1,0 +1,34 @@
++ cd /testbed
++ : '>>>>> Start Test Output'
++ NODE_OPTIONS=--max-old-space-size=8192
++ pnpm test -- --run
+
+> triggerdotdev@0.0.1 test /testbed
+> turbo run test --concurrency=1 -- --run -- --run
+
+• Packages in scope: @internal/cache, @internal/clickhouse, @internal/redis, @internal/replication, @internal/run-engine, @internal/schedule-engine, @internal/testcontainers, @internal/tracing, @internal/zod-worker, @trigger.dev/build, @trigger.dev/core, @trigger.dev/database, @trigger.dev/otlp-importer, @trigger.dev/python, @trigger.dev/react-hooks, @trigger.dev/redis-worker, @trigger.dev/rsc, @trigger.dev/schema-to-json, @trigger.dev/sdk, coordinator, d3-chat, docker-provider, docs, emails, kubernetes-provider, references-bun-catalog, references-d3-openai-agents, references-effect, references-hello-world, references-init-shell, references-init-shell-js, references-issue-2687, references-nextjs-realtime, references-prisma-6, references-prisma-6-client, references-prisma-6-config, references-prisma-6-multi-file, references-prisma-6-output, references-prisma-7, references-python-catalog, references-realtime-hooks-test, references-realtime-streams, references-telemetry, references-test-tasks, supervisor, trigger.dev, webapp
+• Running test in 47 packages
+• Remote caching disabled
+@trigger.dev/database:build: cache miss, executing 83e23de1f8c98d61
+@trigger.dev/database:build: 
+@trigger.dev/database:build: > @trigger.dev/database@0.0.2 build /testbed/internal-packages/database
+@trigger.dev/database:build: > pnpm run clean && tsc --noEmit false --outDir dist --declaration
+@trigger.dev/database:build: 
+@trigger.dev/database:build: 
+@trigger.dev/database:build: > @trigger.dev/database@0.0.2 clean /testbed/internal-packages/database
+@trigger.dev/database:build: > rimraf dist
+@trigger.dev/database:build: 
+@trigger.dev/database:build: src/index.ts(1,15): error TS2307: Cannot find module '../generated/prisma' or its corresponding type declarations.
+@trigger.dev/database:build: src/transaction.ts(1,30): error TS2307: Cannot find module '../generated/prisma' or its corresponding type declarations.
+@trigger.dev/database:build:  ELIFECYCLE  Command failed with exit code 2.
+@trigger.dev/database:build: ERROR: command finished with error: command (/testbed/internal-packages/database) pnpm run build exited (2)
+command (/testbed/internal-packages/database) pnpm run build exited (2)
+
+ Tasks:    0 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    17.232s 
+Failed:    @trigger.dev/database#build
+
+ ERROR  run failed: command  exited (2)
+ ELIFECYCLE  Test failed. See above for more details.
++ : '>>>>> End Test Output'

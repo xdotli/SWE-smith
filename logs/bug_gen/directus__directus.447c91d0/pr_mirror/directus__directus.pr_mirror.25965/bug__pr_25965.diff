@@ -1,0 +1,367 @@
+diff --git a/app/src/composables/use-item/index.ts b/app/src/composables/use-item/index.ts
+index ad7c483..d84af09 100644
+--- a/app/src/composables/use-item/index.ts
++++ b/app/src/composables/use-item/index.ts
+@@ -5,25 +5,24 @@ import { i18n } from '@/lang';
+ import { useFieldsStore } from '@/stores/fields';
+ import { useRelationsStore } from '@/stores/relations';
+ import { APIError } from '@/types/error';
+-import { applyConditions } from '@/utils/apply-conditions';
+ import { getDefaultValuesFromFields } from '@/utils/get-default-values-from-fields';
+-import { getFieldsInGroup } from '@/utils/get-fields-in-group';
+-import { mergeItemData } from '@/utils/merge-item-data';
+ import { notify } from '@/utils/notify';
+ import { pushGroupOptionsDown } from '@/utils/push-group-options-down';
+ import { translate } from '@/utils/translate-object-values';
+ import { unexpectedError } from '@/utils/unexpected-error';
+ import { validateItem } from '@/utils/validate-item';
++import { getFieldsInGroup } from '@/utils/get-fields-in-group';
+ import { useCollection } from '@directus/composables';
+ import { isSystemCollection } from '@directus/system-data';
+ import { Alterations, Field, Item, PrimaryKey, Query, Relation } from '@directus/types';
+ import { getEndpoint, isObject } from '@directus/utils';
+ import { AxiosResponse } from 'axios';
+ import { jsonToGraphQLQuery } from 'json-to-graphql-query';
+-import { cloneDeep, mergeWith } from 'lodash';
++import { mergeWith, cloneDeep } from 'lodash';
+ import { ComputedRef, MaybeRef, Ref, computed, isRef, ref, unref, watch } from 'vue';
+ import { UsablePermissions, usePermissions } from '../use-permissions';
+ import { getGraphqlQueryFields } from './lib/get-graphql-query-fields';
++import { applyConditions } from '@/utils/apply-conditions';
+ 
+ type UsableItem<T extends Item> = {
+ 	edits: Ref<Item>;
+@@ -184,7 +183,7 @@ export function useItem<T extends Item>(
+ 
+ 		const editsWithClearedValues = clearHiddenFieldsByCondition(edits.value, fields, defaultValues.value, item.value);
+ 
+-		const payloadToValidate = mergeItemData(defaultValues.value, item.value ?? {}, editsWithClearedValues);
++		const payloadToValidate = mergeItemData(defaultValues.value, item.value, editsWithClearedValues);
+ 
+ 		const errors = validateItem(payloadToValidate, fields, isNew.value);
+ 		if (nestedValidationErrors.value?.length) errors.push(...nestedValidationErrors.value);
+@@ -222,6 +221,14 @@ export function useItem<T extends Item>(
+ 		}
+ 	}
+ 
++	function mergeItemData(defaultValues: any, item: any, edits: any) {
++		return mergeWith({}, defaultValues, item, edits, function (_from: any, to: any) {
++			if (typeof to !== 'undefined') {
++				return to;
++			}
++		});
++	}
++
+ 	async function saveAsCopy() {
+ 		saving.value = true;
+ 		validationErrors.value = [];
+@@ -407,142 +414,4 @@ export function useItem<T extends Item>(
+ 		}
+ 
+ 		function clearJunctionRelatedKey(relation: Relation, existsJunctionRelated: Relation | undefined, item: Item) {
+-			if (!relation.meta?.junction_field || !isObject(item[relation.meta.junction_field]) || !existsJunctionRelated)
+-				return;
+-
+-			let junctionRelatedPrimaryKeyField = null;
+-
+-			if (existsJunctionRelated.related_collection)
+-				junctionRelatedPrimaryKeyField = fieldsStore.getPrimaryKeyFieldForCollection(
+-					existsJunctionRelated.related_collection,
+-				);
+-			else if (
+-				existsJunctionRelated.meta?.one_collection_field &&
+-				item[existsJunctionRelated.meta.one_collection_field]
+-			)
+-				junctionRelatedPrimaryKeyField = fieldsStore.getPrimaryKeyFieldForCollection(
+-					item[existsJunctionRelated.meta.one_collection_field],
+-				);
+-
+-			const relatedItem = item[relation.meta.junction_field];
+-
+-			if (isObject(relatedItem)) clearPrimaryKey(junctionRelatedPrimaryKeyField, relatedItem);
+-		}
+-	}
+-
+-	function saveErrorHandler(error: any) {
+-		if (error?.response?.data?.errors) {
+-			validationErrors.value = error.response.data.errors
+-				.filter((err: APIError) => VALIDATION_TYPES.includes(err?.extensions?.code))
+-				.map((err: APIError) => {
+-					return err.extensions;
+-				});
+-
+-			const otherErrors = error.response.data.errors.filter(
+-				(err: APIError) => !VALIDATION_TYPES.includes(err?.extensions?.code),
+-			);
+-
+-			if (otherErrors.length > 0) {
+-				otherErrors.forEach(unexpectedError);
+-			}
+-		} else {
+-			unexpectedError(error);
+-		}
+-
+-		throw error;
+-	}
+-
+-	async function archive() {
+-		if (!collectionInfo.value?.meta?.archive_field) return;
+-
+-		archiving.value = true;
+-
+-		const field = collectionInfo.value.meta.archive_field;
+-
+-		let archiveValue: any = collectionInfo.value.meta.archive_value;
+-		if (archiveValue === 'true') archiveValue = true;
+-		if (archiveValue === 'false') archiveValue = false;
+-
+-		let unarchiveValue: any = collectionInfo.value.meta.unarchive_value;
+-		if (unarchiveValue === 'true') unarchiveValue = true;
+-		if (unarchiveValue === 'false') unarchiveValue = false;
+-
+-		try {
+-			let value: any = item.value && item.value[field] === archiveValue ? unarchiveValue : archiveValue;
+-
+-			if (value === 'true') value = true;
+-			if (value === 'false') value = false;
+-
+-			await api.patch(itemEndpoint.value, {
+-				[field]: value,
+-			});
+-
+-			item.value = {
+-				...(item.value as T),
+-				[field]: value,
+-			};
+-
+-			notify({
+-				title:
+-					value === archiveValue ? i18n.global.t('item_delete_success', 1) : i18n.global.t('item_update_success', 1),
+-			});
+-		} catch (error) {
+-			unexpectedError(error);
+-			throw error;
+-		} finally {
+-			archiving.value = false;
+-		}
+-	}
+-
+-	async function remove() {
+-		deleting.value = true;
+-
+-		try {
+-			await api.delete(itemEndpoint.value);
+-
+-			item.value = null;
+-
+-			notify({
+-				title: i18n.global.t('item_delete_success', 1),
+-			});
+-		} catch (error) {
+-			unexpectedError(error);
+-			throw error;
+-		} finally {
+-			deleting.value = false;
+-		}
+-	}
+-
+-	function refresh() {
+-		error.value = null;
+-		validationErrors.value = [];
+-		loadingItem.value = false;
+-		saving.value = false;
+-		deleting.value = false;
+-		archiving.value = false;
+-
+-		item.value = null;
+-
+-		refreshItem();
+-		permissions.itemPermissions.refresh();
+-	}
+-
+-	function refreshItem() {
+-		if (isNew.value) {
+-			item.value = null;
+-		} else {
+-			getItem();
+-		}
+-	}
+-
+-	function setItemValueToResponse(response: AxiosResponse) {
+-		if (
+-			(isSystemCollection(collection.value) && collection.value !== 'directus_collections') ||
+-			(collection.value === 'directus_collections' && isSystemCollection(response.data.data.collection ?? ''))
+-		) {
+-			response.data.data = translate(response.data.data);
+-		}
+-
+-		item.value = response.data.data;
+-	}
+-}
++			if (!relation.meta?.junction_field || !isObject(item[relation.meta.junction_field]) || !existsJunctionRelate
+\ No newline at end of file
+diff --git a/app/src/composables/use-versions.ts b/app/src/composables/use-versions.ts
+index 1b3648a..2507a3e 100644
+--- a/app/src/composables/use-versions.ts
++++ b/app/src/composables/use-versions.ts
+@@ -1,16 +1,16 @@
+ import api from '@/api';
+-import { useNestedValidation } from '@/composables/use-nested-validation';
+-import { VALIDATION_TYPES } from '@/constants';
+-import { APIError } from '@/types/error';
+-import { getDefaultValuesFromFields } from '@/utils/get-default-values-from-fields';
+-import { mergeItemData } from '@/utils/merge-item-data';
+-import { pushGroupOptionsDown } from '@/utils/push-group-options-down';
+ import { unexpectedError } from '@/utils/unexpected-error';
+-import { validateItem } from '@/utils/validate-item';
+-import { ContentVersion, Filter, Item, Query } from '@directus/types';
++import { ContentVersion, Filter, Query, Item } from '@directus/types';
+ import { useRouteQuery } from '@vueuse/router';
+ import { Ref, computed, ref, unref, watch } from 'vue';
+ import { useCollectionPermissions, usePermissions } from './use-permissions';
++import { mergeWith } from 'lodash';
++import { pushGroupOptionsDown } from '@/utils/push-group-options-down';
++import { validateItem } from '@/utils/validate-item';
++import { useNestedValidation } from '@/composables/use-nested-validation';
++import { getDefaultValuesFromFields } from '@/utils/get-default-values-from-fields';
++import { APIError } from '@/types/error';
++import { VALIDATION_TYPES } from '@/constants';
+ 
+ export function useVersions(collection: Ref<string>, isSingleton: Ref<boolean>, primaryKey: Ref<string | null>) {
+ 	const currentVersion = ref<ContentVersion | null>(null);
+@@ -191,7 +191,17 @@ export function useVersions(collection: Ref<string>, isSingleton: Ref<boolean>,
+ 		saveVersionLoading.value = true;
+ 		validationErrors.value = [];
+ 
+-		const payloadToValidate = mergeItemData(defaultValues.value, item.value, edits.value);
++		const payloadToValidate = mergeWith(
++			{},
++			defaultValues.value,
++			item.value,
++			edits.value,
++			function (_from: any, to: any) {
++				if (typeof to !== 'undefined') {
++					return to;
++				}
++			},
++		);
+ 
+ 		const fields = pushGroupOptionsDown(fieldsWithPermissions.value);
+ 
+@@ -221,4 +231,4 @@ export function useVersions(collection: Ref<string>, isSingleton: Ref<boolean>,
+ 			saveVersionLoading.value = false;
+ 		}
+ 	}
+-}
++}
+\ No newline at end of file
+diff --git a/app/src/utils/merge-item-data.test.ts b/app/src/utils/merge-item-data.test.ts
+deleted file mode 100644
+index 072f16f..0000000
+--- a/app/src/utils/merge-item-data.test.ts
++++ /dev/null
+@@ -1,85 +0,0 @@
+-import { describe, it, expect } from 'vitest';
+-import { mergeItemData } from './merge-item-data';
+-
+-describe('mergeItemData', () => {
+-	it('should use existing if field is undefined in edits', () => {
+-		const defaults = { x: 'default' };
+-		const existing = { x: 'existing' };
+-		const edits = {};
+-		const result = mergeItemData(defaults, existing, edits);
+-		expect(result.x).toMatchInlineSnapshot(`"existing"`);
+-	});
+-
+-	it('should use default if field is undefined in both existing and edits', () => {
+-		const defaults = { x: 'default' };
+-		const existing = {};
+-		const edits = {};
+-		const result = mergeItemData(defaults, existing, edits);
+-		expect(result.x).toMatchInlineSnapshot(`"default"`);
+-	});
+-
+-	it('should use edits over existing and default', () => {
+-		const defaults = { x: 'default' };
+-		const existing = { x: 'existing' };
+-		const edits = { x: 'edited' };
+-		const result = mergeItemData(defaults, existing, edits);
+-		expect(result.x).toMatchInlineSnapshot(`"edited"`);
+-	});
+-
+-	it('should merge default, existing, and edits with correct precedence', () => {
+-		const defaults = { b: 'default b', c: 'default c' };
+-		const existing = { a: 'existing a', b: 'existing b', d: 'existing d' };
+-		const edits = { b: 'edit b', e: 'edit e' };
+-		const result = mergeItemData(defaults, existing, edits);
+-
+-		expect(result).toMatchInlineSnapshot(`
+-			{
+-			  "a": "existing a",
+-			  "b": "edit b",
+-			  "c": "default c",
+-			  "d": "existing d",
+-			  "e": "edit e",
+-			}
+-		`);
+-	});
+-
+-	it('should not merge nested objects', () => {
+-		const defaults = { obj: { a: 1, b: 2 } };
+-		const existing = { obj: { b: 3 } };
+-		const edits = { obj: { c: 4 } };
+-		const result = mergeItemData(defaults, existing, edits);
+-
+-		expect(result.obj).toMatchInlineSnapshot(`
+-			{
+-			  "c": 4,
+-			}
+-		`);
+-	});
+-
+-	it('should not merge nested arrays', () => {
+-		const defaults = { arr: [1, 2, 3] };
+-		const existing = { arr: [4, 5] };
+-		const edits = { arr: [6] };
+-		const result = mergeItemData(defaults, existing, edits);
+-
+-		expect(result.arr).toMatchInlineSnapshot(`
+-			[
+-			  6,
+-			]
+-		`);
+-	});
+-
+-	it('should handle null and undefined values correctly', () => {
+-		const defaults = { a: 'default a', b: 'default b' };
+-		const existing = { a: null };
+-		const edits = { b: undefined };
+-		const result = mergeItemData(defaults, existing, edits);
+-
+-		expect(result).toMatchInlineSnapshot(`
+-			{
+-			  "a": null,
+-			  "b": "default b",
+-			}
+-		`);
+-	});
+-});
+diff --git a/app/src/utils/merge-item-data.ts b/app/src/utils/merge-item-data.ts
+deleted file mode 100644
+index a30d190..0000000
+--- a/app/src/utils/merge-item-data.ts
++++ /dev/null
+@@ -1,13 +0,0 @@
+-import { mergeWith } from 'lodash';
+-
+-export function mergeItemData(
+-	defaultValues: Record<string, any>,
+-	existingValues: Record<string, any>,
+-	edits: Record<string, any>,
+-) {
+-	return mergeWith({}, defaultValues, existingValues, edits, customizer);
+-
+-	function customizer(_from: unknown, to: unknown): any {
+-		if (typeof to !== 'undefined') return to;
+-	}
+-}

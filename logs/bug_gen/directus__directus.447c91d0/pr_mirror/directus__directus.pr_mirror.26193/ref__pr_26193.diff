@@ -1,0 +1,274 @@
+diff --git a/.changeset/wet-cities-start.md b/.changeset/wet-cities-start.md
+new file mode 100644
+index 0000000000000..c6135cae6c4cc
+--- /dev/null
++++ b/.changeset/wet-cities-start.md
+@@ -0,0 +1,5 @@
++---
++'@directus/api': patch
++---
++
++Improved extension install error messages
+diff --git a/api/src/extensions/lib/installation/manager.test.ts b/api/src/extensions/lib/installation/manager.test.ts
+new file mode 100644
+index 0000000000000..0597a4f8dcf31
+--- /dev/null
++++ b/api/src/extensions/lib/installation/manager.test.ts
+@@ -0,0 +1,115 @@
++import { download } from '@directus/extensions-registry';
++import { mkdir, readFile, rm } from 'node:fs/promises';
++import { beforeEach, describe, expect, test, vi } from 'vitest';
++import { useLogger } from '../../../logger/index.js';
++import { InstallationManager } from './manager.js';
++
++vi.mock('@directus/env', () => ({
++	useEnv: vi.fn(() => ({
++		TEMP_PATH: '/tmp',
++		EXTENSIONS_PATH: '/extensions',
++	})),
++}));
++
++vi.mock('@directus/extensions-registry', () => ({
++	download: vi.fn(),
++}));
++
++vi.mock('@directus/storage-driver-local');
++
++vi.mock('fs-extra', () => ({
++	move: vi.fn(),
++	remove: vi.fn(),
++}));
++
++vi.mock('node:fs/promises', () => ({
++	mkdir: vi.fn(),
++	readFile: vi.fn(),
++	rm: vi.fn(),
++}));
++
++vi.mock('tar', () => ({
++	extract: vi.fn(),
++}));
++
++vi.mock('../../../logger/index.js', () => ({
++	useLogger: vi.fn(() => ({ warn: vi.fn() })),
++}));
++
++vi.mock('../../../storage/index.js', () => ({
++	getStorage: vi.fn(),
++}));
++
++vi.mock('../get-extensions-path.js', () => ({
++	getExtensionsPath: vi.fn(() => '/extensions'),
++}));
++
++describe('InstallationManager', () => {
++	let manager: InstallationManager;
++	let mockLogger: any;
++
++	beforeEach(async () => {
++		vi.clearAllMocks();
++
++		mockLogger = {
++			warn: vi.fn(),
++		};
++
++		vi.mocked(useLogger).mockReturnValue(mockLogger);
++		vi.mocked(mkdir).mockResolvedValue(undefined);
++
++		// Setup successful mocks by default
++		const mockReadableStream = {
++			getReader: () => ({
++				read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
++			}),
++		};
++
++		vi.mocked(download).mockResolvedValue(mockReadableStream as any);
++
++		vi.mocked(readFile).mockResolvedValue(
++			JSON.stringify({
++				name: 'test-extension',
++				directus: {
++					type: 'interface',
++				},
++			}),
++		);
++
++		manager = new InstallationManager();
++	});
++
++	describe('Errors', () => {
++		test('should throw marketplace ServiceUnavailableError when download fails', async () => {
++			vi.mocked(download).mockRejectedValue(new Error('Network error'));
++
++			await expect(manager.install('test-version')).rejects.toThrowError(
++				'Service "marketplace" is unavailable. Could not download the extension.',
++			);
++		});
++
++		test('should throw extension ServiceUnavailableError for any non marketplace error', async () => {
++			vi.mocked(mkdir).mockRejectedValue(new Error());
++
++			await expect(manager.install('test-version')).rejects.toThrowError(
++				'Service "extensions" is unavailable. Failed to extract the extension or write it to storage.',
++			);
++		});
++
++		test('should always clean up temporary directory even when error occurs', async () => {
++			vi.mocked(mkdir).mockRejectedValue(new Error());
++
++			await expect(manager.install('test-version')).rejects.toThrow();
++
++			expect(rm).toHaveBeenCalledWith('/tmp/marketplace/test-version', { recursive: true });
++		});
++
++		test('should log warning when error occurs', async () => {
++			vi.mocked(download).mockRejectedValue(new Error('Test error'));
++
++			await expect(manager.install('test-version')).rejects.toThrow();
++
++			expect(mockLogger.warn).toHaveBeenCalled();
++		});
++	});
++});
+diff --git a/api/src/extensions/lib/installation/manager.ts b/api/src/extensions/lib/installation/manager.ts
+index 227afd39243b4..689c6c0679ca0 100644
+--- a/api/src/extensions/lib/installation/manager.ts
++++ b/api/src/extensions/lib/installation/manager.ts
+@@ -1,5 +1,5 @@
+ import { useEnv } from '@directus/env';
+-import { ServiceUnavailableError } from '@directus/errors';
++import { ErrorCode, isDirectusError, ServiceUnavailableError } from '@directus/errors';
+ import { EXTENSION_PKG_KEY, ExtensionManifest } from '@directus/extensions';
+ import { download, type DownloadOptions } from '@directus/extensions-registry';
+ import DriverLocal from '@directus/storage-driver-local';
+@@ -33,7 +33,16 @@ export class InstallationManager {
+ 				options.registry = env['MARKETPLACE_REGISTRY'];
+ 			}
+ 
+-			const tarReadableStream = await download(versionId, env['MARKETPLACE_TRUST'] === 'sandbox', options);
++			let tarReadableStream;
++
++			try {
++				tarReadableStream = await download(versionId, env['MARKETPLACE_TRUST'] === 'sandbox', options);
++			} catch (error) {
++				throw new ServiceUnavailableError(
++					{ service: 'marketplace', reason: 'Could not download the extension' },
++					{ cause: error },
++				);
++			}
+ 
+ 			if (!tarReadableStream) {
+ 				throw new Error(`No readable stream returned from download`);
+@@ -92,8 +101,13 @@ export class InstallationManager {
+ 		} catch (err) {
+ 			logger.warn(err);
+ 
++			// rethrow marketplace servic unavailable
++			if (isDirectusError(err, ErrorCode.ServiceUnavailable)) {
++				throw err;
++			}
++
+ 			throw new ServiceUnavailableError(
+-				{ service: 'marketplace', reason: 'Could not download and extract the extension' },
++				{ service: 'extensions', reason: 'Failed to extract the extension or write it to storage' },
+ 				{ cause: err },
+ 			);
+ 		} finally {
+diff --git a/api/src/services/extensions.test.ts b/api/src/services/extensions.test.ts
+new file mode 100644
+index 0000000000000..7f88bc2917a91
+--- /dev/null
++++ b/api/src/services/extensions.test.ts
+@@ -0,0 +1,92 @@
++import { ServiceUnavailableError } from '@directus/errors';
++import { describe as registryDescribe } from '@directus/extensions-registry';
++import { beforeEach, describe, expect, test, vi } from 'vitest';
++import { getExtensionManager } from '../extensions/index.js';
++import { ExtensionsService } from './extensions.js';
++import { ItemsService } from './items.js';
++
++// Mock dependencies at the top level
++vi.mock('@directus/env', () => ({
++	useEnv: vi.fn(() => ({})),
++}));
++
++vi.mock('@directus/extensions-registry', () => ({
++	describe: vi.fn(),
++}));
++
++vi.mock('../extensions/index.js', () => ({
++	getExtensionManager: vi.fn(),
++}));
++
++vi.mock('./items.js', () => ({
++	ItemsService: vi.fn(),
++}));
++
++vi.mock('../database/index.js', () => ({
++	default: vi.fn(),
++}));
++
++describe('ExtensionsService', () => {
++	let mockExtensionManager: any;
++	let mockExtensionsItemService: any;
++
++	beforeEach(async () => {
++		vi.clearAllMocks();
++
++		mockExtensionsItemService = {
++			createOne: vi.fn(),
++			createMany: vi.fn(),
++			readOne: vi.fn(),
++			updateOne: vi.fn(),
++			deleteOne: vi.fn(),
++			deleteByQuery: vi.fn(),
++			readByQuery: vi.fn(),
++		};
++
++		mockExtensionManager = {
++			install: vi.fn(),
++			uninstall: vi.fn(),
++			extensions: [],
++			getExtension: vi.fn(),
++			reload: vi.fn(),
++			broadcastReloadNotification: vi.fn(),
++		};
++
++		vi.mocked(getExtensionManager).mockReturnValue(mockExtensionManager);
++
++		vi.mocked(ItemsService).mockImplementation(() => mockExtensionsItemService);
++
++		vi.mocked(registryDescribe).mockResolvedValue({
++			data: {
++				type: 'interface',
++				versions: [
++					{
++						id: 'test-version',
++						bundled: [],
++					},
++				],
++			},
++		} as any);
++	});
++
++	describe('install', () => {
++		test('should propagate extension manager install error', async () => {
++			mockExtensionManager.install.mockRejectedValue(
++				new ServiceUnavailableError({
++					service: 'marketplace',
++					reason: 'Could not download the extension',
++				}),
++			);
++
++			const service = new ExtensionsService({
++				knex: {} as any,
++				schema: {} as any,
++				accountability: null,
++			});
++
++			await expect(service.install('test-extension', 'test-version')).rejects.toThrow(
++				'Could not download the extension',
++			);
++		});
++	});
++});

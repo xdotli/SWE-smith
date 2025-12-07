@@ -1,0 +1,265 @@
++ cd /testbed
++ : '>>>>> Start Test Output'
++ NODE_OPTIONS=--max-old-space-size=8192
++ pnpm test
+
+> root@0.0.0 test /testbed
+> turbo run test --filter="./packages/**"
+
+
+Attention:
+Turborepo now collects completely anonymous telemetry regarding usage.
+This information is used to shape the Turborepo roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://turborepo.com/docs/telemetry
+
+turbo 2.5.4
+
+• Packages in scope: @tinacms/app, @tinacms/auth, @tinacms/cli, @tinacms/datalayer, @tinacms/graphql, @tinacms/mdx, @tinacms/metrics, @tinacms/schema-tools, @tinacms/scripts, @tinacms/search, @tinacms/vercel-previews, @tinacms/webpack-helpers, create-tina-app, next-tinacms-azure, next-tinacms-cloudinary, next-tinacms-dos, next-tinacms-s3, tinacms, tinacms-authjs, tinacms-clerk, tinacms-gitprovider-github
+• Running test in 21 packages
+• Remote caching disabled
+@tinacms/scripts:build: cache miss, executing 3a7d27ebc7ef7472
+@tinacms/webpack-helpers:build: cache miss, executing bf1ca88f9f84aeb6
+@tinacms/webpack-helpers:build: 
+@tinacms/webpack-helpers:build: > @tinacms/webpack-helpers@1.0.5 build /testbed/packages/@tinacms/webpack-helpers
+@tinacms/webpack-helpers:build: > echo 'build'
+@tinacms/webpack-helpers:build: 
+@tinacms/scripts:build: 
+@tinacms/scripts:build: > @tinacms/scripts@1.4.1 build /testbed/packages/@tinacms/scripts
+@tinacms/scripts:build: > pnpm tsup src/jest-runner.ts src/css-transform.ts src/index.ts --format esm
+@tinacms/scripts:build: 
+@tinacms/webpack-helpers:build: build
+@tinacms/scripts:build: CLI Building entry: src/index.ts, src/jest-runner.ts
+@tinacms/scripts:build: CLI Using tsconfig: tsconfig.json
+@tinacms/scripts:build: CLI tsup v8.4.0
+@tinacms/scripts:build: CLI Target: es2017
+@tinacms/scripts:build: ESM Build start
+@tinacms/scripts:build: ESM dist/index.js          14.29 KB
+@tinacms/scripts:build: ESM dist/chunk-Q2LW34XU.js 1.12 KB
+@tinacms/scripts:build: ESM dist/jest-runner.js    492.00 B
+@tinacms/scripts:build: ESM ⚡️ Build success in 133ms
+@tinacms/auth:build: cache miss, executing b0e13e7aa3de1fcc
+@tinacms/schema-tools:build: cache miss, executing aa025a97b8cf53d1
+@tinacms/metrics:build: cache miss, executing a386a35c2907417d
+@tinacms/auth:build: 
+@tinacms/auth:build: > @tinacms/auth@1.1.0 build /testbed/packages/@tinacms/auth
+@tinacms/auth:build: > tinacms-scripts build
+@tinacms/auth:build: 
+@tinacms/metrics:build: 
+@tinacms/metrics:build: > @tinacms/metrics@2.0.0 build /testbed/packages/@tinacms/metrics
+@tinacms/metrics:build: > tinacms-scripts build
+@tinacms/metrics:build: 
+@tinacms/schema-tools:build: 
+@tinacms/schema-tools:build: > @tinacms/schema-tools@2.0.0 build /testbed/packages/@tinacms/schema-tools
+@tinacms/schema-tools:build: > tinacms-scripts build
+@tinacms/schema-tools:build: 
+@tinacms/schema-tools:build: vite v4.5.9 building for production...
+@tinacms/auth:build: vite v4.5.9 building for production...
+create-tina-app:build: cache miss, executing 27607e895763e6e8
+@tinacms/metrics:types: cache miss, executing cf9cfb6608b45647
+@tinacms/auth:build: transforming...
+@tinacms/schema-tools:build: transforming...
+@tinacms/auth:build: ✓ 1 modules transformed.
+@tinacms/auth:build: rendering chunks...
+@tinacms/auth:build: computing gzip size...
+@tinacms/auth:build: dist/index.js  1.80 kB │ gzip: 0.72 kB
+@tinacms/auth:build: ✓ built in 262ms
+@tinacms/auth:types: cache miss, executing 131dcbd4ff84b1c8
+@tinacms/schema-tools:build: ✓ 35 modules transformed.
+@tinacms/schema-tools:build: rendering chunks...
+@tinacms/schema-tools:build: computing gzip size...
+@tinacms/schema-tools:build: dist/index.js  87.82 kB │ gzip: 18.90 kB
+@tinacms/schema-tools:build: ✓ built in 618ms
+@tinacms/mdx:build: cache miss, executing 8e8e1db713074bb0
+@tinacms/schema-tools:types: cache miss, executing 23d29b0414e474db
+@tinacms/metrics:types: 
+@tinacms/metrics:types: > @tinacms/metrics@2.0.0 types /testbed/packages/@tinacms/metrics
+@tinacms/metrics:types: > pnpm tsc
+@tinacms/metrics:types: 
+create-tina-app:build: 
+create-tina-app:build: > create-tina-app@1.6.2 build /testbed/packages/create-tina-app
+create-tina-app:build: > tinacms-scripts build
+create-tina-app:build: 
+@tinacms/auth:types: 
+@tinacms/auth:types: > @tinacms/auth@1.1.0 types /testbed/packages/@tinacms/auth
+@tinacms/auth:types: > pnpm tsc
+@tinacms/auth:types: 
+@tinacms/schema-tools:types: 
+@tinacms/schema-tools:types: > @tinacms/schema-tools@2.0.0 types /testbed/packages/@tinacms/schema-tools
+@tinacms/schema-tools:types: > pnpm tsc
+@tinacms/schema-tools:types: 
+@tinacms/mdx:build: 
+@tinacms/mdx:build: > @tinacms/mdx@2.0.0 build /testbed/packages/@tinacms/mdx
+@tinacms/mdx:build: > tinacms-scripts build
+@tinacms/mdx:build: 
+@tinacms/graphql:build: cache miss, executing c11a92512bb44dd2
+@tinacms/graphql:build: 
+@tinacms/graphql:build: > @tinacms/graphql@2.0.0 build /testbed/packages/@tinacms/graphql
+@tinacms/graphql:build: > tinacms-scripts build
+@tinacms/graphql:build: 
+@tinacms/metrics:test: cache miss, executing f9c7429f8c177693
+create-tina-app:types: cache miss, executing b7476fccc1569e21
+@tinacms/search:build: cache miss, executing c84cdff3d58407f4
+@tinacms/datalayer:build: cache miss, executing 4b9b30b80f7beb4b
+@tinacms/metrics:test: 
+@tinacms/metrics:test: > @tinacms/metrics@2.0.0 test /testbed/packages/@tinacms/metrics
+@tinacms/metrics:test: > jest --passWithNoTests
+@tinacms/metrics:test: 
+create-tina-app:types: 
+create-tina-app:types: > create-tina-app@1.6.2 types /testbed/packages/create-tina-app
+create-tina-app:types: > pnpm tsc
+create-tina-app:types: 
+@tinacms/auth:test: cache miss, executing 000b8c583f6e373f
+@tinacms/datalayer:build: 
+@tinacms/datalayer:build: > @tinacms/datalayer@2.0.0 build /testbed/packages/@tinacms/datalayer
+@tinacms/datalayer:build: > tinacms-scripts build
+@tinacms/datalayer:build: 
+@tinacms/search:build: 
+@tinacms/search:build: > @tinacms/search@1.1.4 build /testbed/packages/@tinacms/search
+@tinacms/search:build: > tinacms-scripts build
+@tinacms/search:build: 
+@tinacms/auth:test: 
+@tinacms/auth:test: > @tinacms/auth@1.1.0 test /testbed/packages/@tinacms/auth
+@tinacms/auth:test: > jest --passWithNoTests
+@tinacms/auth:test: 
+@tinacms/metrics:test: No tests found, exiting with code 0
+tinacms-gitprovider-github:build: cache miss, executing 377be4abee114af6
+@tinacms/mdx:types: cache miss, executing b682a80d2e4b511c
+@tinacms/schema-tools:test: cache miss, executing db4fa079945871c0
+@tinacms/search:build: vite v4.5.9 building for production...
+@tinacms/search:build: transforming...
+@tinacms/search:build: ✓ 2 modules transformed.
+@tinacms/search:build: rendering chunks...
+@tinacms/search:build: computing gzip size...
+@tinacms/search:build: dist/index-client.js  6.00 kB │ gzip: 1.73 kB
+@tinacms/search:build: ✓ built in 347ms
+tinacms:build: cache miss, executing 0a76d2bb30ca0284
+tinacms-gitprovider-github:build: 
+tinacms-gitprovider-github:build: > tinacms-gitprovider-github@4.0.0 build /testbed/packages/tinacms-gitprovider-github
+tinacms-gitprovider-github:build: > tinacms-scripts build
+tinacms-gitprovider-github:build: 
+@tinacms/mdx:types: 
+@tinacms/mdx:types: > @tinacms/mdx@2.0.0 types /testbed/packages/@tinacms/mdx
+@tinacms/mdx:types: > tsc
+@tinacms/mdx:types: 
+@tinacms/auth:test: No tests found, exiting with code 0
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: > @tinacms/schema-tools@2.0.0 test /testbed/packages/@tinacms/schema-tools
+@tinacms/schema-tools:test: > jest --config jest.config.js
+@tinacms/schema-tools:test: 
+tinacms:build: 
+tinacms:build: > tinacms@3.0.1 build /testbed/packages/tinacms
+tinacms:build: > tinacms-scripts build
+tinacms:build: 
+tinacms:build: vite v4.5.9 building for production...
+tinacms:build: transforming...
+@tinacms/schema-tools:test: PASS src/util/hasDuplicates.spec.ts
+@tinacms/schema-tools:test:   hasDuplicates
+@tinacms/schema-tools:test:     ✓ returns true when it has duplicates (4 ms)
+@tinacms/schema-tools:test:     ✓ returns false when does not have duplicates (1 ms)
+@tinacms/schema-tools:test:     ✓ returns false when undefined is passed
+@tinacms/schema-tools:test:   findDuplicates
+@tinacms/schema-tools:test:     ✓ returns the duplicate when it has duplicates
+@tinacms/schema-tools:test:     ✓ returns undefined when does not have duplicates (1 ms)
+@tinacms/schema-tools:test:     ✓ returns undefined when undefined is passed
+@tinacms/schema-tools:test:     ✓ returns a list of the duplicate when there is more then one (1 ms)
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: PASS src/util/parseURL.spec.ts
+@tinacms/schema-tools:test:   parseUrl
+@tinacms/schema-tools:test:     ✓ returns the branch, client, ID and isLocalClient from a valid production URL (9 ms)
+@tinacms/schema-tools:test:     ✓ returns the branch, client, ID and isLocalClient from a valid local URL (2 ms)
+@tinacms/schema-tools:test:     ✓ handles when branch name contains a "/" (3 ms)
+@tinacms/schema-tools:test:     ✓ throws an error when an invalided format is provided (12 ms)
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: PASS src/schema/addNamespaceToSchema.test.ts
+@tinacms/schema-tools:test:   addNamespaceToSchema
+@tinacms/schema-tools:test:     ✓ should return string unchanged (14 ms)
+@tinacms/schema-tools:test:     ✓ should return null unchanged (1 ms)
+@tinacms/schema-tools:test:     ✓ should return undefined unchanged
+@tinacms/schema-tools:test:     ✓ should add an empty namespace to a single root node with name (1 ms)
+@tinacms/schema-tools:test:     ✓ should add an empty namespace to a single root node with value (1 ms)
+@tinacms/schema-tools:test:     ✓ should add namespaces recursively to nested nodes (1 ms)
+@tinacms/schema-tools:test:     ✓ should handle nodes without name or value properties (1 ms)
+@tinacms/schema-tools:test:     ✓ should handle mixed content in arrays (1 ms)
+@tinacms/schema-tools:test:     ✓ should maintain original properties not related to name or namespace (1 ms)
+@tinacms/schema-tools:test:     ✓ should correctly generate separate namespaces for nested objects (3 ms)
+@tinacms/schema-tools:test:     ✓ should generate separate namespaces for sibling nodes (1 ms)
+@tinacms/schema-tools:test:     ✓ should correctly construct namespaces for nodes with the same names (1 ms)
+@tinacms/schema-tools:test:     ✓ should correctly handle repeated names at different levels
+@tinacms/schema-tools:test:     ✓ should preserve existing namespaces and not modify them (1 ms)
+@tinacms/schema-tools:test:     ✓ deeply nested schema issue #5364 (1 ms)
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: PASS src/schema/TinaSchema.test.ts
+@tinacms/schema-tools:test:   TinaSchema
+@tinacms/schema-tools:test:     getCollectionByFullPath
+@tinacms/schema-tools:test:       ✓ fetches correct collection with getCollectionByFullPath in schema without root (7 ms)
+@tinacms/schema-tools:test:       ✓ getCollectionByPath throws exception if path not in known collection in schema without root (25 ms)
+@tinacms/schema-tools:test:       ✓ fetches correct collection with getCollectionByFullPath in schema with root (2 ms)
+@tinacms/schema-tools:test:       ✓ getCollectionByPath throws exception if path not in known collection in schema with root (2 ms)
+@tinacms/schema-tools:test:     findReferencesFromCollection
+@tinacms/schema-tools:test:       ✓ should find a single reference field (1 ms)
+@tinacms/schema-tools:test:       ✓ should find multiple reference fields
+@tinacms/schema-tools:test:       ✓ should find references in a list of objects (1 ms)
+@tinacms/schema-tools:test:       ✓ should find nested reference fields
+@tinacms/schema-tools:test:       ✓ should find references across multiple collections (1 ms)
+@tinacms/schema-tools:test:       ✓ should return an empty object if no references exist (1 ms)
+@tinacms/schema-tools:test:       ✓ should return an empty object if no references exist (1 ms)
+@tinacms/schema-tools:test:       ✓ should find references in templates (1 ms)
+@tinacms/schema-tools:test:       ✓ should find references in nested templates
+@tinacms/schema-tools:test:     walkFields
+@tinacms/schema-tools:test:       ✓ should walk a single non-list, non-nested field (1 ms)
+@tinacms/schema-tools:test:       ✓ should walk all fields with list of objects
+@tinacms/schema-tools:test:       ✓ should walk nested fields within an object (1 ms)
+@tinacms/schema-tools:test:       ✓ should walk a list of primitive fields (1 ms)
+@tinacms/schema-tools:test:       ✓ should walk body with templates (1 ms)
+@tinacms/schema-tools:test:       ✓ should handle an empty collection
+@tinacms/schema-tools:test:       ✓ should handle a collection with no fields
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: PASS src/validate/index.spec.ts
+@tinacms/schema-tools:test:   validateSchema
+@tinacms/schema-tools:test:     ✓ Passes on a valid schema (18 ms)
+@tinacms/schema-tools:test:     ✓ fails when a bad format is given (13 ms)
+@tinacms/schema-tools:test:     ✓ fails when a no name is given (2 ms)
+@tinacms/schema-tools:test:     ✓ fails when two collections have the same name (1 ms)
+@tinacms/schema-tools:test:     ✓ fails when two templates have the same name (1 ms)
+@tinacms/schema-tools:test:     ✓ fails on deeply nested incorrect object (2 ms)
+@tinacms/schema-tools:test:     ✓ fails when templates and fields are provided (1 ms)
+@tinacms/schema-tools:test:     ✓ fails when fields is empty (1 ms)
+@tinacms/schema-tools:test:     ✓ fails when templates is empty
+@tinacms/schema-tools:test:     ✓ fails when a deeply nested field under a template is invalid (1 ms)
+@tinacms/schema-tools:test:     ✓ fails when a invalid type is given (2 ms)
+@tinacms/schema-tools:test:     ✓ fails when a invalid configuration for `isTitle` is given (1 ms)
+@tinacms/schema-tools:test:     ✓ passes when a valid configuration for `isTitle` is given (1 ms)
+@tinacms/schema-tools:test: 
+@tinacms/schema-tools:test: Test Suites: 5 passed, 5 total
+@tinacms/schema-tools:test: Tests:       59 passed, 59 total
+@tinacms/schema-tools:test: Snapshots:   0 total
+@tinacms/schema-tools:test: Time:        1.92 s
+@tinacms/schema-tools:test: Ran all test suites.
+tinacms:build: ✓ 154 modules transformed.
+tinacms:build: ✓ built in 3.03s
+tinacms:build: [vite:esbuild] Transform failed with 1 error:
+tinacms:build: /testbed/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx:449:103: ERROR: Unexpected end of file
+tinacms:build: file: /testbed/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx:449:103
+tinacms:build: 
+tinacms:build: Unexpected end of file
+tinacms:build: 447|          tinaPreview ? `/${tinaPreview}/index.html#` : '/admin#'
+tinacms:build: 448|        }/collections/${collection.name}/~`}
+tinacms:build: 449|        className='text-base tracking-wide text-gray-500 hover:text-blue-600 flex items-center opacity-90
+tinacms:build:    |                                                                                                         ^
+tinacms:build: 
+tinacms:build: Failed to build tinacms: Transform failed with 1 error:
+tinacms:build: /testbed/packages/tinacms/src/toolkit/react-sidebar/components/sidebar.tsx:449:103: ERROR: Unexpected end of file
+tinacms:build:  ELIFECYCLE  Command failed with exit code 1.
+tinacms:build: ERROR: command finished with error: command (/testbed/packages/tinacms) /root/.local/share/pnpm/.tools/pnpm/9.15.5/bin/pnpm run build exited (1)
+tinacms#build: command (/testbed/packages/tinacms) /root/.local/share/pnpm/.tools/pnpm/9.15.5/bin/pnpm run build exited (1)
+
+ Tasks:    18 successful, 20 total
+Cached:    0 cached, 20 total
+  Time:    14.858s 
+Failed:    tinacms#build
+
+ WARNING  no output files found for task @tinacms/webpack-helpers#build. Please check your `outputs` key in `turbo.json`
+ ERROR  run failed: command  exited (1)
+ ELIFECYCLE  Test failed. See above for more details.
++ : '>>>>> End Test Output'

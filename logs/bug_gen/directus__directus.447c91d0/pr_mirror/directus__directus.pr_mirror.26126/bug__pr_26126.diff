@@ -1,0 +1,788 @@
+diff --git a/api/src/services/tus/data-store.ts b/api/src/services/tus/data-store.ts
+index 9531ff9..6b1cccd 100644
+--- a/api/src/services/tus/data-store.ts
++++ b/api/src/services/tus/data-store.ts
+@@ -1,14 +1,14 @@
+ import formatTitle from '@directus/format-title';
+ import type { TusDriver } from '@directus/storage';
+ import type { Accountability, ChunkedUploadContext, File, SchemaOverview } from '@directus/types';
+-import { DataStore, ERRORS, Upload } from '@tus/utils';
+-import { omit } from 'lodash-es';
+ import { extension } from 'mime-types';
+ import { extname } from 'node:path';
+ import stream from 'node:stream';
+-import getDatabase from '../../database/index.js';
+-import { useLogger } from '../../logger/index.js';
++import { DataStore, ERRORS, Upload } from '@tus/utils';
+ import { ItemsService } from '../items.js';
++import { useLogger } from '../../logger/index.js';
++import getDatabase from '../../database/index.js';
++import { omit } from 'lodash-es';
+ 
+ export type TusDataStoreConfig = {
+ 	constants: {
+@@ -97,7 +97,7 @@ export class TusDataStore extends DataStore {
+ 		}
+ 
+ 		const fileData: Partial<File> = {
+-			...omit(upload.metadata, ['id', 'replace_id']),
++			...omit(upload.metadata, ['id']),
+ 			tus_id: upload.id,
+ 			tus_data: upload,
+ 			filesize: upload.size,
+@@ -288,4 +288,4 @@ export class TusDataStore extends DataStore {
+ 
+ 		return results[0] as File;
+ 	}
+-}
++}
+\ No newline at end of file
+diff --git a/tests/blackbox/common/config.ts b/tests/blackbox/common/config.ts
+index 3d3c2e7..b54160f 100644
+--- a/tests/blackbox/common/config.ts
++++ b/tests/blackbox/common/config.ts
+@@ -91,7 +91,6 @@ const directusConfig = {
+ 	QUERY_LIMIT_DEFAULT: '90', // Must be less than MAX_BATCH_MUTATION by at least 3
+ 	ACCESS_TOKEN_TTL: '25d', // should be larger than 24.86 days to test Expires value larger than 32-bit signed integer
+ 	WEBSOCKETS_ENABLED: 'true',
+-	TUS_ENABLED: 'true',
+ 	EMAIL_TRANSPORT: 'smtp',
+ 	EMAIL_SMTP_HOST: '127.0.0.1',
+ 	EMAIL_SMTP_PORT: '1025',
+@@ -139,194 +138,4 @@ const config: Config = {
+ 			connection: {
+ 				database: 'directus',
+ 				user: 'root',
+-				password: 'secret',
+-				host: '127.0.0.1',
+-				port: 6103,
+-			},
+-			...knexConfig,
+-		},
+-		maria: {
+-			client: 'mysql2',
+-			connection: {
+-				database: 'directus',
+-				user: 'root',
+-				password: 'secret',
+-				host: '127.0.0.1',
+-				port: 6104,
+-			},
+-			...knexConfig,
+-		},
+-		mssql: {
+-			client: 'mssql',
+-			connection: {
+-				database: 'model',
+-				user: 'sa',
+-				password: 'Test@123',
+-				host: '127.0.0.1',
+-				port: 6105,
+-				requestTimeout: 60000,
+-			},
+-			...knexConfig,
+-		},
+-		oracle: {
+-			client: 'oracledb',
+-			connection: {
+-				user: 'secretsysuser',
+-				password: 'secretpassword',
+-				connectString: '127.0.0.1:6106/XE',
+-			},
+-			...knexConfig,
+-			waitTestSQL: 'SELECT 1 FROM DUAL',
+-		},
+-		cockroachdb: {
+-			client: 'cockroachdb',
+-			connection: {
+-				database: 'defaultdb',
+-				user: 'root',
+-				password: '',
+-				host: '127.0.0.1',
+-				port: 6107,
+-			},
+-			pool: {
+-				afterCreate: (conn: any, callback: any) => {
+-					conn.query('SET serial_normalization = "sql_sequence"');
+-					conn.query('SET default_int_size = 4');
+-					callback(null, conn);
+-				},
+-			},
+-			...knexConfig,
+-		},
+-		sqlite3: {
+-			client: 'sqlite3',
+-			connection: {
+-				filename: './test.db',
+-			},
+-			useNullAsDefault: true,
+-			pool: {
+-				afterCreate: (conn: any, callback: any) => {
+-					conn.run('PRAGMA foreign_keys = ON');
+-					callback(null, conn);
+-				},
+-			},
+-			...knexConfig,
+-		},
+-	},
+-	names: {
+-		postgres: 'Postgres',
+-		postgres10: 'Postgres (10)',
+-		mysql: 'MySQL',
+-		mysql5: 'MySQL (5)',
+-		maria: 'MariaDB',
+-		mssql: 'MS SQL Server',
+-		oracle: 'OracleDB',
+-		cockroachdb: 'CockroachDB',
+-		sqlite3: 'SQLite 3',
+-	},
+-	envs: {
+-		postgres: {
+-			...directusConfig,
+-			DB_CLIENT: 'pg',
+-			DB_HOST: `127.0.0.1`,
+-			DB_USER: 'postgres',
+-			DB_PASSWORD: 'secret',
+-			DB_PORT: '6100',
+-			DB_DATABASE: 'directus',
+-			PORT: '59152',
+-		},
+-		postgres10: {
+-			...directusConfig,
+-			DB_CLIENT: 'pg',
+-			DB_HOST: `127.0.0.1`,
+-			DB_USER: 'postgres',
+-			DB_PASSWORD: 'secret',
+-			DB_PORT: '6101',
+-			DB_DATABASE: 'directus',
+-			PORT: '59153',
+-		},
+-		mysql: {
+-			...directusConfig,
+-			DB_CLIENT: 'mysql',
+-			DB_HOST: `127.0.0.1`,
+-			DB_PORT: '6102',
+-			DB_USER: 'root',
+-			DB_PASSWORD: 'secret',
+-			DB_DATABASE: 'directus',
+-			PORT: '59154',
+-		},
+-		mysql5: {
+-			...directusConfig,
+-			DB_CLIENT: 'mysql',
+-			DB_HOST: `127.0.0.1`,
+-			DB_PORT: '6103',
+-			DB_USER: 'root',
+-			DB_PASSWORD: 'secret',
+-			DB_DATABASE: 'directus',
+-			PORT: '59155',
+-		},
+-		maria: {
+-			...directusConfig,
+-			DB_CLIENT: 'mysql',
+-			DB_HOST: `127.0.0.1`,
+-			DB_PORT: '6104',
+-			DB_USER: 'root',
+-			DB_PASSWORD: 'secret',
+-			DB_DATABASE: 'directus',
+-			PORT: '59156',
+-		},
+-		mssql: {
+-			...directusConfig,
+-			DB_CLIENT: 'mssql',
+-			DB_HOST: `127.0.0.1`,
+-			DB_PORT: '6105',
+-			DB_USER: 'sa',
+-			DB_PASSWORD: 'Test@123',
+-			DB_DATABASE: 'model',
+-			PORT: '59157',
+-		},
+-		oracle: {
+-			...directusConfig,
+-			DB_CLIENT: 'oracledb',
+-			DB_USER: 'secretsysuser',
+-			DB_PASSWORD: 'secretpassword',
+-			DB_CONNECT_STRING: `127.0.0.1:6106/XE`,
+-			PORT: '59158',
+-		},
+-		cockroachdb: {
+-			...directusConfig,
+-			DB_CLIENT: 'cockroachdb',
+-			DB_HOST: `127.0.0.1`,
+-			DB_USER: 'root',
+-			DB_PASSWORD: '',
+-			DB_PORT: '6107',
+-			DB_DATABASE: 'defaultdb',
+-			PORT: '59159',
+-		},
+-		sqlite3: {
+-			...directusConfig,
+-			DB_CLIENT: 'sqlite3',
+-			DB_FILENAME: './test.db',
+-			PORT: '59160',
+-		},
+-	},
+-};
+-
+-const isWindows = ['win32', 'win64'].includes(process.platform);
+-
+-for (const vendor of allVendors) {
+-	config.envs[vendor]['TZ'] = isWindows ? '0' : 'UTC';
+-	config.envs[vendor]['PUBLIC_URL'] = getUrl(vendor);
+-}
+-
+-export function getUrl(vendor: Vendor, overrideEnv?: Env) {
+-	let port = overrideEnv ? overrideEnv[vendor].PORT : config.envs[vendor].PORT;
+-
+-	if (process.env['TEST_LOCAL']) {
+-		port = '8055';
+-	} else if (process.env['TEST_NO_CACHE']) {
+-		port = String(parseInt(config.envs[vendor].PORT) + 50);
+-	}
+-
+-	return `http://127.0.0.1:${port}`;
+-}
+-
+-export default config;
++				password: 'secret',
+\ No newline at end of file
+diff --git a/tests/blackbox/common/functions.ts b/tests/blackbox/common/functions.ts
+index 2c2f2c2..ba46bed 100644
+--- a/tests/blackbox/common/functions.ts
++++ b/tests/blackbox/common/functions.ts
+@@ -521,325 +521,4 @@ export async function CreateFieldM2M(vendor: Vendor, options: OptionsCreateField
+ 		type: options.primaryKeyType!,
+ 	};
+ 
+-	const junctionField = await CreateField(vendor, junctionFieldOptions);
+-
+-	const otherJunctionFieldName = `${options.otherCollection}_id${isSelfReferencing ? '2' : ''}`;
+-
+-	const otherJunctionFieldOptions: OptionsCreateField = {
+-		collection: options.junctionCollection,
+-		field: otherJunctionFieldName,
+-		type: options.primaryKeyType!,
+-	};
+-
+-	const otherJunctionField = await CreateField(vendor, otherJunctionFieldOptions);
+-
+-	const relationOptions: OptionsCreateRelation = {
+-		collection: options.junctionCollection,
+-		field: junctionFieldName,
+-		meta: {
+-			...options.relationMeta,
+-			one_field: options.field,
+-			junction_field: otherJunctionFieldName,
+-		},
+-		schema: options.relationSchema,
+-		related_collection: options.collection,
+-	};
+-
+-	const relation = await CreateRelation(vendor, relationOptions);
+-
+-	const otherRelationOptions: OptionsCreateRelation = {
+-		collection: options.junctionCollection,
+-		field: otherJunctionFieldName,
+-		meta: {
+-			...options.relationMeta,
+-			one_field: options.otherField,
+-			junction_field: junctionFieldName,
+-		},
+-		schema: options.otherRelationSchema,
+-		related_collection: options.otherCollection,
+-	};
+-
+-	const otherRelation = await CreateRelation(vendor, otherRelationOptions);
+-
+-	return { field, otherField, junctionCollection, junctionField, otherJunctionField, relation, otherRelation };
+-}
+-
+-export type OptionsCreateFieldM2A = {
+-	collection: string;
+-	field: string;
+-	relatedCollections: string[];
+-	fieldMeta?: any;
+-	fieldSchema?: any;
+-	junctionCollection: string;
+-	primaryKeyType?: string;
+-	relationMeta?: any;
+-	relationSchema?: any;
+-	itemRelationMeta?: any;
+-	itemRelationSchema?: any;
+-};
+-
+-export async function CreateFieldM2A(vendor: Vendor, options: OptionsCreateFieldM2A) {
+-	// Parse options
+-	const defaultOptions = {
+-		fieldMeta: {},
+-		fieldSchema: {},
+-		primaryKeyType: 'integer',
+-		otherMeta: {},
+-		otherSchema: {},
+-		relationSchema: null,
+-		itemRelationSchema: {
+-			on_delete: 'SET NULL',
+-		},
+-	};
+-
+-	options = Object.assign({}, defaultOptions, options);
+-
+-	const fieldOptions: OptionsCreateField = {
+-		collection: options.collection,
+-		field: options.field,
+-		type: 'alias',
+-		meta: options.fieldMeta,
+-		schema: options.fieldSchema,
+-	};
+-
+-	if (!fieldOptions.meta.special) {
+-		fieldOptions.meta.special = ['m2a'];
+-	} else if (!fieldOptions.meta.special.includes('m2a')) {
+-		fieldOptions.meta.special.push('m2a');
+-	}
+-
+-	// Action
+-	const field = await CreateField(vendor, fieldOptions);
+-
+-	const junctionCollectionOptions: OptionsCreateCollection = {
+-		collection: options.junctionCollection,
+-		primaryKeyType: 'integer',
+-	};
+-
+-	const junctionCollection = await CreateCollection(vendor, junctionCollectionOptions);
+-
+-	const junctionFieldName = `${options.junctionCollection}_id`;
+-
+-	const junctionFieldOptions: OptionsCreateField = {
+-		collection: options.junctionCollection,
+-		field: junctionFieldName,
+-		type: options.primaryKeyType!,
+-		meta: { hidden: true },
+-	};
+-
+-	const junctionField = await CreateField(vendor, junctionFieldOptions);
+-
+-	const junctionFieldItemOptions: OptionsCreateField = {
+-		collection: options.junctionCollection,
+-		field: 'item',
+-		type: 'string',
+-		meta: { hidden: true },
+-	};
+-
+-	const junctionFieldItem = await CreateField(vendor, junctionFieldItemOptions);
+-
+-	const junctionFieldCollectionOptions: OptionsCreateField = {
+-		collection: options.junctionCollection,
+-		field: 'collection',
+-		type: 'string',
+-		meta: { hidden: true },
+-	};
+-
+-	const junctionFieldCollection = await CreateField(vendor, junctionFieldCollectionOptions);
+-
+-	const relationOptions: OptionsCreateRelation = {
+-		collection: options.junctionCollection,
+-		field: 'item',
+-		related_collection: null,
+-		meta: {
+-			one_allowed_collections: options.relatedCollections,
+-			one_collection_field: 'collection',
+-			junction_field: junctionFieldName,
+-		},
+-		schema: null,
+-	};
+-
+-	const relation = await CreateRelation(vendor, relationOptions);
+-
+-	const itemRelationOptions: OptionsCreateRelation = {
+-		collection: options.junctionCollection,
+-		field: junctionFieldName,
+-		related_collection: options.collection,
+-		meta: {
+-			one_field: options.field,
+-			junction_field: 'item',
+-		},
+-		schema: options.itemRelationSchema,
+-	};
+-
+-	const itemRelation = await CreateRelation(vendor, itemRelationOptions);
+-
+-	return {
+-		field,
+-		junctionCollection,
+-		junctionField,
+-		junctionFieldItem,
+-		junctionFieldCollection,
+-		relation,
+-		otherRelation: itemRelation,
+-	};
+-}
+-
+-export type OptionsCreateItem = {
+-	collection: string;
+-	item: any;
+-	token?: string;
+-};
+-
+-export async function CreateItem(vendor: Vendor, options: OptionsCreateItem) {
+-	// Action
+-	const response = await request(getUrl(vendor))
+-		.post(`/items/${options.collection}`)
+-		.set('Authorization', `Bearer ${options.token ?? USER.TESTS_FLOW.TOKEN}`)
+-		.send(options.item);
+-
+-	expect(response.ok, JSON.stringify(response.body)).toBeTruthy();
+-	return response.body.data;
+-}
+-
+-export type OptionsReadItem = {
+-	collection: string;
+-} & Query;
+-
+-export async function ReadItem(vendor: Vendor, options: OptionsReadItem) {
+-	// Parse options
+-	const defaultOptions = {
+-		filter: {},
+-		fields: '*',
+-	};
+-
+-	options = Object.assign({}, defaultOptions, options);
+-
+-	// Action
+-	const response = await request(getUrl(vendor))
+-		.get(`/items/${options.collection}`)
+-		.set('Authorization', `Bearer ${USER.TESTS_FLOW.TOKEN}`)
+-		.query(omit(options, 'collection'));
+-
+-	return response.body.data;
+-}
+-
+-export type OptionsUpdateItem = {
+-	id?: string | number;
+-	collection: string;
+-	item: any;
+-};
+-
+-export async function UpdateItem(vendor: Vendor, options: OptionsUpdateItem) {
+-	// Action
+-	const response = await request(getUrl(vendor))
+-		.patch(`/items/${options.collection}/${options.id === undefined ? '' : options.id}`)
+-		.set('Authorization', `Bearer ${USER.TESTS_FLOW.TOKEN}`)
+-		.send(options.item);
+-
+-	return response.body.data;
+-}
+-
+-export type OptionsCreatePolicy = {
+-	name: string;
+-	appAccessEnabled: boolean;
+-	adminAccessEnabled: boolean;
+-	role?: keyof typeof ROLE;
+-};
+-
+-export async function CreatePolicy(vendor: Vendor, options: OptionsCreatePolicy) {
+-	// Action
+-	const roleResponse = await request(getUrl(vendor))
+-		.get(`/policies`)
+-		.query({
+-			filter: { name: { _eq: options.name } },
+-		})
+-		.set('Authorization', `Bearer ${USER.TESTS_FLOW.TOKEN}`);
+-
+-	if (roleResponse.body.data.length > 0) {
+-		return roleResponse.body.data[0];
+-	}
+-
+-	let roleId = options.role;
+-
+-	if (roleId && roleId in ROLE) {
+-		const role = await request(getUrl(vendor))
+-			.get('/roles')
+-			.query({ filter: { name: { _eq: ROLE[roleId].NAME } } })
+-			.set('Authorization', `Bearer ${USER.APP_ACCESS.TOKEN}`);
+-
+-		roleId = role.body.data[0].id;
+-	}
+-
+-	const response = await request(getUrl(vendor))
+-		.post(`/policies`)
+-		.set('Authorization', `Bearer ${USER.TESTS_FLOW.TOKEN}`)
+-		.send({
+-			name: options.name,
+-			app_access: options.appAccessEnabled,
+-			admin_access: options.adminAccessEnabled,
+-			roles: [{ role: roleId }],
+-		});
+-
+-	return response.body.data;
+-}
+-
+-export type OptionsCreatePermission = {
+-	role: keyof typeof ROLE;
+-	permissions: Omit<Partial<Permission>, 'id' | 'role' | 'system' | 'policy'>[];
+-	policy?: string;
+-	policyName?: string;
+-};
+-
+-export async function CreatePermission(vendor: Vendor, options: OptionsCreatePermission) {
+-	let policyId = options.policy;
+-	let roleId = options.role;
+-
+-	if (roleId in ROLE) {
+-		const role = await request(getUrl(vendor))
+-			.get('/roles')
+-			.query({ filter: { name: { _eq: ROLE[roleId].NAME } } })
+-			.set('Authorization', `Bearer ${USER.ADMIN.TOKEN}`);
+-
+-		roleId = role.body.data[0].id;
+-	}
+-
+-	if (!policyId) {
+-		const policy = await CreatePolicy(vendor, {
+-			role: roleId,
+-			adminAccessEnabled: false,
+-			appAccessEnabled: false,
+-			name: options.policyName ? `${options.role}-${options.policyName}` : `${options.role}-${randomUUID()}`,
+-		});
+-
+-		policyId = policy.id;
+-	}
+-
+-	const response = await request(getUrl(vendor))
+-		.patch(`/policies/${policyId}`)
+-		.set('Authorization', `Bearer ${USER.ADMIN.TOKEN}`)
+-		.send({
+-			permissions: {
+-				create: options.permissions.map((p) => ({ ...p, policy: policyId })),
+-				update: [],
+-				delete: [],
+-			},
+-		});
+-
+-	return response.body.data;
+-}
+-
+-export type OptionsDeletePermission = {
+-	policyId: string;
+-};
+-
+-export async function DeletePermission(vendor: Vendor, { policyId }: OptionsDeletePermission) {
+-	const response = await request(getUrl(vendor))
+-		.delete(`/policies/${policyId}`)
+-		.set('Authorization', `Bearer ${USER.ADMIN.TOKEN}`);
+-
+-	return response.body;
+-}
+-
+-// TODO
+-// export async function UpdatePermission() {}
++	const junctionField = await CreateField(vendor, junctionFiel
+\ No newline at end of file
+diff --git a/tests/blackbox/tests/db/routes/files/tus.test.ts b/tests/blackbox/tests/db/routes/files/tus.test.ts
+deleted file mode 100644
+index da329b9..0000000
+--- a/tests/blackbox/tests/db/routes/files/tus.test.ts
++++ /dev/null
+@@ -1,145 +0,0 @@
+-import { getUrl } from '@common/config';
+-import { CreatePermission, DeletePermission } from '@common/functions';
+-import vendors, { type Vendor } from '@common/get-dbs-to-test';
+-import { USER } from '@common/variables';
+-import type { Query } from '@directus/types';
+-import request, { type Response } from 'supertest';
+-import { Upload } from 'tus-js-client';
+-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+-
+-const file = {
+-	name: 'tus.text',
+-	type: 'text/plain',
+-	content: 'tus',
+-};
+-
+-const policies = new Map();
+-
+-function createUpload(vendor: Vendor, payload: { filename_download: string; type: string; id?: string }) {
+-	return new Promise<Response>((resolve, reject) => {
+-		const upload = new Upload(Buffer.from(file.content), {
+-			headers: {
+-				Authorization: `Bearer ${USER.APP_ACCESS.TOKEN}`,
+-			},
+-			endpoint: getUrl(vendor) + `/files/tus`,
+-			chunkSize: Buffer.from(file.content).byteLength,
+-			metadata: payload,
+-			removeFingerprintOnSuccess: true,
+-			onError(error: unknown) {
+-				reject(error);
+-			},
+-			async onSuccess() {
+-				const query: Query = {
+-					filter: { filename_download: { _eq: payload.filename_download } },
+-					fields: ['id'],
+-					limit: 1,
+-				};
+-
+-				if (payload.id) {
+-					query.filter = {
+-						...query.filter,
+-						id: { _eq: payload.id },
+-					};
+-				}
+-
+-				const response = await request(getUrl(vendor))
+-					.get('/files')
+-					.query(query)
+-					.set('Authorization', `Bearer ${USER.APP_ACCESS.TOKEN}`);
+-
+-				resolve(response);
+-			},
+-			onShouldRetry() {
+-				return false;
+-			},
+-		});
+-
+-		upload.start();
+-	});
+-}
+-
+-beforeAll(async () => {
+-	for (const vendor of vendors) {
+-		const response = await CreatePermission(vendor, {
+-			role: USER.APP_ACCESS.KEY,
+-			permissions: [
+-				{
+-					collection: 'directus_files',
+-					action: 'create',
+-					permissions: {},
+-					fields: ['*'],
+-				},
+-				{
+-					collection: 'directus_files',
+-					action: 'read',
+-					permissions: {},
+-					fields: ['*'],
+-				},
+-				{
+-					collection: 'directus_files',
+-					action: 'update',
+-					permissions: {},
+-					fields: ['*'],
+-				},
+-				{
+-					collection: 'directus_files',
+-					action: 'delete',
+-					permissions: {},
+-					fields: ['*'],
+-				},
+-			],
+-			policyName: 'TUS',
+-		});
+-
+-		policies.set(vendor, response.id);
+-	}
+-});
+-
+-afterAll(async () => {
+-	for (const vendor of vendors) {
+-		if (!policies.has(vendor)) continue;
+-
+-		await DeletePermission(vendor, {
+-			policyId: policies.get(vendor),
+-		});
+-	}
+-});
+-
+-describe('/files/tus', () => {
+-	describe('POST /files/tus', () => {
+-		it.each(vendors)('%s', async (vendor) => {
+-			// Action
+-			const response = await createUpload(vendor, { filename_download: file.name, type: file.type });
+-
+-			// Assert
+-			expect(response.statusCode).toBe(200);
+-			expect(response.body.data?.[0]?.id).toBeDefined();
+-		});
+-	});
+-
+-	describe('PATCH /files/tus/:id', () => {
+-		it.each(vendors)('%s', async (vendor) => {
+-			const fileResponse = await request(getUrl(vendor))
+-				.get('/files')
+-				.query({
+-					filter: { filename_download: { _eq: file.name } },
+-					fields: ['id'],
+-					limit: 1,
+-				})
+-				.set('Authorization', `Bearer ${USER.APP_ACCESS.TOKEN}`);
+-
+-			file.name = `changed_${file.name}`;
+-
+-			// Action
+-			const response = await createUpload(vendor, {
+-				filename_download: file.name,
+-				type: file.type,
+-				id: fileResponse.body.data?.[0]?.id,
+-			});
+-
+-			// Assert
+-			expect(response.statusCode).toBe(200);
+-			expect(response.body.data?.[0]?.id).toBeDefined();
+-		});
+-	});
+-});
+diff --git a/tests/blackbox/tests/db/routes/permissions/check-item-permissions.test.ts b/tests/blackbox/tests/db/routes/permissions/check-item-permissions.test.ts
+index 65fb2a4..d1f96b5 100644
+--- a/tests/blackbox/tests/db/routes/permissions/check-item-permissions.test.ts
++++ b/tests/blackbox/tests/db/routes/permissions/check-item-permissions.test.ts
+@@ -61,15 +61,13 @@ describe('/permissions/me/:collection/:id?', () => {
+ 
+ 					await CreatePermission(vendor, {
+ 						role: USER.APP_ACCESS.KEY,
+-						permissions: [
+-							{
+-								collection,
+-								action: 'update',
+-								permissions: { _and: [{ name: { _eq: collectionItemName } }] },
+-								presets: {},
+-								fields: ['name'],
+-							},
+-						],
++						permission: {
++							collection,
++							action: 'update',
++							permissions: { _and: [{ name: { _eq: collectionItemName } }] },
++							presets: {},
++							fields: ['name'],
++						},
+ 						policyName: 'Check Update Collection',
+ 					});
+ 
+@@ -107,15 +105,13 @@ describe('/permissions/me/:collection/:id?', () => {
+ 
+ 					await CreatePermission(vendor, {
+ 						role: USER.APP_ACCESS.KEY,
+-						permissions: [
+-							{
+-								collection: singleton,
+-								action: 'update',
+-								permissions: { _and: [{ name: { _eq: singletonItemName } }] },
+-								presets: {},
+-								fields: ['name'],
+-							},
+-						],
++						permission: {
++							collection: singleton,
++							action: 'update',
++							permissions: { _and: [{ name: { _eq: singletonItemName } }] },
++							presets: {},
++							fields: ['name'],
++						},
+ 						policyName: 'Check Update Singleton',
+ 					});
+ 
+@@ -146,4 +142,4 @@ describe('/permissions/me/:collection/:id?', () => {
+ 			expect(response.statusCode).toBe(403);
+ 		});
+ 	});
+-});
++});
+\ No newline at end of file

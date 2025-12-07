@@ -1,0 +1,108 @@
+diff --git a/.changeset/chubby-papers-kiss.md b/.changeset/chubby-papers-kiss.md
+new file mode 100644
+index 0000000000000..4e5e517c0fe81
+--- /dev/null
++++ b/.changeset/chubby-papers-kiss.md
+@@ -0,0 +1,5 @@
++---
++'@directus/api': patch
++---
++
++Added support for MSSQL tables with triggers
+diff --git a/api/src/services/items.test.ts b/api/src/services/items.test.ts
+index 7fae6f0170f60..c7d9faf6126cc 100644
+--- a/api/src/services/items.test.ts
++++ b/api/src/services/items.test.ts
+@@ -4,6 +4,7 @@ import knex, { type Knex } from 'knex';
+ import { MockClient, Tracker, createTracker } from 'knex-mock-client';
+ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+ import { validateUserCountIntegrity } from '../utils/validate-user-count-integrity.js';
++import { getDatabaseClient } from '../database/index.js';
+ import { ItemsService } from './index.js';
+ 
+ vi.mock('../../src/database/index', () => ({
+@@ -56,6 +57,52 @@ describe('Integration Tests', () => {
+ 
+ 				expect(validateUserCountIntegrity).toHaveBeenCalled();
+ 			});
++
++			it('should use includeTriggerModifications for MS SQL', async () => {
++				vi.mocked(getDatabaseClient).mockReturnValue('mssql');
++
++				const mockReturning = vi.fn().mockResolvedValue([{ id: 1 }]);
++
++				const mockQuery = {
++					insert: vi.fn().mockReturnThis(),
++					into: vi.fn().mockReturnThis(),
++					returning: mockReturning,
++				};
++
++				const transactionSpy = vi.spyOn(db, 'transaction').mockImplementation(async (callback) => {
++					const trx = { ...db, ...mockQuery };
++					return await callback(trx as any);
++				});
++
++				await service.createOne({ name: 'Test' });
++
++				expect(mockReturning).toHaveBeenCalledWith('id', { includeTriggerModifications: true });
++
++				transactionSpy.mockRestore();
++			});
++
++			it('should not use includeTriggerModifications for non-MS SQL', async () => {
++				vi.mocked(getDatabaseClient).mockReturnValue('postgres');
++
++				const mockReturning = vi.fn().mockResolvedValue([{ id: 1 }]);
++
++				const mockQuery = {
++					insert: vi.fn().mockReturnThis(),
++					into: vi.fn().mockReturnThis(),
++					returning: mockReturning,
++				};
++
++				const transactionSpy = vi.spyOn(db, 'transaction').mockImplementation(async (callback) => {
++					const trx = { ...db, ...mockQuery };
++					return await callback(trx as any);
++				});
++
++				await service.createOne({ name: 'Test' });
++
++				expect(mockReturning).toHaveBeenCalledWith('id', undefined);
++
++				transactionSpy.mockRestore();
++			});
+ 		});
+ 
+ 		describe('createMany', () => {
+diff --git a/api/src/services/items.ts b/api/src/services/items.ts
+index 68abe56ebf58a..7147d1406d366 100644
+--- a/api/src/services/items.ts
++++ b/api/src/services/items.ts
+@@ -23,7 +23,7 @@ import { getCache } from '../cache.js';
+ import { translateDatabaseError } from '../database/errors/translate.js';
+ import { getAstFromQuery } from '../database/get-ast-from-query/get-ast-from-query.js';
+ import { getHelpers } from '../database/helpers/index.js';
+-import getDatabase from '../database/index.js';
++import getDatabase, { getDatabaseClient } from '../database/index.js';
+ import { runAst } from '../database/run-ast/run-ast.js';
+ import emitter from '../emitter.js';
+ import { processAst } from '../permissions/modules/process-ast/process-ast.js';
+@@ -243,10 +243,17 @@ export class ItemsService<Item extends AnyItem = AnyItem, Collection extends str
+ 			}
+ 
+ 			try {
++				let returningOptions = undefined;
++
++				// Support MSSQL tables that have triggers.
++				if (getDatabaseClient(trx) === 'mssql') {
++					returningOptions = { includeTriggerModifications: true };
++				}
++
+ 				const result = await trx
+ 					.insert(payloadWithoutAliases)
+ 					.into(this.collection)
+-					.returning(primaryKeyField)
++					.returning(primaryKeyField, returningOptions)
+ 					.then((result) => result[0]);
+ 
+ 				const returnedKey = typeof result === 'object' ? result[primaryKeyField] : result;

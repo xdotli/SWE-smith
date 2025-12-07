@@ -1,0 +1,963 @@
+diff --git a/examples/actions/schema.ts b/examples/actions/schema.ts
+index 2ed99c523..6b61dd140 100644
+--- a/examples/actions/schema.ts
++++ b/examples/actions/schema.ts
+@@ -94,7 +94,6 @@ export const lists = {
+         access: allowAll,
+         async resolve({ actionKey, where }, context) {
+           console.log(`${actionKey}`, JSON.stringify({ where }))
+-          // throw new Error('Random failure, try again')
+           return await context.db.Post.updateOne({
+             where,
+             data: {
+@@ -112,11 +111,11 @@ export const lists = {
+           messages: {
+             promptTitle: 'Report {singular}',
+             promptTitleMany: 'Report {count} {singular|plural}',
+-            prompt: 'Are you sure you want to report “{itemLabel}”?',
++            prompt: 'Are you sure you want to report "{itemLabel}"?',
+             promptMany: 'Are you sure you want to report {count} {singular|plural}?',
+             promptConfirmLabel: 'Yes, report',
+             promptConfirmLabelMany: 'Yes, report {count} {singular|plural}',
+-            fail: 'Could not report {singular} “{itemLabel}”',
++            fail: 'Could not report {singular}',
+             failMany: 'Could not report {countFail} {singular|plural}',
+             success: '{Singular} reported',
+             successMany: 'Successfully reported {countSuccess} {singular|plural}',
+@@ -141,4 +140,4 @@ export const lists = {
+       },
+     },
+   }),
+-} satisfies Lists
++} satisfies Lists
+\ No newline at end of file
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
+index 9de55f204..0aed4f369 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
+@@ -25,7 +25,6 @@ function CreateItemPage({ listKey }: { listKey: string }) {
+       header={
+         <ItemPageHeader
+           list={list}
+-          actions={[]}
+           label="Create"
+           title={`Create ${list.singular}`}
+           item={null}
+@@ -66,4 +65,4 @@ function CreateItemPage({ listKey }: { listKey: string }) {
+       </ColumnLayout>
+     </PageContainer>
+   )
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
+index a197bb2c3..ee54e00c6 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
+@@ -18,20 +18,19 @@ import type { ActionMeta, ListMeta } from '../../../../types'
+ 
+ export function ItemPageHeader({
+   list,
+-  actions,
+   item,
+   label,
+   title = label,
+   onAction,
+ }: {
+   list: ListMeta
+-  actions: ActionMeta[]
+   item: Record<string, unknown> | null
+   label: string
+   title: string
+-  onAction: ((action: ActionMeta, resultId: string | null) => void) | null
++  onAction: ((action: ActionMeta, resultId: string) => void) | null
+ }) {
+   const router = useRouter()
++  const actions = list.actions.filter(action => action.itemView.actionMode !== 'hidden')
+ 
+   return (
+     <Grid
+@@ -88,11 +87,6 @@ function replace(
+   return s
+ }
+ 
+-type ActionError = {
+-  action: ActionMeta
+-  error: Error
+-}
+-
+ function ItemActions({
+   list,
+   item,
+@@ -114,7 +108,7 @@ function ItemActions({
+       })),
+     [actions]
+   )
+-  const [actionError, setActionError] = useState<ActionError | null>(null)
++  const [errorDialogValue, setErrorDialogValue] = useState<Error | null>(null)
+   const [activeAction, setActiveAction] = useState<ActionMeta | null>(null)
+   const itemLabel_ = item[list.labelField] ?? item.id
+   const itemLabel = typeof itemLabel_ === 'string' ? itemLabel_ : (item.id as string)
+@@ -148,11 +142,11 @@ function ItemActions({
+         toastQueue.neutral(replace(m.success, list, { itemLabel }), { timeout: 5000 })
+       }
+ 
+-      onAction(action, data.data?.result?.id ?? null)
+-    } catch (error: any) {
++      onAction(action, data.data?.result?.id)
++    } catch (err: any) {
+       toastQueue.critical(replace(m.fail, list, { itemLabel }), {
+         actionLabel: 'Details',
+-        onAction: () => setActionError({ action, error }),
++        onAction: () => setErrorDialogValue(err),
+         shouldCloseOnAction: true,
+       })
+     }
+@@ -195,13 +189,8 @@ function ItemActions({
+         )}
+       </DialogContainer>
+ 
+-      <DialogContainer onDismiss={() => setActionError(null)} isDismissable>
+-        {actionError && (
+-          <ErrorDetailsDialog
+-            title={replace(actionError.action.messages.fail, list, { itemLabel })}
+-            error={actionError.error}
+-          />
+-        )}
++      <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
++        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
+       </DialogContainer>
+     </Fragment>
+   )
+@@ -289,4 +278,4 @@ export function BaseToolbar(props: { children: ReactNode }) {
+       </HStack>
+     </Grid>
+   )
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
+index 562d63437..d13a6f89b 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
+@@ -90,7 +90,7 @@ function DeleteButton({
+             try {
+               await deleteItem()
+             } catch (err: any) {
+-              toastQueue.critical('Unable to delete item', {
++              toastQueue.critical('Unable to delete item.', {
+                 actionLabel: 'Details',
+                 onAction: () => setErrorDialogValue(err),
+                 shouldCloseOnAction: true,
+@@ -112,9 +112,7 @@ function DeleteButton({
+       </DialogTrigger>
+ 
+       <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
+-        {errorDialogValue && (
+-          <ErrorDetailsDialog title="Unable to delete item" error={errorDialogValue} />
+-        )}
++        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
+       </DialogContainer>
+     </Fragment>
+   )
+@@ -178,7 +176,7 @@ function ItemForm({
+ }) {
+   const list = useList(listKey)
+   const itemId = initialValue.id as string
+-  const [updateError, setUpdateError] = useState<Error | null>(null)
++  const [errorDialogValue, setErrorDialogValue] = useState<Error | null>(null)
+   const [update, { loading, error }] = useMutation(
+     gql`mutation ($id: ID!, $data: ${list.graphql.names.updateInputName}!) {
+       item: ${list.graphql.names.updateMutationName}(where: { id: $id }, data: $data) {
+@@ -216,13 +214,13 @@ function ItemForm({
+     if (error) {
+       toastQueue.critical('Unable to save item', {
+         actionLabel: 'Details',
+-        onAction: () => setUpdateError(new Error(error.message)),
++        onAction: () => setErrorDialogValue(new Error(error.message)),
+         shouldCloseOnAction: true,
+       })
+       return
+     }
+ 
+-    toastQueue.positive(`Saved changes to ${list.singular.toLocaleLowerCase()}.`, {
++    toastQueue.positive(`Saved changes to ${list.singular.toLocaleLowerCase()}`, {
+       timeout: 5000,
+     })
+ 
+@@ -296,8 +294,8 @@ function ItemForm({
+         </BaseToolbar>
+       </form>
+ 
+-      <DialogContainer onDismiss={() => setUpdateError(null)} isDismissable>
+-        {updateError && <ErrorDetailsDialog title="Unable to save item" error={updateError} />}
++      <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
++        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
+       </DialogContainer>
+     </Fragment>
+   )
+@@ -322,55 +320,25 @@ function ItemPage({ listKey }: ItemPageProps) {
+     return deserializeItemToValue(list.fields, item)
+   }, [list.fields, data?.item])
+ 
+-  const { actionsInContext, fieldModes, fieldPositions, isRequireds } = useMemo(() => {
+-    const actionModes = Object.fromEntries(
+-      Object.entries(list.actions).map(([k, v]) => [k, v.itemView.actionMode])
+-    )
++  const { fieldModes, fieldPositions, isRequireds } = useMemo(() => {
+     const fieldModes = Object.fromEntries(
+-      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.fieldMode])
++      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.fieldMode])
+     )
+     const fieldPositions = Object.fromEntries(
+-      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.fieldPosition])
++      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.fieldPosition])
+     )
+     const isRequireds = Object.fromEntries(
+-      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.isRequired])
++      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.isRequired])
+     )
+-    for (const field of data?.keystone?.adminMeta?.list?.fields ?? []) {
+-      if (
+-        !field?.itemView ||
+-        !field.key ||
+-        !field.itemView.fieldMode ||
+-        !field.itemView.fieldPosition ||
+-        !field.itemView.isRequired
+-      )
+-        continue
+-      fieldModes[field.key] = field.itemView.fieldMode
+-      fieldPositions[field.key] = field.itemView.fieldPosition
+-      isRequireds[field.key] = field.itemView.isRequired
+-    }
+-    for (const action of data?.keystone?.adminMeta?.list?.actions ?? []) {
+-      if (!action?.itemView?.actionMode || !action.key) continue
+-      actionModes[action.key] = action.itemView.actionMode
+-    }
+-
+-    // actions within context of an item
+-    const actionsInContext = list.actions
+-      .map(action => ({
+-        ...action,
+-        itemView: {
+-          ...action.itemView,
+-          actionMode: actionModes[action.key],
+-        },
+-      }))
+-      .filter(action => action.itemView.actionMode !== 'hidden')
+-
+-    return {
+-      actionsInContext,
+-      fieldModes,
+-      fieldPositions,
+-      isRequireds,
++    for (const field of data?.keystone.adminMeta.list?.fields ?? []) {
++      if (field.itemView) {
++        fieldModes[field.key] = field.itemView.fieldMode
++        fieldPositions[field.key] = field.itemView.fieldPosition
++        isRequireds[field.key] = field.itemView.isRequired
++      }
+     }
+-  }, [data?.keystone?.adminMeta, list.fields])
++    return { fieldModes, fieldPositions, isRequireds }
++  }, [data?.keystone.adminMeta, list.fields])
+ 
+   function onAction(action: ActionMeta, resultId: string | null) {
+     const { navigation } = action.itemView
+@@ -390,7 +358,6 @@ function ItemPage({ listKey }: ItemPageProps) {
+       header={
+         <ItemPageHeader
+           list={list}
+-          actions={actionsInContext}
+           label={typeof pageLabel !== 'string' ? 'Loading...' : pageLabel}
+           title={pageTitle}
+           item={item ?? null}
+@@ -410,20 +377,20 @@ function ItemPage({ listKey }: ItemPageProps) {
+               (list.isSingleton ? (
+                 itemId === '1' ? (
+                   <ItemNotFound>
+-                    <Text>“{list.label}” doesn’t exist, or you don’t have access to it.</Text>
++                    <Text>"{list.label}" doesn't exist, or you don't have access to it.</Text>
+                     {!list.hideCreate && <CreateButtonLink list={list} />}
+                   </ItemNotFound>
+                 ) : (
+                   <ItemNotFound>
+                     <Text>
+-                      An item with ID <strong>“{itemId}”</strong> does not exist.
++                      An item with ID <strong>"{itemId}"</strong> does not exist.
+                     </Text>
+                   </ItemNotFound>
+                 )
+               ) : (
+                 <ItemNotFound>
+                   <Text>
+-                    The item with ID <strong>“{itemId}”</strong> doesn’t exist, or you don’t have
++                    The item with ID <strong>"{itemId}"</strong> doesn't exist, or you don't have
+                     access to it.
+                   </Text>
+                 </ItemNotFound>
+@@ -444,4 +411,4 @@ function ItemPage({ listKey }: ItemPageProps) {
+       )}
+     </PageContainer>
+   )
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
+index 803fa0596..78e3b1e82 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
+@@ -1,5 +1,4 @@
+ import isDeepEqual from 'fast-deep-equal'
+-import type { GraphQLFormattedError } from 'graphql'
+ import { useRouter } from 'next/router'
+ import type { ParsedUrlQuery, ParsedUrlQueryInput } from 'querystring'
+ import { type FormEvent, type Key, Fragment, useEffect, useId, useMemo, useState } from 'react'
+@@ -13,7 +12,7 @@ import { chevronDownIcon } from '@keystar/ui/icon/icons/chevronDownIcon'
+ import { searchXIcon } from '@keystar/ui/icon/icons/searchXIcon'
+ import { textSelectIcon } from '@keystar/ui/icon/icons/textSelectIcon'
+ import { undo2Icon } from '@keystar/ui/icon/icons/undo2Icon'
+-import { Box, Flex, HStack, VStack } from '@keystar/ui/layout'
++import { Flex, HStack, VStack } from '@keystar/ui/layout'
+ import { Menu, MenuTrigger } from '@keystar/ui/menu'
+ import { ProgressCircle } from '@keystar/ui/progress'
+ import { SearchField } from '@keystar/ui/search-field'
+@@ -32,10 +31,8 @@ import { toastQueue } from '@keystar/ui/toast'
+ import { Tooltip, TooltipTrigger } from '@keystar/ui/tooltip'
+ import { Heading, Text } from '@keystar/ui/typography'
+ 
+-import { TextLink } from '@keystar/ui/link'
+-import { Notice } from '@keystar/ui/notice'
+ import type { TypedDocumentNode } from '../../../../admin-ui/apollo'
+-import { CombinedGraphQLErrors, gql, useMutation, useQuery } from '../../../../admin-ui/apollo'
++import { gql, useMutation, useQuery } from '../../../../admin-ui/apollo'
+ import { CreateButtonLink } from '../../../../admin-ui/components/CreateButtonLink'
+ import { EmptyState } from '../../../../admin-ui/components/EmptyState'
+ import { GraphQLErrorNotice } from '../../../../admin-ui/components/GraphQLErrorNotice'
+@@ -254,8 +251,7 @@ function ListPage({ listKey }: ListPageProps) {
+   const localStorageListKey = `keystone.list.${listKey}.list.page.info`
+ 
+   const list = useList(listKey)
+-  const { query, replace: routerReplace, isReady } = useRouter()
+-  const [loaded, setLoaded] = useState(false)
++  const { query, replace, isReady } = useRouter()
+   const [sort, setSort] = useState<SortDescriptor | null>(() => getSort(list, {}))
+   const [columns, setColumns] = useState<string[]>(list.initialColumns)
+   const [filters, setFilters] = useState<Filter[]>(() => getFilters(list, {}))
+@@ -264,7 +260,6 @@ function ListPage({ listKey }: ListPageProps) {
+   const [searchString, setSearchString] = useState('')
+   const [selectedItems, setSelectedItems] = useState<Selection>(() => new Set([]))
+   const [activeAction, setActiveAction] = useState<Key | null>(null)
+-  const [actionResult, setActionResult] = useState<ActionErrorResult | null>(null)
+   const dirty = useMemo(() => {
+     const defaultFilters = getFilters(list, {})
+     const defaultSort = getSort(list, {})
+@@ -321,8 +316,8 @@ function ListPage({ listKey }: ListPageProps) {
+     }
+ 
+     localStorage.setItem(localStorageListKey, JSON.stringify(updatedQuery))
+-    routerReplace({ query: updatedQuery })
+-  }, [columns, sort, filters, currentPage, pageSize, searchString, list, loaded])
++    replace({ query: updatedQuery })
++  }, [columns, sort, filters, currentPage, pageSize, searchString, list])
+ 
+   const allowCreate = !(list.hideCreate ?? true)
+   const isConstrained = Boolean(filters.length || query.search)
+@@ -412,481 +407,4 @@ function ListPage({ listKey }: ListPageProps) {
+   const isEmpty = Boolean(data?.count === 0 && !isConstrained)
+   const headers = shownFields.map(field => {
+     return {
+-      id: field.key,
+-      label: field.label,
+-      allowsSorting: !isConstrained && !data?.items?.length ? false : field.isOrderable,
+-    }
+-  })
+-
+-  function onAddFilter(newFilter: Filter) {
+-    setFilters(prevFilters => [...prevFilters, newFilter])
+-  }
+-
+-  function resetToDefaults() {
+-    const defaultFilters = getFilters(list, {})
+-    const defaultSort = getSort(list, {})
+-    setSearchString('')
+-    setColumns(list.initialColumns)
+-    setFilters(defaultFilters)
+-    setSort(defaultSort)
+-  }
+-
+-  const actions = list.actions.filter(action => action.listView.actionMode === 'enabled')
+-  const actionsForList = list.hideDelete
+-    ? actions
+-    : [
+-        ...actions,
+-        {
+-          key: 'delete',
+-          label: 'Delete',
+-          icon: 'trash2Icon',
+-          graphql: {
+-            names: {
+-              one: list.graphql.names.deleteMutationName,
+-              many: list.graphql.names.deleteManyMutationName,
+-            },
+-          },
+-          messages: {
+-            promptTitle: 'Delete {singular}?',
+-            promptTitleMany: 'Delete {count} {singular|plural}?',
+-            prompt: 'Are you sure you want to delete {singular}? This action cannot be undone.',
+-            promptMany:
+-              'Are you sure you want to delete {count} {singular|plural}? This action cannot be undone.',
+-            promptConfirmLabel: 'Yes, delete',
+-            promptConfirmLabelMany: 'Yes, delete',
+-            success: 'Deleted {singular}.',
+-            successMany: 'Deleted {countSuccess} {singular|plural}.',
+-            fail: 'Unable to delete {singular}.',
+-            failMany: 'Unable to delete {countFail} {singular|plural}.',
+-          },
+-          itemView: null as any, // unusud
+-          listView: { actionMode: list.hideDelete ? 'hidden' : 'enabled' },
+-        } as const,
+-      ]
+-  const selectionMode = actionsForList.length > 0 ? 'multiple' : 'none'
+-
+-  return (
+-    <PageContainer
+-      header={<ListPageHeader listKey={listKey} showCreate={allowCreate} />}
+-      title={list.label}
+-    >
+-      <VStack flex gap="large" paddingY="xlarge" minHeight={0} minWidth={0}>
+-        <HStack gap="regular" alignItems="center">
+-          <SearchField
+-            aria-label="Search"
+-            isDisabled={isEmpty}
+-            onClear={() => setSearchString('')}
+-            onChange={v => setSearchString(v)}
+-            placeholder="Search…"
+-            value={searchString}
+-            width="alias.singleLineWidth"
+-            flexGrow={{ mobile: 1, tablet: 0 }}
+-          />
+-          <FilterAdd listKey={listKey} onAdd={onAddFilter} isDisabled={isEmpty} />
+-          <MenuTrigger>
+-            <ActionButton isDisabled={isEmpty}>
+-              <Text>Columns</Text>
+-              <Icon src={chevronDownIcon} />
+-            </ActionButton>
+-            <Menu
+-              items={readableFields}
+-              disallowEmptySelection
+-              onSelectionChange={selection => {
+-                if (selection === 'all') {
+-                  setColumns(readableFields.map(field => field.id))
+-                } else {
+-                  setColumns(readableFields.filter(f => selection.has(f.id)).map(f => f.id))
+-                }
+-              }}
+-              selectionMode="multiple"
+-              selectedKeys={columns}
+-            >
+-              {item => <Item key={item.value}>{item.label}</Item>}
+-            </Menu>
+-          </MenuTrigger>
+-          {dirty ? (
+-            <TooltipTrigger>
+-              <ActionButton aria-label="reset" onPress={resetToDefaults} prominence="low">
+-                <Icon src={undo2Icon} />
+-              </ActionButton>
+-              <Tooltip>Reset to defaults</Tooltip>
+-            </TooltipTrigger>
+-          ) : null}
+-          {isReady && loading && (
+-            <ProgressCircle aria-label="Loading…" size="small" isIndeterminate />
+-          )}
+-        </HStack>
+-
+-        {filters.length ? (
+-          <Flex gap="small" wrap>
+-            {filters.map((filter, i) => {
+-              const field = list.fields[filter.field]
+-              function onRemove() {
+-                setFilters(prevFilters => prevFilters.filter(f => f !== filter))
+-              }
+-              function onChange(updatedFilter: Filter) {
+-                setFilters(prevFilters => [...prevFilters.filter(f => f !== filter), updatedFilter])
+-              }
+-
+-              return (
+-                <FilterTag
+-                  key={i}
+-                  field={field}
+-                  filter={filter}
+-                  onChange={onChange}
+-                  onRemove={onRemove}
+-                />
+-              )
+-            })}
+-          </Flex>
+-        ) : null}
+-
+-        <GraphQLErrorNotice errors={[error]} />
+-
+-        <ActionBarContainer flex minHeight="scale.3000">
+-          <TableView
+-            aria-labelledby={LIST_PAGE_TITLE_ID}
+-            selectionMode={selectionMode}
+-            onSortChange={setSort}
+-            sortDescriptor={sort ?? undefined}
+-            density="spacious"
+-            overflowMode="truncate"
+-            onSelectionChange={setSelectedItems}
+-            selectedKeys={selectedItems}
+-            renderEmptyState={() =>
+-              loading ? (
+-                <ProgressCircle aria-label="Preparing items" isIndeterminate />
+-              ) : isConstrained ? (
+-                <EmptyState
+-                  icon={searchXIcon}
+-                  title="No results"
+-                  message="No items found. Try adjusting your search or filters."
+-                />
+-              ) : (
+-                <EmptyState
+-                  icon={textSelectIcon}
+-                  title="Empty list"
+-                  message="Add the first item to see it here."
+-                />
+-              )
+-            }
+-            flex
+-            UNSAFE_style={{
+-              opacity: loading && !!data ? 0.5 : undefined,
+-            }}
+-          >
+-            <TableHeader columns={headers}>
+-              {({ label, id, ...options }) => (
+-                <Column key={id} isRowHeader {...options}>
+-                  {label}
+-                </Column>
+-              )}
+-            </TableHeader>
+-            <TableBody items={data?.items ?? []}>
+-              {row => {
+-                return (
+-                  <Row href={`/${list.path}/${row?.id}`}>
+-                    {key => {
+-                      const field = list.fields[key]
+-                      const value = row[key]
+-                      const CellContent = field.views.Cell
+-                      return (
+-                        <Cell>
+-                          {CellContent ? (
+-                            <CellContent value={value} field={field.controller} item={row} />
+-                          ) : (
+-                            <Text>{value?.toString()}</Text>
+-                          )}
+-                        </Cell>
+-                      )
+-                    }}
+-                  </Row>
+-                )
+-              }}
+-            </TableBody>
+-          </TableView>
+-
+-          <ActionBar
+-            selectedItemCount={selectedItemIds.length}
+-            onClearSelection={() => setSelectedItems(new Set())}
+-            UNSAFE_className={css({
+-              // TODO: update in @keystar/ui package
+-              // make `tokenSchema.size.shadow.regular` token "0 1px 4px"
+-              'div:has([data-focus-scope-start])': {
+-                backgroundColor: tokenSchema.color.background.canvas,
+-                border: `${tokenSchema.size.border.regular} solid ${tokenSchema.color.border.emphasis}`,
+-                borderRadius: tokenSchema.size.radius.regular,
+-                boxShadow: `0 1px 4px ${tokenSchema.color.shadow.regular}`,
+-              },
+-            })}
+-            onAction={setActiveAction}
+-          >
+-            {[
+-              ...(function* () {
+-                for (const action of actionsForList) {
+-                  const iconComponent = action.icon ? KeystarIcons[action.icon] : null
+-                  yield (
+-                    <Item key={action.key} textValue={action.label}>
+-                      {iconComponent ? <Icon src={iconComponent} /> : null}
+-                      <Text>{action.label}</Text>
+-                    </Item>
+-                  )
+-                }
+-              })(),
+-            ]}
+-          </ActionBar>
+-        </ActionBarContainer>
+-
+-        {!!data?.count && (
+-          <PaginationControls
+-            singular={list.singular}
+-            plural={list.plural}
+-            currentPage={currentPage}
+-            pageSize={pageSize}
+-            total={data.count}
+-            onChangePage={(page: number) => setCurrentPage(page)}
+-            onChangePageSize={(pageSize: number) => setPageSize(pageSize)}
+-            defaultPageSize={list.pageSize}
+-          />
+-        )}
+-
+-        <DialogContainer
+-          onDismiss={() => {
+-            setActiveAction(null)
+-          }}
+-        >
+-          {actionsForList
+-            .filter(action => action.key === activeAction)
+-            .map(action => {
+-              return (
+-                <ActionItemsDialog
+-                  itemIds={selectedItemIds}
+-                  action={action}
+-                  list={list}
+-                  onSuccess={remaining => {
+-                    refetch()
+-                    setSelectedItems(remaining)
+-                  }}
+-                  onErrors={setActionResult}
+-                />
+-              )
+-            })
+-            .pop()}
+-        </DialogContainer>
+-        <DialogContainer onDismiss={() => setActionResult(null)} isDismissable>
+-          {actionResult ? (
+-            <Dialog>
+-              <Heading>Error details for {actionResult.action.label} action</Heading>
+-              <Content>
+-                <VStack gap="large">
+-                  {[
+-                    ...(function* () {
+-                      const { action, errors: actionErrors } = actionResult
+-                      for (const [itemId, itemActionErrors] of Object.entries(actionErrors)) {
+-                        const item = data?.items?.find(i => i.id === itemId) ?? null
+-                        const itemLabel = (item?.[list.labelField] as string | null) ?? itemId
+-                        const href = `/${list.path}/${itemId}`
+-
+-                        for (const error of itemActionErrors) {
+-                          yield (
+-                            <VStack key={itemId} gap="regular">
+-                              <Notice tone="critical">
+-                                <Content>
+-                                  <Text>
+-                                    You might try running the action again from{' '}
+-                                    <TextLink href={href}>
+-                                      the {list.singular.toLowerCase()}.
+-                                    </TextLink>
+-                                  </Text>
+-                                  <Box
+-                                    elementType="pre"
+-                                    backgroundColor="critical"
+-                                    borderRadius="regular"
+-                                    maxHeight="100%"
+-                                    overflow="auto"
+-                                  >
+-                                    <Text
+-                                      color="critical"
+-                                      UNSAFE_className={css({
+-                                        fontFamily: tokenSchema.typography.fontFamily.code,
+-                                      })}
+-                                    >
+-                                      {error.message}
+-                                    </Text>
+-                                  </Box>
+-                                </Content>
+-                                <div>
+-                                  <Heading>
+-                                    {replace(action.messages.fail, list, { itemLabel }, false)}
+-                                  </Heading>
+-                                </div>
+-                              </Notice>
+-                            </VStack>
+-                          )
+-                        }
+-                      }
+-                    })(),
+-                  ]}
+-                </VStack>
+-              </Content>
+-            </Dialog>
+-          ) : null}
+-        </DialogContainer>
+-      </VStack>
+-    </PageContainer>
+-  )
+-}
+-
+-const LIST_PAGE_TITLE_ID = 'keystone-list-page-title'
+-
+-function ListPageHeader({ listKey, showCreate }: { listKey: string; showCreate?: boolean }) {
+-  const list = useList(listKey)
+-  return (
+-    <Fragment>
+-      <Heading id={LIST_PAGE_TITLE_ID} elementType="h1" size="small">
+-        {list.label}
+-      </Heading>
+-      {showCreate && (
+-        <CreateButtonLink
+-          list={list}
+-        >{`New ${list.singular.toLocaleLowerCase()}`}</CreateButtonLink>
+-      )}
+-    </Fragment>
+-  )
+-}
+-
+-function replace(
+-  s: string,
+-  list: ListMeta,
+-  args: {
+-    itemLabel?: string
+-    count?: number
+-    countFail?: number
+-    countSuccess?: number
+-  },
+-  many: boolean
+-) {
+-  if (s.includes('{singular|plural}'))
+-    s = s.replaceAll('{singular|plural}', many ? '{plural}' : '{singular}')
+-  if (s.includes('{Singular}')) s = s.replaceAll('{Singular}', list.singular)
+-  if (s.includes('{Plural}')) s = s.replaceAll('{Plural}', list.plural)
+-  if (s.includes('{singular}')) s = s.replaceAll('{singular}', list.singular.toLowerCase())
+-  if (s.includes('{plural}')) s = s.replaceAll('{plural}', list.plural.toLowerCase())
+-  if ('count' in args) s = s.replaceAll('{count}', String(args.count))
+-  if ('countFail' in args) s = s.replaceAll('{countFail}', String(args.countFail))
+-  if ('countSuccess' in args) s = s.replaceAll('{countSuccess}', String(args.countSuccess))
+-  if ('itemLabel' in args) s = s.replaceAll('{itemLabel}', args.itemLabel ?? '')
+-  return s
+-}
+-
+-type ActionErrors = Record<string, GraphQLFormattedError[]>
+-type ActionErrorResult = {
+-  action: ActionMeta
+-  errors: ActionErrors
+-}
+-
+-function ActionItemsDialog({
+-  list,
+-  itemIds,
+-  onSuccess,
+-  onErrors,
+-  action,
+-}: {
+-  list: ListMeta
+-  itemIds: string[]
+-  onSuccess: (remaining: Set<string>) => void
+-  onErrors: (result: ActionErrorResult) => void
+-  action: ActionMeta
+-}) {
+-  const [actionOnItems] = useMutation<{ results?: ({ id: string } | null)[] }>(
+-    gql`mutation($where: [${list.graphql.names.whereUniqueInputName}!]!) {
+-      results: ${action.graphql.names.many}(where: $where) {
+-        id
+-      }
+-    }`,
+-    {
+-      variables: { where: itemIds.map(id => ({ id })) },
+-      errorPolicy: 'all',
+-    }
+-  )
+-  const { messages: m } = action
+-
+-  async function onTryAction() {
+-    try {
+-      const { error } = await actionOnItems()
+-      const failed = new Set<string>()
+-      const actionErrors: ActionErrors = {}
+-      let countFail = 0
+-      if (CombinedGraphQLErrors.is(error)) {
+-        countFail = error.errors.length
+-        for (const err of error.errors ?? []) {
+-          const i = err.path?.[1]
+-          if (typeof i !== 'number') continue
+-          const itemId = itemIds[i]
+-
+-          failed.add(itemId)
+-          actionErrors[itemId] ??= []
+-          actionErrors[itemId].push(err)
+-        }
+-      }
+-      const countSuccess = itemIds.length - countFail
+-
+-      if (countSuccess) {
+-        toastQueue.neutral(
+-          replace(
+-            m.successMany,
+-            list,
+-            {
+-              count: itemIds.length,
+-              countFail,
+-              countSuccess,
+-            },
+-            countSuccess > 1
+-          ),
+-          { timeout: 5000 }
+-        )
+-      }
+-
+-      if (countFail) {
+-        toastQueue.critical(
+-          replace(
+-            m.failMany,
+-            list,
+-            {
+-              count: itemIds.length,
+-              countFail,
+-              countSuccess,
+-            },
+-            countFail > 1
+-          ),
+-          {
+-            actionLabel: 'Details',
+-            onAction: () => onErrors({ action, errors: actionErrors }),
+-            shouldCloseOnAction: true,
+-          }
+-        )
+-      }
+-
+-      return onSuccess(failed)
+-    } catch (error) {
+-      console.error(error)
+-    }
+-  }
+-
+-  return (
+-    <AlertDialog
+-      tone={action.key === 'delete' ? 'critical' : 'neutral'}
+-      title={replace(m.promptTitleMany, list, { count: itemIds.length }, itemIds.length > 1)}
+-      cancelLabel="Cancel"
+-      primaryActionLabel={replace(
+-        m.promptConfirmLabelMany,
+-        list,
+-        { count: itemIds.length },
+-        itemIds.length > 1
+-      )}
+-      onPrimaryAction={onTryAction}
+-    >
+-      <Text>{replace(m.promptMany, list, { count: itemIds.length }, itemIds.length > 1)}</Text>
+-    </AlertDialog>
+-  )
+-}
++      id: field.
+\ No newline at end of file
+diff --git a/packages/core/src/admin-ui/components/Errors.tsx b/packages/core/src/admin-ui/components/Errors.tsx
+index 493a480e7..58240fabd 100644
+--- a/packages/core/src/admin-ui/components/Errors.tsx
++++ b/packages/core/src/admin-ui/components/Errors.tsx
+@@ -5,7 +5,6 @@ import { Dialog } from '@keystar/ui/dialog'
+ import { Icon } from '@keystar/ui/icon'
+ import { alertTriangleIcon } from '@keystar/ui/icon/icons/alertTriangleIcon'
+ import { Box, Grid, VStack } from '@keystar/ui/layout'
+-import { Notice } from '@keystar/ui/notice'
+ import { Content, SlotProvider } from '@keystar/ui/slots'
+ import { css, tokenSchema } from '@keystar/ui/style'
+ import { Heading, Text } from '@keystar/ui/typography'
+@@ -84,34 +83,26 @@ export function ErrorContainer({ children }: ErrorContainerProps) {
+   )
+ }
+ 
+-export function ErrorDetailsDialog({ title, error }: { title: string; error: Error }) {
++export function ErrorDetailsDialog({ error }: { error: Error }) {
+   const { message, stack } = error
+   return (
+     <Dialog>
+       <Heading>Error details</Heading>
+       <Content>
+-        <Notice tone="critical">
+-          <Content>
+-            <Text weight="medium">{message}</Text>
++        <VStack gap="large">
++          <Text weight="medium">{message}</Text>
++          {stack && (
+             <Box
+               elementType="pre"
+               backgroundColor="critical"
+               borderRadius="regular"
+               maxHeight="100%"
++              padding="medium"
+               overflow="auto"
+             >
+               <Text
+                 color="critical"
+-                UNSAFE_className={css({
+-                  fontFamily: tokenSchema.typography.fontFamily.code,
+-                })}
+-              >
+-                {message}
+-              </Text>
+-              <Text
+-                color="critical"
+-                marginTop="small"
+-                size="small"
++                trim={false}
+                 UNSAFE_className={css({
+                   fontFamily: tokenSchema.typography.fontFamily.code,
+                 })}
+@@ -119,12 +110,9 @@ export function ErrorDetailsDialog({ title, error }: { title: string; error: Err
+                 {stack}
+               </Text>
+             </Box>
+-          </Content>
+-          <div>
+-            <Heading>{title}</Heading>
+-          </div>
+-        </Notice>
++          )}
++        </VStack>
+       </Content>
+     </Dialog>
+   )
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/admin-ui/context.tsx b/packages/core/src/admin-ui/context.tsx
+index d7908821f..6b5ba14c3 100644
+--- a/packages/core/src/admin-ui/context.tsx
++++ b/packages/core/src/admin-ui/context.tsx
+@@ -242,12 +242,6 @@ export function useListItem(
+               isRequired: ConditionalFilterCase<BaseListTypeInfo>
+             } | null
+           }[]
+-          actions: {
+-            key: string
+-            itemView: {
+-              actionMode: ConditionalFilter<'enabled' | 'disabled' | 'hidden', BaseListTypeInfo>
+-            } | null
+-          }[]
+         } | null
+       }
+     }
+@@ -300,4 +294,4 @@ export function useListItem(
+       id: itemId,
+     },
+   })
+-}
++}
+\ No newline at end of file
+diff --git a/tests/admin-ui-tests/list-view-crud.test.ts b/tests/admin-ui-tests/list-view-crud.test.ts
+index 18fb2def1..51b3a51b3 100644
+--- a/tests/admin-ui-tests/list-view-crud.test.ts
++++ b/tests/admin-ui-tests/list-view-crud.test.ts
+@@ -89,7 +89,7 @@ adminUITests('./tests/test-projects/crud-notifications', browserType => {
+     const alertDialog = page.locator('[role=alertdialog][aria-modal=false]')
+     await alertDialog.waitFor()
+ 
+-    expect(await alertDialog.innerText()).toBe('Unable to delete 25 tasks.\nDetails')
++    expect(await alertDialog.innerText()).toBe('Unable to delete 25 tasks.')
+ 
+     await alertDialog.getByRole('button', { name: 'Close' }).click()
+     await page
+@@ -99,4 +99,4 @@ adminUITests('./tests/test-projects/crud-notifications', browserType => {
+   afterAll(async () => {
+     await browser.close()
+   })
+-})
++})
+\ No newline at end of file

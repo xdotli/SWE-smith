@@ -1,0 +1,876 @@
+diff --git a/.changeset/mighty-facts-study.md b/.changeset/mighty-facts-study.md
+deleted file mode 100644
+index 587d0b2..0000000
+--- a/.changeset/mighty-facts-study.md
++++ /dev/null
+@@ -1,5 +0,0 @@
+----
+-'@directus/app': minor
+----
+-
+-Added support for float intervals and min/max warnings for number inputs
+\ No newline at end of file
+diff --git a/app/src/components/v-input.test.ts b/app/src/components/v-input.test.ts
+index 463291b..8cd716e 100644
+--- a/app/src/components/v-input.test.ts
++++ b/app/src/components/v-input.test.ts
+@@ -1,20 +1,28 @@
+ import { Focus } from '@/__utils__/focus';
+-import { Tooltip } from '@/__utils__/tooltip';
+ import type { GlobalMountOptions } from '@/__utils__/types';
++import { i18n } from '@/lang';
+ import { mount } from '@vue/test-utils';
+ import { afterEach, describe, expect, test, vi } from 'vitest';
+ import VInput from './v-input.vue';
+-import { i18n } from '@/lang';
+ 
+ const global: GlobalMountOptions = {
+ 	stubs: ['v-icon'],
+ 	plugins: [i18n],
+ 	directives: {
+ 		focus: Focus,
+-		tooltip: Tooltip,
+ 	},
+ };
+ 
++test('Mount component', () => {
++	expect(VInput).toBeTruthy();
++
++	const wrapper = mount(VInput, {
++		global,
++	});
++
++	expect(wrapper.html()).toMatchSnapshot();
++});
++
+ test('modelValue prop', async () => {
+ 	const wrapper = mount(VInput, {
+ 		props: {
+@@ -254,7 +262,7 @@ describe('emitValue', () => {
+ 	});
+ });
+ 
+-describe('inline warning', () => {
++describe('invalid warning', () => {
+ 	afterEach(() => {
+ 		vi.restoreAllMocks();
+ 	});
+@@ -287,18 +295,16 @@ describe('inline warning', () => {
+ 		const validitySpy = vi.spyOn(inputEl, 'validity', 'get').mockReturnValue({ ...validityMock, badInput: true });
+ 
+ 		expect(inputEl.validity.badInput).toBe(true);
+-		expect((wrapper.vm as any).isBadInput).toBe(false);
++		expect((wrapper.vm as any).isInvalidInput).toBe(false);
+ 
+ 		await input.trigger('input');
+ 		await wrapper.vm.$nextTick();
+ 
+-		expect((wrapper.vm as any).isBadInput).toBe(true);
++		expect((wrapper.vm as any).isInvalidInput).toBe(true);
+ 		expect(wrapper.find('.v-input.invalid').exists()).toBe(true);
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(true);
++		expect(wrapper.find('v-icon-stub.warning-invalid').exists()).toBe(true);
+ 		expect(validitySpy).toHaveBeenCalledTimes(2);
+ 
+-		expect((wrapper.vm as any).inlineWarning).toBe(i18n.global.t('not_a_number'));
+-
+ 		expect(wrapper.html()).toMatchSnapshot();
+ 	});
+ 
+@@ -316,295 +322,16 @@ describe('inline warning', () => {
+ 		const validitySpy = vi.spyOn(inputEl, 'validity', 'get').mockReturnValue(validityMock);
+ 
+ 		expect(inputEl.validity.badInput).toBe(false);
+-		expect((wrapper.vm as any).isBadInput).toBe(false);
++		expect((wrapper.vm as any).isInvalidInput).toBe(false);
+ 
+ 		await input.trigger('input');
+ 		await wrapper.vm.$nextTick();
+ 
+-		expect((wrapper.vm as any).isBadInput).toBe(false);
++		expect((wrapper.vm as any).isInvalidInput).toBe(false);
+ 		expect(wrapper.find('.v-input.invalid').exists()).toBe(false);
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(false);
++		expect(wrapper.find('v-icon-stub.warning-invalid').exists()).toBe(false);
+ 		expect(validitySpy).toHaveBeenCalledTimes(2);
+ 
+ 		expect(wrapper.html()).toMatchSnapshot();
+ 	});
+-
+-	test('should appear when value exceeds maximum', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 15,
+-				min: 0,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).inlineWarning).toBeDefined();
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(true);
+-		expect((wrapper.vm as any).inlineWarning).toBe(i18n.global.t('invalid_range_max', { value: 10 }));
+-	});
+-
+-	test('should appear when value is below minimum', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: -5,
+-				min: 0,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).inlineWarning).toBeDefined();
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(true);
+-		expect((wrapper.vm as any).inlineWarning).toBe(i18n.global.t('invalid_range_min', { value: 0 }));
+-	});
+-
+-	test('should not appear when value is within range', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5,
+-				min: 0,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).inlineWarning).toBeUndefined();
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(false);
+-	});
+-
+-	test('should work with decimal values for float type', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 10.5,
+-				min: 0.5,
+-				max: 10,
+-				float: true,
+-			},
+-			global,
+-		});
+-
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).inlineWarning).toBeDefined();
+-		expect(wrapper.find('v-icon-stub.inline-warning').exists()).toBe(true);
+-		expect((wrapper.vm as any).inlineWarning).toBe(i18n.global.t('invalid_range_max', { value: 10 }));
+-	});
+-
+-	test('should show invalid_input key for non-number type', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'text',
+-			},
+-			global,
+-		});
+-
+-		const input = wrapper.find('input');
+-		const inputEl = input.element as HTMLInputElement;
+-
+-		vi.spyOn(inputEl, 'validity', 'get').mockReturnValue({
+-			badInput: true,
+-		} as ValidityState);
+-
+-		await input.trigger('input');
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).inlineWarning).toBe(i18n.global.t('invalid_input'));
+-	});
+-
+-	test('useInvalidInput takes priority over useInvalidRange', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 15,
+-				min: 0,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		const input = wrapper.find('input');
+-		const inputEl = input.element as HTMLInputElement;
+-
+-		vi.spyOn(inputEl, 'validity', 'get').mockReturnValue({
+-			badInput: true,
+-		} as ValidityState);
+-
+-		await input.trigger('input');
+-		await wrapper.vm.$nextTick();
+-
+-		expect((wrapper.vm as any).isBadInput).toBe(true);
+-		expect(wrapper.find('.v-input.invalid').exists()).toBe(true);
+-	});
+-});
+-
+-describe('step controls', () => {
+-	test('isStepUpAllowed should work with integer values', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(true);
+-	});
+-
+-	test('isStepUpAllowed should work with float values', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5.5,
+-				max: 10,
+-				float: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(true);
+-	});
+-
+-	test('isStepUpAllowed should be false when at max', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 10,
+-				max: 10,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(false);
+-	});
+-
+-	test('isStepUpAllowed should be false when exceeding max', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 10.5,
+-				max: 10,
+-				float: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(false);
+-	});
+-
+-	test('isStepDownAllowed should work with integer values', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5,
+-				min: 0,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(true);
+-	});
+-
+-	test('isStepDownAllowed should work with float values', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5.5,
+-				min: 0,
+-				float: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(true);
+-	});
+-
+-	test('isStepDownAllowed should be false when at min', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 0,
+-				min: 0,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(false);
+-	});
+-
+-	test('isStepDownAllowed should be false when below min', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: -0.5,
+-				min: 0,
+-				float: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(false);
+-	});
+-
+-	test('isStepUpAllowed should be true when no max is set', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 100,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(true);
+-	});
+-
+-	test('isStepDownAllowed should be true when no min is set', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: -100,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(true);
+-	});
+-
+-	test('step controls should be disabled when input is disabled', async () => {
+-		const wrapper = mount(VInput, {
+-			props: {
+-				type: 'number',
+-				modelValue: 5,
+-				min: 0,
+-				max: 10,
+-				disabled: true,
+-				integer: true,
+-			},
+-			global,
+-		});
+-
+-		expect((wrapper.vm as any).isStepUpAllowed).toBe(false);
+-		expect((wrapper.vm as any).isStepDownAllowed).toBe(false);
+-	});
+-});
++});
+\ No newline at end of file
+diff --git a/app/src/interfaces/input/index.test.ts b/app/src/interfaces/input/index.test.ts
+deleted file mode 100644
+index 8780785..0000000
+--- a/app/src/interfaces/input/index.test.ts
++++ /dev/null
+@@ -1,153 +0,0 @@
+-import { describe, expect, test } from 'vitest';
+-import type { ExtensionOptionsContext } from '@directus/extensions';
+-import config from './index';
+-
+-type OptionsFunction = (context: Partial<ExtensionOptionsContext>) => unknown;
+-
+-describe('input interface options', () => {
+-	describe('numeric field types', () => {
+-		test('returns float type for min/max/step when field is float', () => {
+-			const field = {
+-				type: 'float' as const,
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(Array.isArray(options)).toBe(true);
+-
+-			const stepOption = (options as any[]).find((opt) => opt.field === 'step');
+-			expect(stepOption).toBeDefined();
+-			expect(stepOption.type).toBe('float');
+-
+-			const minOption = (options as any[]).find((opt) => opt.field === 'min');
+-			expect(minOption).toBeDefined();
+-			expect(minOption.type).toBe('float');
+-
+-			const maxOption = (options as any[]).find((opt) => opt.field === 'max');
+-			expect(maxOption).toBeDefined();
+-			expect(maxOption.type).toBe('float');
+-		});
+-
+-		test('returns integer type for min/max/step when field is integer', () => {
+-			const field = {
+-				type: 'integer' as const,
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(Array.isArray(options)).toBe(true);
+-
+-			const stepOption = (options as any[]).find((opt) => opt.field === 'step');
+-			expect(stepOption).toBeDefined();
+-			expect(stepOption.type).toBe('integer');
+-
+-			const minOption = (options as any[]).find((opt) => opt.field === 'min');
+-			expect(minOption).toBeDefined();
+-			expect(minOption.type).toBe('integer');
+-
+-			const maxOption = (options as any[]).find((opt) => opt.field === 'max');
+-			expect(maxOption).toBeDefined();
+-			expect(maxOption.type).toBe('integer');
+-		});
+-
+-		test('has default step value of 1 for numeric types', () => {
+-			const floatField = {
+-				type: 'float' as const,
+-			};
+-
+-			const integerField = {
+-				type: 'integer' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const floatOptions = (config.options as OptionsFunction)({ field: floatField });
+-			const integerOptions = (config.options as OptionsFunction)({ field: integerField });
+-
+-			expect(floatOptions).toBeDefined();
+-			expect(integerOptions).toBeDefined();
+-
+-			const floatStepOption = (floatOptions as any[]).find((opt) => opt.field === 'step');
+-			const integerStepOption = (integerOptions as any[]).find((opt) => opt.field === 'step');
+-
+-			expect(floatStepOption.schema.default_value).toBe(1);
+-			expect(integerStepOption.schema.default_value).toBe(1);
+-		});
+-	});
+-
+-	describe('text field types', () => {
+-		test('returns textOptions for string field', () => {
+-			const field = {
+-				type: 'string' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(options).toHaveProperty('standard');
+-			expect(options).toHaveProperty('advanced');
+-		});
+-
+-		test('returns textOptions for text field', () => {
+-			const field = {
+-				type: 'text' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(options).toHaveProperty('standard');
+-			expect(options).toHaveProperty('advanced');
+-		});
+-
+-		test('returns textOptions for uuid field', () => {
+-			const field = {
+-				type: 'uuid' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(options).toHaveProperty('standard');
+-			expect(options).toHaveProperty('advanced');
+-		});
+-
+-		test('returns textOptions for decimal field', () => {
+-			const field = {
+-				type: 'decimal' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(options).toHaveProperty('standard');
+-			expect(options).toHaveProperty('advanced');
+-		});
+-
+-		test('returns textOptions for bigInteger field', () => {
+-			const field = {
+-				type: 'bigInteger' as const,
+-				field: 'test',
+-			};
+-
+-			expect(typeof config.options).toBe('function');
+-			const options = (config.options as OptionsFunction)({ field });
+-
+-			expect(options).toBeDefined();
+-			expect(options).toHaveProperty('standard');
+-			expect(options).toHaveProperty('advanced');
+-		});
+-	});
+-});
+diff --git a/app/src/interfaces/input/index.ts b/app/src/interfaces/input/index.ts
+index a89463d..f2a86f2 100644
+--- a/app/src/interfaces/input/index.ts
++++ b/app/src/interfaces/input/index.ts
+@@ -146,7 +146,7 @@ export default defineInterface({
+ 			{
+ 				field: 'min',
+ 				name: '$t:interfaces.input.minimum_value',
+-				type: field.type,
++				type: 'integer',
+ 				meta: {
+ 					width: 'half',
+ 					interface: 'input',
+@@ -155,7 +155,7 @@ export default defineInterface({
+ 			{
+ 				field: 'max',
+ 				name: '$t:interfaces.input.maximum_value',
+-				type: field.type,
++				type: 'integer',
+ 				meta: {
+ 					width: 'half',
+ 					interface: 'input',
+@@ -164,7 +164,7 @@ export default defineInterface({
+ 			{
+ 				field: 'step',
+ 				name: '$t:interfaces.input.step_interval',
+-				type: field.type,
++				type: 'integer',
+ 				meta: {
+ 					width: 'half',
+ 					interface: 'input',
+@@ -231,4 +231,4 @@ export default defineInterface({
+ 		return textOptions;
+ 	},
+ 	preview: PreviewSVG,
+-});
++});
+\ No newline at end of file
+diff --git a/app/src/interfaces/input/input.test.ts b/app/src/interfaces/input/input.test.ts
+deleted file mode 100644
+index 2973a8d..0000000
+--- a/app/src/interfaces/input/input.test.ts
++++ /dev/null
+@@ -1,293 +0,0 @@
+-import { mount } from '@vue/test-utils';
+-import { beforeEach, describe, expect, test, vi } from 'vitest';
+-import InputInterface from './input.vue';
+-
+-const mountOptions = {
+-	global: {
+-		stubs: {
+-			'v-input': {
+-				name: 'v-input',
+-				props: ['modelValue', 'type', 'min', 'max', 'step', 'placeholder', 'disabled', 'trim', 'integer', 'float'],
+-				template: '<input />',
+-				emits: ['update:model-value'],
+-			},
+-			'v-icon': {
+-				template: '<span><slot /></span>',
+-			},
+-		},
+-	},
+-};
+-
+-describe('input interface', () => {
+-	let wrapper: any;
+-
+-	beforeEach(() => {
+-		vi.clearAllMocks();
+-	});
+-
+-	test('interface mounts', () => {
+-		expect(() => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'test',
+-					type: 'string',
+-				},
+-			});
+-		}).not.toThrow();
+-
+-		expect(wrapper.exists()).toBe(true);
+-	});
+-
+-	describe('type handling', () => {
+-		test('sets inputType to "number" for integer type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 42,
+-					type: 'integer',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('type')).toBe('number');
+-		});
+-
+-		test('sets inputType to "number" for float type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 3.14,
+-					type: 'float',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('type')).toBe('number');
+-		});
+-
+-		test('sets inputType to "text" for string type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'test',
+-					type: 'string',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('type')).toBe('text');
+-		});
+-
+-		test('sets inputType to "password" when masked is true', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'secret',
+-					type: 'string',
+-					masked: true,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('type')).toBe('password');
+-		});
+-	});
+-
+-	describe('integer and float props', () => {
+-		test('sets integer prop to true for integer type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 42,
+-					type: 'integer',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('integer')).toBe(true);
+-			expect(input.props('float')).toBe(false);
+-		});
+-
+-		test('sets integer prop to true for bigInteger type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 42,
+-					type: 'bigInteger',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('integer')).toBe(true);
+-			expect(input.props('float')).toBe(false);
+-		});
+-
+-		test('sets float prop to true for float type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 3.14,
+-					type: 'float',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('float')).toBe(true);
+-			expect(input.props('integer')).toBe(false);
+-		});
+-
+-		test('sets float prop to true for decimal type', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 19.99,
+-					type: 'decimal',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('float')).toBe(true);
+-			expect(input.props('integer')).toBe(false);
+-		});
+-	});
+-
+-	describe('numeric options', () => {
+-		test('passes min and max props correctly', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 5,
+-					type: 'integer',
+-					min: 0,
+-					max: 10,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('min')).toBe(0);
+-			expect(input.props('max')).toBe(10);
+-		});
+-
+-		test('passes step prop correctly', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 5,
+-					type: 'integer',
+-					step: 2,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('step')).toBe(2);
+-		});
+-
+-		test('defaults step to 1', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 5,
+-					type: 'integer',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('step')).toBe(1);
+-		});
+-
+-		test('supports decimal step for float types', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 5.5,
+-					type: 'float',
+-					step: 0.2,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('step')).toBe(0.2);
+-		});
+-
+-		test('supports decimal min and max for float types', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 5.5,
+-					type: 'float',
+-					min: 0.5,
+-					max: 10.5,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('min')).toBe(0.5);
+-			expect(input.props('max')).toBe(10.5);
+-		});
+-	});
+-
+-	describe('events', () => {
+-		test('emits input event when value changes', async () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'test',
+-					type: 'string',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			await input.vm.$emit('update:model-value', 'new value');
+-
+-			expect(wrapper.emitted('input')).toBeTruthy();
+-			expect(wrapper.emitted('input')?.[0]).toEqual(['new value']);
+-		});
+-	});
+-
+-	describe('text field options', () => {
+-		test('renders with placeholder', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: '',
+-					type: 'string',
+-					placeholder: 'Enter text...',
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('placeholder')).toBe('Enter text...');
+-		});
+-
+-		test('passes trim prop for text trimming', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'test',
+-					type: 'string',
+-					trim: true,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('trim')).toBe(true);
+-		});
+-	});
+-
+-	describe('state management', () => {
+-		test('handles disabled state', () => {
+-			wrapper = mount(InputInterface, {
+-				...mountOptions,
+-				props: {
+-					value: 'test',
+-					type: 'string',
+-					disabled: true,
+-				},
+-			});
+-
+-			const input = wrapper.findComponent({ name: 'v-input' });
+-			expect(input.props('disabled')).toBe(true);
+-		});
+-	});
+-});

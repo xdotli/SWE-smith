@@ -1,0 +1,134 @@
+diff --git a/.changeset/shy-cougars-matter.md b/.changeset/shy-cougars-matter.md
+new file mode 100644
+index 0000000000000..c221b1e20bbe9
+--- /dev/null
++++ b/.changeset/shy-cougars-matter.md
+@@ -0,0 +1,5 @@
++---
++'@directus/api': patch
++---
++
++Fixed telemetry reporting when visual editor urls are set
+diff --git a/api/src/telemetry/utils/get-settings.test.ts b/api/src/telemetry/utils/get-settings.test.ts
+index 414757dbfcfed..f5281fa7f03ae 100644
+--- a/api/src/telemetry/utils/get-settings.test.ts
++++ b/api/src/telemetry/utils/get-settings.test.ts
+@@ -1,20 +1,22 @@
+ import type { Knex } from 'knex';
+ import { describe, expect, it, vi } from 'vitest';
+ import { getSettings } from './get-settings.js';
++import { SettingsService } from '../../services/settings.js';
++
++vi.mock('../../utils/get-schema.js');
++vi.mock('../../services/settings.js');
++
++const mockDb: Knex = {} as Knex;
+ 
+ describe('getSettings', () => {
+ 	it('should return settings when they exist in the database', async () => {
+-		const mockDb = {
+-			select: vi.fn().mockReturnThis(),
+-			from: vi.fn().mockReturnThis(),
+-			first: vi.fn().mockResolvedValue({
+-				project_id: 'test-project-id',
+-				mcp_enabled: true,
+-				mcp_allow_deletes: false,
+-				mcp_system_prompt_enabled: true,
+-				visual_editor_urls: '["https://example.com","https://example.org"]',
+-			}),
+-		} as unknown as Knex;
++		vi.mocked(SettingsService.prototype.readSingleton).mockResolvedValue({
++			project_id: 'test-project-id',
++			mcp_enabled: true,
++			mcp_allow_deletes: false,
++			mcp_system_prompt_enabled: true,
++			visual_editor_urls: ['https://example.com', 'https://example.org'],
++		} as any);
+ 
+ 		const result = await getSettings(mockDb);
+ 
+@@ -28,15 +30,11 @@ describe('getSettings', () => {
+ 	});
+ 
+ 	it('should coerce missing values to defaults when they are not set', async () => {
+-		const mockDb = {
+-			select: vi.fn().mockReturnThis(),
+-			from: vi.fn().mockReturnThis(),
+-			first: vi.fn().mockResolvedValue({
+-				project_id: 'test-project-id',
+-				// booleans omitted on purpose to ensure toBoolean handles undefined
+-				visual_editor_urls: null,
+-			}),
+-		} as unknown as Knex;
++		vi.mocked(SettingsService.prototype.readSingleton).mockResolvedValue({
++			project_id: 'test-project-id',
++			// booleans omitted on purpose to ensure handles undefined
++			visual_editor_urls: null,
++		} as any);
+ 
+ 		const result = await getSettings(mockDb);
+ 
+@@ -48,14 +46,4 @@ describe('getSettings', () => {
+ 			visual_editor_urls: 0,
+ 		});
+ 	});
+-
+-	it('should handle unexpected database errors gracefully', async () => {
+-		const mockDb = {
+-			select: vi.fn().mockReturnThis(),
+-			from: vi.fn().mockReturnThis(),
+-			first: vi.fn().mockRejectedValue(new Error('Database error')),
+-		} as unknown as Knex;
+-
+-		await expect(getSettings(mockDb)).rejects.toThrow('Database error');
+-	});
+ });
+diff --git a/api/src/telemetry/utils/get-settings.ts b/api/src/telemetry/utils/get-settings.ts
+index cc103805054b9..3cc9cb9dbb589 100644
+--- a/api/src/telemetry/utils/get-settings.ts
++++ b/api/src/telemetry/utils/get-settings.ts
+@@ -1,4 +1,5 @@
+-import { toBoolean } from '@directus/utils';
++import { SettingsService } from '../../services/settings.js';
++import { getSchema } from '../../utils/get-schema.js';
+ import type { Knex } from 'knex';
+ 
+ export type TelemetrySettings = {
+@@ -9,17 +10,29 @@ export type TelemetrySettings = {
+ 	visual_editor_urls: number;
+ };
+ 
++type DatabaseSettings = {
++	project_id: string;
++	mcp_enabled?: boolean;
++	mcp_allow_deletes?: boolean;
++	mcp_system_prompt_enabled?: boolean;
++	visual_editor_urls?: { url: string }[];
++};
++
+ export const getSettings = async (db: Knex): Promise<TelemetrySettings> => {
+-	const settings = await db
+-		.select('project_id', 'mcp_enabled', 'mcp_allow_deletes', 'mcp_system_prompt_enabled', 'visual_editor_urls')
+-		.from('directus_settings')
+-		.first();
++	const settingsService = new SettingsService({
++		knex: db,
++		schema: await getSchema({ database: db }),
++	});
++
++	const settings = (await settingsService.readSingleton({
++		fields: ['project_id', 'mcp_enabled', 'mcp_allow_deletes', 'mcp_system_prompt_enabled', 'visual_editor_urls'],
++	})) as DatabaseSettings;
+ 
+ 	return {
+ 		project_id: settings.project_id,
+-		mcp_enabled: toBoolean(settings?.mcp_enabled),
+-		mcp_allow_deletes: toBoolean(settings?.mcp_allow_deletes),
+-		mcp_system_prompt_enabled: toBoolean(settings?.mcp_system_prompt_enabled),
+-		visual_editor_urls: settings.visual_editor_urls ? JSON.parse(settings.visual_editor_urls).length : 0,
++		mcp_enabled: settings?.mcp_enabled || false,
++		mcp_allow_deletes: settings?.mcp_allow_deletes || false,
++		mcp_system_prompt_enabled: settings?.mcp_system_prompt_enabled || false,
++		visual_editor_urls: settings.visual_editor_urls?.length || 0,
+ 	};
+ };

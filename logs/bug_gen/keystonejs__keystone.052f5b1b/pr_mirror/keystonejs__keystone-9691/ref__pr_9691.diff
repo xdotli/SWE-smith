@@ -1,0 +1,531 @@
+diff --git a/examples/actions/schema.ts b/examples/actions/schema.ts
+index afa3d2f94c9..33263c0cac0 100644
+--- a/examples/actions/schema.ts
++++ b/examples/actions/schema.ts
+@@ -67,6 +67,7 @@ export const lists = {
+         access: allowAll,
+         async resolve({ actionKey, where }, context) {
+           console.log(`${actionKey}`, JSON.stringify({ where }))
++          // throw new Error('Random failure, try again')
+           return await context.db.Post.updateOne({
+             where,
+             data: {
+@@ -88,7 +89,7 @@ export const lists = {
+             promptMany: 'Are you sure you want to report {count} {singular|plural}?',
+             promptConfirmLabel: 'Yes, report',
+             promptConfirmLabelMany: 'Yes, report {count} {singular|plural}',
+-            fail: 'Could not report {singular}',
++            fail: 'Could not report {singular} “{itemLabel}”',
+             failMany: 'Could not report {countFail} {singular|plural}',
+             success: '{Singular} reported',
+             successMany: 'Successfully reported {countSuccess} {singular|plural}',
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
+index ac994c696e2..9cc74187358 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/CreateItemPage/index.tsx
+@@ -25,6 +25,7 @@ function CreateItemPage({ listKey }: { listKey: string }) {
+       header={
+         <ItemPageHeader
+           list={list}
++          actions={[]}
+           label="Create"
+           title={`Create ${list.singular}`}
+           item={null}
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
+index e84f38c26f7..2212bb40f87 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/common.tsx
+@@ -18,19 +18,20 @@ import type { ActionMeta, ListMeta } from '../../../../types'
+ 
+ export function ItemPageHeader({
+   list,
++  actions,
+   item,
+   label,
+   title = label,
+   onAction,
+ }: {
+   list: ListMeta
++  actions: ActionMeta[]
+   item: Record<string, unknown> | null
+   label: string
+   title: string
+   onAction: ((action: ActionMeta, resultId: string) => void) | null
+ }) {
+   const router = useRouter()
+-  const actions = list.actions.filter(action => action.itemView.actionMode !== 'hidden')
+ 
+   return (
+     <Grid
+@@ -87,6 +88,11 @@ function replace(
+   return s
+ }
+ 
++type ActionError = {
++  action: ActionMeta
++  error: Error
++}
++
+ function ItemActions({
+   list,
+   item,
+@@ -108,7 +114,7 @@ function ItemActions({
+       })),
+     [actions]
+   )
+-  const [errorDialogValue, setErrorDialogValue] = useState<Error | null>(null)
++  const [actionError, setActionError] = useState<ActionError | null>(null)
+   const [activeAction, setActiveAction] = useState<ActionMeta | null>(null)
+   const itemLabel_ = item[list.labelField] ?? item.id
+   const itemLabel = typeof itemLabel_ === 'string' ? itemLabel_ : (item.id as string)
+@@ -143,10 +149,10 @@ function ItemActions({
+       }
+ 
+       onAction(action, data.data?.result?.id)
+-    } catch (err: any) {
++    } catch (error: any) {
+       toastQueue.critical(replace(m.fail, list, { itemLabel }), {
+         actionLabel: 'Details',
+-        onAction: () => setErrorDialogValue(err),
++        onAction: () => setActionError({ action, error }),
+         shouldCloseOnAction: true,
+       })
+     }
+@@ -189,8 +195,13 @@ function ItemActions({
+         )}
+       </DialogContainer>
+ 
+-      <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
+-        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
++      <DialogContainer onDismiss={() => setActionError(null)} isDismissable>
++        {actionError && (
++          <ErrorDetailsDialog
++            title={replace(actionError.action.messages.fail, list, { itemLabel })}
++            error={actionError.error}
++          />
++        )}
+       </DialogContainer>
+     </Fragment>
+   )
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
+index 6b6d6fa327c..f0a6b823b6e 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ItemPage/index.tsx
+@@ -90,7 +90,7 @@ function DeleteButton({
+             try {
+               await deleteItem()
+             } catch (err: any) {
+-              toastQueue.critical('Unable to delete item.', {
++              toastQueue.critical('Unable to delete item', {
+                 actionLabel: 'Details',
+                 onAction: () => setErrorDialogValue(err),
+                 shouldCloseOnAction: true,
+@@ -112,7 +112,9 @@ function DeleteButton({
+       </DialogTrigger>
+ 
+       <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
+-        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
++        {errorDialogValue && (
++          <ErrorDetailsDialog title="Unable to delete item" error={errorDialogValue} />
++        )}
+       </DialogContainer>
+     </Fragment>
+   )
+@@ -176,7 +178,7 @@ function ItemForm({
+ }) {
+   const list = useList(listKey)
+   const itemId = initialValue.id as string
+-  const [errorDialogValue, setErrorDialogValue] = useState<Error | null>(null)
++  const [updateError, setUpdateError] = useState<Error | null>(null)
+   const [update, { loading, error }] = useMutation(
+     gql`mutation ($id: ID!, $data: ${list.graphql.names.updateInputName}!) {
+       item: ${list.graphql.names.updateMutationName}(where: { id: $id }, data: $data) {
+@@ -212,13 +214,13 @@ function ItemForm({
+     if (error) {
+       toastQueue.critical('Unable to save item', {
+         actionLabel: 'Details',
+-        onAction: () => setErrorDialogValue(new Error(error.message)),
++        onAction: () => setUpdateError(new Error(error.message)),
+         shouldCloseOnAction: true,
+       })
+       return
+     }
+ 
+-    toastQueue.positive(`Saved changes to ${list.singular.toLocaleLowerCase()}`, {
++    toastQueue.positive(`Saved changes to ${list.singular.toLocaleLowerCase()}.`, {
+       timeout: 5000,
+     })
+ 
+@@ -293,8 +295,8 @@ function ItemForm({
+         </BaseToolbar>
+       </form>
+ 
+-      <DialogContainer onDismiss={() => setErrorDialogValue(null)} isDismissable>
+-        {errorDialogValue && <ErrorDetailsDialog error={errorDialogValue} />}
++      <DialogContainer onDismiss={() => setUpdateError(null)} isDismissable>
++        {updateError && <ErrorDetailsDialog title="Unable to save item" error={updateError} />}
+       </DialogContainer>
+     </Fragment>
+   )
+@@ -319,24 +321,47 @@ function ItemPage({ listKey }: ItemPageProps) {
+     return deserializeItemToValue(list.fields, item)
+   }, [list.fields, data?.item])
+ 
+-  const { fieldModes, fieldPositions, isRequireds } = useMemo(() => {
++  const { actionsInContext, fieldModes, fieldPositions, isRequireds } = useMemo(() => {
++    const actionModes = Object.fromEntries(
++      Object.entries(list.actions).map(([k, v]) => [k, v.itemView.actionMode])
++    )
+     const fieldModes = Object.fromEntries(
+-      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.fieldMode])
++      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.fieldMode])
+     )
+     const fieldPositions = Object.fromEntries(
+-      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.fieldPosition])
++      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.fieldPosition])
+     )
+     const isRequireds = Object.fromEntries(
+-      Object.entries(list.fields).map(([key, val]) => [key, val.itemView.isRequired])
++      Object.entries(list.fields).map(([k, v]) => [k, v.itemView.isRequired])
+     )
+     for (const field of data?.keystone.adminMeta.list?.fields ?? []) {
+-      if (field.itemView) {
+-        fieldModes[field.key] = field.itemView.fieldMode
+-        fieldPositions[field.key] = field.itemView.fieldPosition
+-        isRequireds[field.key] = field.itemView.isRequired
+-      }
++      if (!field.itemView) continue
++      fieldModes[field.key] = field.itemView.fieldMode
++      fieldPositions[field.key] = field.itemView.fieldPosition
++      isRequireds[field.key] = field.itemView.isRequired
++    }
++    for (const action of data?.keystone.adminMeta.list?.actions ?? []) {
++      if (!action.itemView) continue
++      actionModes[action.key] = action.itemView.actionMode
++    }
++
++    // actions within context of an item
++    const actionsInContext = list.actions
++      .map(action => ({
++        ...action,
++        itemView: {
++          ...action.itemView,
++          actionMode: actionModes[action.key],
++        },
++      }))
++      .filter(action => action.itemView.actionMode !== 'hidden')
++
++    return {
++      actionsInContext,
++      fieldModes,
++      fieldPositions,
++      isRequireds,
+     }
+-    return { fieldModes, fieldPositions, isRequireds }
+   }, [data?.keystone.adminMeta, list.fields])
+ 
+   function onAction(action: ActionMeta, resultId: string | null) {
+@@ -357,6 +382,7 @@ function ItemPage({ listKey }: ItemPageProps) {
+       header={
+         <ItemPageHeader
+           list={list}
++          actions={actionsInContext}
+           label={typeof pageLabel !== 'string' ? 'Loading...' : pageLabel}
+           title={pageTitle}
+           item={item ?? null}
+diff --git a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
+index 40de6267865..f42d56bc3b5 100644
+--- a/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
++++ b/packages/core/src/___internal-do-not-use-will-break-in-patch/admin-ui/pages/ListPage/index.tsx
+@@ -1,4 +1,5 @@
+ import isDeepEqual from 'fast-deep-equal'
++import type { GraphQLFormattedError } from 'graphql'
+ import { useRouter } from 'next/router'
+ import type { ParsedUrlQuery, ParsedUrlQueryInput } from 'querystring'
+ import { type FormEvent, type Key, Fragment, useEffect, useId, useMemo, useState } from 'react'
+@@ -12,7 +13,7 @@ import { chevronDownIcon } from '@keystar/ui/icon/icons/chevronDownIcon'
+ import { searchXIcon } from '@keystar/ui/icon/icons/searchXIcon'
+ import { textSelectIcon } from '@keystar/ui/icon/icons/textSelectIcon'
+ import { undo2Icon } from '@keystar/ui/icon/icons/undo2Icon'
+-import { Flex, HStack, VStack } from '@keystar/ui/layout'
++import { Box, Flex, HStack, VStack } from '@keystar/ui/layout'
+ import { Menu, MenuTrigger } from '@keystar/ui/menu'
+ import { ProgressCircle } from '@keystar/ui/progress'
+ import { SearchField } from '@keystar/ui/search-field'
+@@ -31,6 +32,8 @@ import { toastQueue } from '@keystar/ui/toast'
+ import { Tooltip, TooltipTrigger } from '@keystar/ui/tooltip'
+ import { Heading, Text } from '@keystar/ui/typography'
+ 
++import { TextLink } from '@keystar/ui/link'
++import { Notice } from '@keystar/ui/notice'
+ import type { TypedDocumentNode } from '../../../../admin-ui/apollo'
+ import { gql, useMutation, useQuery } from '../../../../admin-ui/apollo'
+ import { CreateButtonLink } from '../../../../admin-ui/components/CreateButtonLink'
+@@ -251,7 +254,7 @@ function ListPage({ listKey }: ListPageProps) {
+   const localStorageListKey = `keystone.list.${listKey}.list.page.info`
+ 
+   const list = useList(listKey)
+-  const { query, replace, isReady } = useRouter()
++  const { query, replace: routerReplace, isReady } = useRouter()
+   const [sort, setSort] = useState<SortDescriptor | null>(() => getSort(list, {}))
+   const [columns, setColumns] = useState<string[]>(list.initialColumns)
+   const [filters, setFilters] = useState<Filter[]>(() => getFilters(list, {}))
+@@ -260,6 +263,7 @@ function ListPage({ listKey }: ListPageProps) {
+   const [searchString, setSearchString] = useState('')
+   const [selectedItems, setSelectedItems] = useState<Selection>(() => new Set([]))
+   const [activeAction, setActiveAction] = useState<Key | null>(null)
++  const [actionResult, setActionResult] = useState<ActionErrorResult | null>(null)
+   const dirty = useMemo(() => {
+     const defaultFilters = getFilters(list, {})
+     const defaultSort = getSort(list, {})
+@@ -313,7 +317,7 @@ function ListPage({ listKey }: ListPageProps) {
+     }
+ 
+     localStorage.setItem(localStorageListKey, JSON.stringify(updatedQuery))
+-    replace({ query: updatedQuery })
++    routerReplace({ query: updatedQuery })
+   }, [columns, sort, filters, currentPage, pageSize, searchString, list])
+ 
+   const allowCreate = !(list.hideCreate ?? true)
+@@ -655,15 +659,75 @@ function ListPage({ listKey }: ListPageProps) {
+                   itemIds={selectedItemIds}
+                   {...action}
+                   list={list}
+-                  onSuccess={() => {
++                  onSuccess={remaining => {
+                     refetch()
+-                    setSelectedItems(new Set())
++                    setSelectedItems(remaining)
+                   }}
++                  onErrors={setActionResult}
+                 />
+               )
+             })
+             .pop()}
+         </DialogContainer>
++        <DialogContainer onDismiss={() => setActionResult(null)} isDismissable>
++          {actionResult ? (
++            <Dialog>
++              <Heading>Error details for {actionResult.action.label} action</Heading>
++              <Content>
++                <VStack gap="large">
++                  {[
++                    ...(function* () {
++                      const { action, errors: actionErrors } = actionResult
++                      for (const [itemId, itemActionErrors] of Object.entries(actionErrors)) {
++                        const item = data?.items?.find(i => i.id === itemId) ?? null
++                        const itemLabel = (item?.[list.labelField] as string | null) ?? itemId
++                        const href = `/${list.path}/${itemId}`
++
++                        for (const error of itemActionErrors) {
++                          yield (
++                            <VStack key={itemId} gap="regular">
++                              <Notice tone="critical">
++                                <Content>
++                                  <Text>
++                                    You might try running the action again from{' '}
++                                    <TextLink href={href}>
++                                      the {list.singular.toLowerCase()}.
++                                    </TextLink>
++                                  </Text>
++                                  <Box
++                                    elementType="pre"
++                                    backgroundColor="critical"
++                                    borderRadius="regular"
++                                    maxHeight="100%"
++                                    overflow="auto"
++                                  >
++                                    <Text
++                                      color="critical"
++                                      UNSAFE_className={css({
++                                        fontFamily: tokenSchema.typography.fontFamily.code,
++                                      })}
++                                    >
++                                      {error.message}
++                                    </Text>
++                                  </Box>
++                                </Content>
++                                <div>
++                                  <Heading>
++                                    {replace(action.messages.fail, list, { itemLabel }, false)}
++                                  </Heading>
++                                </div>
++                              </Notice>
++                            </VStack>
++                          )
++                        }
++                      }
++                    })(),
++                  ]}
++                </VStack>
++              </Content>
++            </Dialog>
++          ) : null}
++        </DialogContainer>
+       </VStack>
+     </PageContainer>
+   )
+@@ -711,15 +775,23 @@ function replace(
+   return s
+ }
+ 
++type ActionErrors = Record<string, GraphQLFormattedError[]>
++type ActionErrorResult = {
++  action: ActionMeta
++  errors: ActionErrors
++}
++
+ function ActionItemsDialog({
+   list,
+   itemIds,
+   onSuccess,
++  onErrors,
+   ...action
+ }: {
+   list: ListMeta
+   itemIds: string[]
+-  onSuccess: (remaining: string[]) => void
++  onSuccess: (remaining: Set<string>) => void
++  onErrors: (result: ActionErrorResult) => void
+ } & ActionMeta) {
+   const [actionOnItems] = useMutation<{ results?: ({ id: string } | null)[] }>(
+     gql`mutation($where: [${list.graphql.names.whereUniqueInputName}!]!) {
+@@ -736,13 +808,22 @@ function ActionItemsDialog({
+ 
+   async function onTryAction() {
+     try {
+-      const { data, errors } = await actionOnItems()
+-      const failed = itemIds.filter(id => !data?.results?.some(x => x?.id === id))
+-      const countSuccess = itemIds.length - failed.length
+-      const countFail = failed.length
++      const { errors } = await actionOnItems()
++      const countFail = errors?.length ?? 0
++      const countSuccess = itemIds.length - countFail
++      const failed = new Set<string>()
++      const actionErrors: ActionErrors = {}
++      for (const error of errors ?? []) {
++        const i = error.path?.[1]
++        if (typeof i !== 'number') continue
++        const itemId = itemIds[i]
++
++        failed.add(itemId)
++        actionErrors[itemId] ??= []
++        actionErrors[itemId].push(error)
++      }
+ 
+-      // if there are errors
+-      if (failed.length || errors?.length) {
++      if (countFail) {
+         toastQueue.critical(
+           replace(
+             m.failMany,
+@@ -754,7 +835,11 @@ function ActionItemsDialog({
+             },
+             countFail > 1
+           ),
+-          { timeout: 5000 }
++          {
++            actionLabel: 'Details',
++            onAction: () => onErrors({ action, errors: actionErrors }),
++            shouldCloseOnAction: true,
++          }
+         )
+       }
+ 
+diff --git a/packages/core/src/admin-ui/components/Errors.tsx b/packages/core/src/admin-ui/components/Errors.tsx
+index f77ee7f0273..493a480e7d2 100644
+--- a/packages/core/src/admin-ui/components/Errors.tsx
++++ b/packages/core/src/admin-ui/components/Errors.tsx
+@@ -5,6 +5,7 @@ import { Dialog } from '@keystar/ui/dialog'
+ import { Icon } from '@keystar/ui/icon'
+ import { alertTriangleIcon } from '@keystar/ui/icon/icons/alertTriangleIcon'
+ import { Box, Grid, VStack } from '@keystar/ui/layout'
++import { Notice } from '@keystar/ui/notice'
+ import { Content, SlotProvider } from '@keystar/ui/slots'
+ import { css, tokenSchema } from '@keystar/ui/style'
+ import { Heading, Text } from '@keystar/ui/typography'
+@@ -83,26 +84,34 @@ export function ErrorContainer({ children }: ErrorContainerProps) {
+   )
+ }
+ 
+-export function ErrorDetailsDialog({ error }: { error: Error }) {
++export function ErrorDetailsDialog({ title, error }: { title: string; error: Error }) {
+   const { message, stack } = error
+   return (
+     <Dialog>
+       <Heading>Error details</Heading>
+       <Content>
+-        <VStack gap="large">
+-          <Text weight="medium">{message}</Text>
+-          {stack && (
++        <Notice tone="critical">
++          <Content>
++            <Text weight="medium">{message}</Text>
+             <Box
+               elementType="pre"
+               backgroundColor="critical"
+               borderRadius="regular"
+               maxHeight="100%"
+-              padding="medium"
+               overflow="auto"
+             >
+               <Text
+                 color="critical"
+-                trim={false}
++                UNSAFE_className={css({
++                  fontFamily: tokenSchema.typography.fontFamily.code,
++                })}
++              >
++                {message}
++              </Text>
++              <Text
++                color="critical"
++                marginTop="small"
++                size="small"
+                 UNSAFE_className={css({
+                   fontFamily: tokenSchema.typography.fontFamily.code,
+                 })}
+@@ -110,8 +119,11 @@ export function ErrorDetailsDialog({ error }: { error: Error }) {
+                 {stack}
+               </Text>
+             </Box>
+-          )}
+-        </VStack>
++          </Content>
++          <div>
++            <Heading>{title}</Heading>
++          </div>
++        </Notice>
+       </Content>
+     </Dialog>
+   )
+diff --git a/packages/core/src/admin-ui/context.tsx b/packages/core/src/admin-ui/context.tsx
+index 43668c17c3f..a481db6ef01 100644
+--- a/packages/core/src/admin-ui/context.tsx
++++ b/packages/core/src/admin-ui/context.tsx
+@@ -237,6 +237,12 @@ export function useListItem(
+               isRequired: ConditionalFilterCase<BaseListTypeInfo>
+             } | null
+           }[]
++          actions: {
++            key: string
++            itemView: {
++              actionMode: ConditionalFilter<'enabled' | 'disabled' | 'hidden', BaseListTypeInfo>
++            } | null
++          }[]
+         } | null
+       }
+     }
+diff --git a/tests/admin-ui-tests/list-view-crud.test.ts b/tests/admin-ui-tests/list-view-crud.test.ts
+index 54448dd9121..cd694596edd 100644
+--- a/tests/admin-ui-tests/list-view-crud.test.ts
++++ b/tests/admin-ui-tests/list-view-crud.test.ts
+@@ -88,7 +88,7 @@ adminUITests('./tests/test-projects/crud-notifications', browserType => {
+     await page.getByRole('button', { name: 'Yes, delete' }).click()
+     const alertDialog = page.locator('[role=alertdialog][aria-modal=false]')
+     await alertDialog.waitFor()
+-    expect(await alertDialog.innerText()).toBe('Unable to delete 25 tasks.')
++    expect(await alertDialog.innerText()).toBe('Unable to delete 25 tasks.\nDetails')
+     await alertDialog.getByRole('button', { name: 'Close' }).click()
+     await page
+       .locator('[role=alertdialog][aria-modal=false]:has-text("Deleted 25 tasks.")')

@@ -1,0 +1,227 @@
+diff --git a/examples/actions/schema.ts b/examples/actions/schema.ts
+index 33263c0cac0..e0b9b2274f9 100644
+--- a/examples/actions/schema.ts
++++ b/examples/actions/schema.ts
+@@ -14,7 +14,18 @@ export const lists = {
+     fields: {
+       title: text(),
+       content: text(),
+-      hidden: checkbox(),
++      hidden: checkbox({
++        ui: {
++          itemView: {
++            fieldMode: ({ item, itemField }) => {
++              // WARNING: none of this is access control
++              if (!item || item.votes === null) return 'edit'
++              if (itemField) return 'edit'
++              return item.votes > 0 ? 'read' : 'edit'
++            },
++          },
++        },
++      }),
+       votes: integer({ defaultValue: 0 }),
+       reportedAt: timestamp({
+         ui: {
+diff --git a/packages/core/src/fields/types/checkbox/views/index.tsx b/packages/core/src/fields/types/checkbox/views/index.tsx
+index ded256df246..7ccf76fba7a 100644
+--- a/packages/core/src/fields/types/checkbox/views/index.tsx
++++ b/packages/core/src/fields/types/checkbox/views/index.tsx
+@@ -3,6 +3,7 @@ import { Icon } from '@keystar/ui/icon'
+ import { checkIcon } from '@keystar/ui/icon/icons/checkIcon'
+ import { Text, VisuallyHidden } from '@keystar/ui/typography'
+ 
++import { entriesTyped } from '../../../../lib/core/utils'
+ import type {
+   CellComponent,
+   FieldController,
+@@ -10,7 +11,6 @@ import type {
+   FieldProps,
+   SimpleFieldTypeInfo,
+ } from '../../../../types'
+-import { entriesTyped } from '../../../../lib/core/utils'
+ 
+ export function Field({ field, value, onChange, autoFocus }: FieldProps<typeof controller>) {
+   return (
+diff --git a/packages/core/src/lib/admin-meta-graphql.ts b/packages/core/src/lib/admin-meta-graphql.ts
+index b33c7a13bc3..db48a73ad11 100644
+--- a/packages/core/src/lib/admin-meta-graphql.ts
++++ b/packages/core/src/lib/admin-meta-graphql.ts
+@@ -86,7 +86,7 @@ const KeystoneAdminUIFieldMeta = g.object<FieldMetaSource>()({
+           }),
+           isRequired: g.field({
+             type: g.nonNull(g.JSON),
+-            resolve({ item, fieldKey, itemView, itemField, listKey }, _, context) {
++            resolve({ listKey, fieldKey, itemView, item, itemField }, _, context) {
+               const { isRequired } = itemView
+               if (typeof isRequired !== 'function') return isRequired
+               return isRequired({
+@@ -316,7 +316,12 @@ const KeystoneAdminUIListMeta = g.object<ListMetaSource>()({
+     path: g.field({ type: g.nonNull(g.String) }),
+ 
+     labelField: g.field({ type: g.nonNull(g.String) }),
+-    fields: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldMeta))) }),
++    fields: g.field({
++      resolve: ({ fields, item }) => {
++        return fields.map(f => ({ ...f, item, itemField: item?.[f.key] ?? null }))
++      },
++      type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldMeta))),
++    }),
+     groups: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIFieldGroupMeta))) }),
+     actions: g.field({ type: g.nonNull(g.list(g.nonNull(KeystoneAdminUIActionMeta))) }),
+     graphql: g.field({ type: g.nonNull(KeystoneAdminUIGraphQL) }),
+@@ -352,8 +357,14 @@ const adminMeta = g.object<AdminMetaSource>()({
+             item: null,
+           }
+         }
++        // WARNING: do not use sudo
+         const item = await context.db[key].findOne({ where: { id: itemId } })
+-        if (!item) return null
++        if (!item) {
++          return {
++            ...source.listsByKey[key],
++            item: null,
++          }
++        }
+         return {
+           ...source.listsByKey[key],
+           item,
+diff --git a/tests2/omit.test.ts b/tests2/omit.test.ts
+index 26b624b9dcc..99e9ed362b0 100644
+--- a/tests2/omit.test.ts
++++ b/tests2/omit.test.ts
+@@ -73,13 +73,13 @@ const fieldsMatrix = [
+ 
+ function makeList({
+   fields,
+-  isFilterable,
+-  isOrderable,
++  defaultIsFilterable,
++  defaultIsOrderable,
+   omit,
+ }: {
+   fields: typeof fieldsMatrix
+-  isFilterable: boolean
+-  isOrderable: boolean
++  defaultIsFilterable: boolean
++  defaultIsOrderable: boolean
+   omit:
+     | boolean
+     | {
+@@ -89,21 +89,22 @@ function makeList({
+         delete: boolean
+       }
+ }) {
+-  const prefix = `List${fields.length}_Filt${yn(isFilterable)}_Ord${yn(isOrderable)}` as const
+-  const __name = `${prefix}_Omit${
++  const prefix =
++    `List${fields.length}_Filt${yn(defaultIsFilterable)}_Ord${yn(defaultIsOrderable)}` as const
++  const name__ = `${prefix}_Omit${
+     typeof omit !== 'object'
+       ? yn(omit)
+       : [omit.query, omit.create, omit.update, omit.delete].map(yn).join('')
+   }`
+ 
+   return {
+-    __name,
++    name__,
+     access: allowAll,
+     fields: Object.fromEntries(fields),
+-    defaultIsFilterable: isFilterable,
+-    defaultIsOrderable: isOrderable,
++    defaultIsFilterable,
++    defaultIsOrderable,
+     graphql: {
+-      plural: __name + 's',
++      plural: name__ + 's',
+       omit,
+     },
+   } as const
+@@ -111,10 +112,15 @@ function makeList({
+ 
+ const listsMatrix = [
+   ...(function* () {
+-    for (const isFilterable of [false, true]) {
+-      for (const isOrderable of [false, true]) {
++    for (const defaultIsFilterable of [false, true]) {
++      for (const defaultIsOrderable of [false, true]) {
+         for (const omit of [false, true]) {
+-          yield makeList({ fields: fieldsMatrix, isFilterable, isOrderable, omit })
++          yield makeList({
++            fields: fieldsMatrix,
++            defaultIsFilterable,
++            defaultIsOrderable,
++            omit,
++          })
+         }
+ 
+         for (const query of [false, true]) {
+@@ -123,8 +129,8 @@ const listsMatrix = [
+               for (const delete_ of [false, true]) {
+                 yield makeList({
+                   fields: fieldsMatrix,
+-                  isFilterable,
+-                  isOrderable,
++                  defaultIsFilterable,
++                  defaultIsOrderable,
+                   omit: {
+                     query,
+                     create,
+@@ -135,8 +141,8 @@ const listsMatrix = [
+ 
+                 yield makeList({
+                   fields: [],
+-                  isFilterable,
+-                  isOrderable,
++                  defaultIsFilterable,
++                  defaultIsOrderable,
+                   omit: {
+                     query,
+                     create,
+@@ -156,24 +162,24 @@ const listsMatrix = [
+ // TODO: FIXME: skip for now, MySQL has a limit on the number of indexes
+ if (dbProvider !== 'mysql') {
+   listsMatrix.push({
+-    __name: 'RelatedToAll',
++    name__: 'RelatedToAll',
+     access: allowAll,
+     fields: Object.fromEntries(
+       (function* () {
+         for (const l of listsMatrix) {
+           // WARNING: if names exceed some length, expect duplicate _AB_unique index errors
+           yield [
+-            `R${l.__name}_one`,
++            `R${l.name__}_one`,
+             relationship({
+-              ref: l.__name,
++              ref: l.name__,
+               many: false,
+             }),
+           ] as const
+ 
+           yield [
+-            `R${l.__name}_many`,
++            `R${l.name__}_many`,
+             relationship({
+-              ref: l.__name,
++              ref: l.name__,
+               many: true,
+             }),
+           ] as const
+@@ -334,7 +340,7 @@ describe(`Omit (${dbProvider})`, () => {
+ 
+   const suite = setupTestSuite({
+     config: {
+-      lists: Object.fromEntries(listsMatrix.map(({ __name, ...l }) => [__name, list(l)])),
++      lists: Object.fromEntries(listsMatrix.map(({ name__: __name, ...l }) => [__name, list(l)])),
+     },
+   })
+ 
+@@ -342,7 +348,7 @@ describe(`Omit (${dbProvider})`, () => {
+   const sudoData = suite().then(async ({ context }) => await introspectSchema(context.sudo()))
+ 
+   for (const l of listsMatrix) {
+-    const listName = l.__name
++    const listName = l.name__
+     const omit = l.graphql.omit
+ 
+     // common context is configurable
